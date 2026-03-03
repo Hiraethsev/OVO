@@ -3293,6 +3293,14 @@
                     <button class="action-btn" id="theater-create-btn" title="创建剧场">+</button>
                 </div>
             </header>
+            <!-- 模式切换开关 -->
+            <div class="theater-mode-switch-bar">
+                <div class="theater-mode-switch" id="theater-mode-switch">
+                    <div class="theater-mode-option active" data-mode="text">纯文字</div>
+                    <div class="theater-mode-option" data-mode="html">HTML</div>
+                    <div class="theater-mode-slider"></div>
+                </div>
+            </div>
             <div id="theater-multi-select-bar" class="theater-multi-select-bar">
                 <span id="theater-selected-count">已选 0 项</span>
                 <div class="theater-multi-select-actions">
@@ -3301,7 +3309,8 @@
                     <button type="button" class="btn btn-small btn-secondary" id="theater-cancel-multi-btn">取消</button>
                 </div>
             </div>
-            <main class="content theater-content">
+            <!-- 纯文字模式主内容 -->
+            <main id="theater-text-main" class="content theater-content">
                 <div class="theater-filter-bar">
                     <select id="theater-category-filter" class="theater-filter-select">
                         <option value="">全部分类</option>
@@ -3312,13 +3321,25 @@
                     <div class="theater-empty-state">还没有生成的剧情，点击右上角"+"创建吧~</div>
                 </div>
             </main>
+            <!-- HTML 模式主内容 -->
+            <main id="theater-html-main" class="content theater-content" style="display:none;">
+                <div class="theater-filter-bar">
+                    <select id="theater-html-category-filter" class="theater-filter-select">
+                        <option value="">全部分类</option>
+                        <option value="未分类">未分类</option>
+                    </select>
+                </div>
+                <div id="theater-html-scenarios-list" class="theater-scenarios-list">
+                    <div class="theater-empty-state">还没有生成的 HTML 剧情，点击右上角"+"创建吧~</div>
+                </div>
+            </main>
         </div>
 
         <div id="theater-create-screen" class="screen">
             <header class="app-header">
                 <button class="back-btn" data-target="theater-screen">‹</button>
                 <div class="title-container">
-                    <h1 class="title">创建剧场</h1>
+                    <h1 class="title" id="theater-create-title">创建剧场</h1>
                 </div>
                 <div class="action-btn-group"></div>
             </header>
@@ -3348,8 +3369,31 @@
                             </div>
                         </div>
                     </div>
+                    <!-- 聊天记录 & 日记总结读取开关 -->
                     <div class="theater-control-group">
-                        <label>剧情提示词</label>
+                        <div class="theater-context-toggle-row">
+                            <label>读取聊天记录 & 日记总结</label>
+                            <div class="theater-toggle-switch" id="theater-context-toggle" role="switch" aria-checked="false" tabindex="0">
+                                <div class="theater-toggle-slider"></div>
+                            </div>
+                        </div>
+                        <div class="theater-context-options" id="theater-context-options" style="display:none;">
+                            <div class="theater-context-option-row">
+                                <label>聊天记录条数</label>
+                                <input type="number" id="theater-chat-history-count" class="theater-number-input" min="0" max="200" value="20" placeholder="20">
+                            </div>
+                            <div class="theater-context-option-row">
+                                <label>日记总结条数</label>
+                                <input type="number" id="theater-journal-count" class="theater-number-input" min="0" max="50" value="5" placeholder="5">
+                            </div>
+                            <div class="theater-context-hint">
+                                需先选择角色才能读取对应的聊天记录和日记总结
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="theater-control-group">
+                        <label id="theater-prompt-label">剧情提示词</label>
                         <div class="theater-prompt-toolbar">
                             <select id="theater-prompt-preset-select" class="theater-prompt-select">
                                 <option value="">选择预设提示词</option>
@@ -3390,6 +3434,33 @@
                     <button id="theater-share-btn" class="theater-action-btn theater-share-btn">分享到聊天框</button>
                     <button id="theater-edit-category-btn" class="theater-action-btn theater-edit-category-btn">修改分类</button>
                     <button id="theater-delete-btn" class="theater-action-btn theater-delete-btn">删除</button>
+                </div>
+            </main>
+        </div>
+
+        <!-- HTML 模式详情页（独立 DOM） -->
+        <div id="theater-html-detail-screen" class="screen">
+            <header class="app-header">
+                <button class="back-btn" data-target="theater-screen">‹</button>
+                <div class="title-container">
+                    <h1 class="title">HTML 剧场详情</h1>
+                </div>
+                <div class="action-btn-group">
+                    <button type="button" class="action-btn" id="theater-html-header-edit-btn" title="编辑内容">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                </div>
+            </header>
+            <main class="content theater-content">
+                <div id="theater-html-detail-content" class="theater-detail-content">
+                    <!-- HTML 模式详情内容将由 JS 动态填充 -->
+                </div>
+                <div class="theater-detail-actions">
+                    <button id="theater-html-favorite-btn" class="theater-action-btn theater-favorite-btn">收藏</button>
+                    <button id="theater-html-save-edit-btn" class="theater-action-btn theater-save-edit-btn" style="display: none;">保存</button>
+                    <button id="theater-html-share-btn" class="theater-action-btn theater-share-btn">分享到聊天框</button>
+                    <button id="theater-html-edit-category-btn" class="theater-action-btn theater-edit-category-btn">修改分类</button>
+                    <button id="theater-html-delete-btn" class="theater-action-btn theater-delete-btn">删除</button>
                 </div>
             </main>
         </div>

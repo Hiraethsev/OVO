@@ -698,8 +698,13 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
         // 小剧场分享卡片渲染
         const scenarioId = theaterShareMatch[1];
         let scenario = null;
-        if (typeof db !== 'undefined' && db && Array.isArray(db.theaterScenarios)) {
+        if (typeof db !== 'undefined' && db) {
+            if (Array.isArray(db.theaterScenarios)) {
             scenario = db.theaterScenarios.find(s => s.id === scenarioId);
+            }
+            if (!scenario && Array.isArray(db.theaterHtmlScenarios)) {
+                scenario = db.theaterHtmlScenarios.find(s => s.id === scenarioId);
+            }
         }
 
         bubbleElement = document.createElement('div');
@@ -740,10 +745,14 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
             </div>
         `;
 
-        if (scenario && typeof showTheaterScenarioDetail === 'function') {
+        if (scenario) {
             bubbleElement.addEventListener('click', () => {
                 try {
+                    if (scenario.mode === 'html' && typeof showTheaterHtmlScenarioDetail === 'function') {
+                        showTheaterHtmlScenarioDetail(scenario);
+                    } else if (typeof showTheaterScenarioDetail === 'function') {
                     showTheaterScenarioDetail(scenario);
+                    }
                 } catch (e) {
                     console.error('Failed to open theater scenario detail:', e);
                 }

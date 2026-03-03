@@ -647,13 +647,19 @@ function filterHistoryForAI(chat, historySlice, ignoreContextDisabled = false) {
     // 4. 小剧场分享占位符展开为真实内容（仅供 AI 上下文使用）
     try {
         const theaterShareRegex = /^\[小剧场分享[：:](.+?)\]$/;
-        if (typeof db !== 'undefined' && db && Array.isArray(db.theaterScenarios)) {
+        if (typeof db !== 'undefined' && db) {
             filteredHistory.forEach(msg => {
                 if (!msg || !msg.content || typeof msg.content !== 'string') return;
                 const match = msg.content.match(theaterShareRegex);
                 if (!match) return;
                 const scenarioId = match[1];
-                const scenario = db.theaterScenarios.find(s => s.id === scenarioId);
+                let scenario = null;
+                if (Array.isArray(db.theaterScenarios)) {
+                    scenario = db.theaterScenarios.find(s => s.id === scenarioId);
+                }
+                if (!scenario && Array.isArray(db.theaterHtmlScenarios)) {
+                    scenario = db.theaterHtmlScenarios.find(s => s.id === scenarioId);
+                }
                 if (!scenario) return;
 
                 let charName = '';

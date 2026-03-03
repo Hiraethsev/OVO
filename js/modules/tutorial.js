@@ -622,11 +622,18 @@ function renderTutorialContent() {
             }
             if (selected.includes('theater')) {
                 const scenarioN = (db.theaterScenarios && db.theaterScenarios.length) || 0;
+                const htmlScenarioN = (db.theaterHtmlScenarios && db.theaterHtmlScenarios.length) || 0;
                 db.theaterScenarios = [];
+                db.theaterHtmlScenarios = [];
                 db.theaterPromptPresets = db.theaterPromptPresets || [];
+                db.theaterHtmlPromptPresets = db.theaterHtmlPromptPresets || [];
                 const presetN = db.theaterPromptPresets.length;
+                const htmlPresetN = db.theaterHtmlPromptPresets.length;
                 db.theaterPromptPresets = [];
-                if (scenarioN > 0 || presetN > 0) report.push(`小剧场：已清空 ${scenarioN} 个剧本、${presetN} 个预设`);
+                db.theaterHtmlPromptPresets = [];
+                const totalScenarios = scenarioN + htmlScenarioN;
+                const totalPresets = presetN + htmlPresetN;
+                if (totalScenarios > 0 || totalPresets > 0) report.push(`小剧场：已清空 ${totalScenarios} 个剧本、${totalPresets} 个预设`);
             }
 
             await saveData(db);

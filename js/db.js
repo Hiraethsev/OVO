@@ -166,7 +166,8 @@ const globalSettingKeys = [
     'globalSendSound', 'globalReceiveSound', 'globalIncomingCallSound', 'multiMsgSoundEnabled', 'soundPresets', 'galleryPresets', 'iconPresets', 'homeWidgetPresets', 'widgetWallpaperPresets',
     'cotSettings', 'cotPresets', 'hasSeenVideoCallDisclaimer', 'hasSeenVideoCallAvatarHint',
     'favorites', 'piggyBank',
-    'theaterScenarios', 'theaterPromptPresets'
+    'theaterScenarios', 'theaterPromptPresets',
+    'theaterHtmlScenarios', 'theaterHtmlPromptPresets', 'theaterMode'
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
@@ -738,7 +739,10 @@ const loadData = async () => {
             favorites: [],
             piggyBank: { balance: 520, transactions: [] },
             theaterScenarios: [],
-            theaterPromptPresets: []
+            theaterPromptPresets: [],
+            theaterHtmlScenarios: [],
+            theaterHtmlPromptPresets: [],
+            theaterMode: 'text'
         };
         db[key] = settings[key] !== undefined ? settings[key] : (defaultValue[key] !== undefined ? JSON.parse(JSON.stringify(defaultValue[key])) : undefined);
     });

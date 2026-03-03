@@ -1048,7 +1048,7 @@ function generatePrivateSystemPrompt(character) {
             });
         }
         if (altForumUserIds.length > 0) {
-            let altBlock = '\n<alt_shared_memory>\n【小号记忆互通】你在论坛有小号，你与小号记忆互通（互通条数=你的角色上下文条数）。小号与用户在论坛私信的往来、以及若已加好友则加好友后的聊天，你都知道。以下为小号与用户的最近互动（最近' + syncLimit + '条）：\n\n';
+            let altBlock = '\n<alt_shared_memory>\n【小号记忆互通】你在论坛有小号，小号与用户在论坛私信的往来、以及若已加好友则加好友后的聊天，你都知道。以下为小号与用户的最近互动（最近' + syncLimit + '条）：\n\n';
             altForumUserIds.forEach(function(forumUserId) {
                 const profile = db.forumStrangerProfiles && db.forumStrangerProfiles[forumUserId];
                 const altName = (profile && profile.name) ? profile.name : (forumUserId.replace(/^npc_/, ''));
@@ -1085,7 +1085,7 @@ function generatePrivateSystemPrompt(character) {
         const mainSyncLimit = Math.max(1, (linkedChar.maxMemory != null ? parseInt(linkedChar.maxMemory, 10) : 20) || 20);
         const mainRecent = linkedChar.history.filter(function(m) { return !m.isContextDisabled; }).slice(-mainSyncLimit);
         if (mainRecent.length > 0) {
-            let mainBlock = '\n<main_shared_memory>\n【主号记忆互通】你与主号记忆互通（互通条数=主号的角色上下文条数，即' + mainSyncLimit + '条）。主号在聊天里与用户说的最近对话你都知道。以下为主号与用户的最近' + mainRecent.length + '条：\n\n';
+            let mainBlock = '\n<main_shared_memory>\n【主号记忆互通】你与主号记忆互通。主号在聊天里与用户说的最近对话你都知道。以下为主号与用户的最近互动' + mainRecent.length + '条：\n\n';
             mainRecent.forEach(function(m) {
                 const from = m.role === 'user' ? '用户' : '主号(' + (linkedChar.realName || linkedChar.remarkName || '') + ')';
                 const text = (m.content || '').trim().slice(0, 200) + (m.content && m.content.length > 200 ? '…' : '');
@@ -1121,7 +1121,7 @@ function generatePrivateSystemPrompt(character) {
         }
         const viewedSummary = character.peekViewedByUser.map(entry => formatPeekContentForPrompt(entry)).filter(Boolean).join('\n');
         prompt += `\n<peek_awareness>\n`;
-        prompt += `用户${timeDesc}偷看过你的手机，并点进并查看了以下应用及其内容。请根据你的人设与当前对话氛围，自然地对此做出反应（例如惊讶、生气、调侃、害羞、无奈等），无需刻意提及“系统告诉你”，当作你作为角色自然发现或推断到即可。以下为用户查看过的应用及内容摘要：\n\n`;
+        prompt += `用户${timeDesc}偷看过你的手机，并点进并查看了以下应用及其内容。请根据你的人设与当前对话氛围，自然地对此做出反应，以下为用户查看过的应用及内容摘要：\n\n`;
         prompt += viewedSummary;
         prompt += `\n</peek_awareness>\n\n`;
     }
@@ -1141,7 +1141,7 @@ function generatePrivateSystemPrompt(character) {
         }
         if (!currentThemeName) currentThemeName = '当前为自定义样式或默认';
         prompt += `\n<chat_themes>\n`;
-        prompt += `【你与用户共用的对话主题】以下是你与用户共同使用的聊天界面主题列表。更换后，你和用户看到的对话界面都会一起改变；这是「当前这场对话」的视觉主题，不是仅你可见的设定。\n\n`;
+        prompt += `【你与用户共用的对话主题】以下是你与用户共同使用的聊天界面主题列表。更换后，你和用户看到的对话界面都会一起改变；这是你和用户对话框的视觉主题。\n\n`;
         prompt += `当前可选的对话主题：\n${themeListText}\n\n`;
         prompt += `当前正在使用：${currentThemeName}\n\n`;
         if (character.themeJustChangedByUser && character.themeJustChangedByUser.trim()) {
@@ -1250,8 +1250,8 @@ function generatePrivateSystemPrompt(character) {
 - [${character.myName}的语音：xxx]：我给你发送了一段内容为xxx的语音。
 - [${character.myName}发来的照片/视频：xxx]：我给你分享了一个描述为xxx的照片或视频。
 - [${character.myName}给你转账：xxx元；备注：xxx]：我给你转了一笔钱。
-- [我的位置：xxx；距你约 x 千米]：我向你发送了我当前所在的位置。其中“我的位置”后的内容为我填写的地点（必填）；“距你约”后的数字和单位（如米、千米）为选填，表示我与你之间的距离。请根据我所在的位置以及可选的距离信息自然地回应，例如关心安全、提议见面、调侃距离远近等。
-- 你也可以主动告诉我你当前所在位置，使用格式 [${character.realName}的位置：xxx；距你约 x 米]（地点必填，距你约为选填），这样我就知道你在哪里。
+- [我的位置：xxx；距你约 x 千米]：我向你发送了我当前所在的位置。其中“我的位置”后的内容为我目前的地点；“距你约”后的数字和单位（如米、千米）（我选填）表示我与你之间的距离。请根据我所在的位置以及距离信息（如果有距离信息的话）自然地回应，例如关心安全、提议见面、调侃距离远近等。
+- 你也可以主动告诉我你当前所在位置，使用格式 [${character.realName}的位置：xxx；距你约 x 米]（地点必填，距你约为选填），这样我就知道你在哪里，我们之间距离有多少。
 - [${character.myName}向${character.realName}发起了代付请求:金额|商品清单]：我正在向你发起代付请求，希望你为这些商品买单。你需要根据我们当前的关系和你的性格决定是否同意。
 - [${character.myName}为${character.realName}下单了：配送方式|金额|商品清单]：我已经下单购买了商品送给你。
 - [${character.myName}引用“{被引用内容}”并回复：{回复内容}]：我引用了某条历史消息并做出了新的回复。你需要理解我引用的上下文并作出回应。
