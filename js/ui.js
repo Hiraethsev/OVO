@@ -717,28 +717,6 @@ function applyFontSize(scale) {
     document.documentElement.style.setProperty('--app-font-scale', scale);
 }
 
-// 输入框增高：切换自动增高模式
-function applyInputExpand(enabled) {
-    const ta = document.getElementById('message-input');
-    if (!ta) return;
-    if (enabled) {
-        ta.classList.add('input-expand-active');
-        ta.removeEventListener('input', _autoResizeInput);
-        ta.addEventListener('input', _autoResizeInput);
-        // 立即调整当前内容高度
-        _autoResizeInput.call(ta);
-    } else {
-        ta.classList.remove('input-expand-active');
-        ta.removeEventListener('input', _autoResizeInput);
-        ta.style.height = '';
-    }
-}
-
-function _autoResizeInput() {
-    this.style.height = 'auto';
-    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-}
-
 // 统一面板控制函数
 function showPanel(type) {
     triggerHapticFeedback('light');

@@ -551,7 +551,6 @@ function loadSettingsToSidebar() {
         };
 
         document.getElementById('setting-bubble-blur').checked = e.bubbleBlurEnabled !== false; 
-        document.getElementById('setting-input-expand').checked = e.inputExpandEnabled || false;
 
         document.getElementById('setting-title-layout').value = e.titleLayout || 'left';
         document.getElementById('setting-show-timestamp').checked = e.showTimestamp || false;
@@ -699,8 +698,6 @@ async function saveSettingsFromSidebar() {
         e.avatarRadius = parseInt(document.getElementById('setting-avatar-radius').value, 10);
 
         e.bubbleBlurEnabled = document.getElementById('setting-bubble-blur').checked;
-        e.inputExpandEnabled = document.getElementById('setting-input-expand').checked;
-        applyInputExpand(e.inputExpandEnabled);
         const chatScreen = document.getElementById('chat-room-screen');
         if (e.bubbleBlurEnabled) {
             chatScreen.classList.remove('disable-blur');

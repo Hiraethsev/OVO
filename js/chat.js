@@ -221,11 +221,8 @@ function setupChatRoom() {
             messageInput.focus();
         }, 50);
     });
-    messageInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !isGenerating) {
-            e.preventDefault();
-            sendMessage();
-        }
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !isGenerating) sendMessage();
     });
 
     // 监听输入框聚焦事件：自动收起底部面板，避免与键盘冲突
@@ -540,8 +537,6 @@ function openChatRoom(chatId, type) {
         chatRoomScreen.classList.remove('disable-blur');
     }
 
-    applyInputExpand(chat.inputExpandEnabled || false);
-
     if (chat.showTimestamp) {
         chatRoomScreen.classList.add('show-timestamp');
     } else {
@@ -632,7 +627,6 @@ async function sendMessage() {
     const text = messageInput.value.trim();
     if (!text || isGenerating) return;
     messageInput.value = '';
-    messageInput.style.height = '';
     const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
 
     if (!chat) return;

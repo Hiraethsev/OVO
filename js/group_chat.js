@@ -115,7 +115,7 @@ function setupGroupChatSystem() {
         'setting-group-theme-color', 'setting-group-use-custom-css', 'setting-group-show-timestamp',
         'setting-group-show-notice', 'setting-group-allow-gossip', 'setting-group-avatar-radius',
         'setting-group-bilingual-mode', 'setting-group-bilingual-style', 'setting-group-auto-journal-enabled',
-        'setting-group-timestamp-format', 'setting-group-input-expand'
+        'setting-group-timestamp-format'
     ];
     groupAutoSaveChanges.forEach(id => {
         const el = document.getElementById(id);
@@ -1016,7 +1016,6 @@ function loadGroupSettingsToSidebar() {
     const avatarRadius = group.avatarRadius !== undefined ? group.avatarRadius : 50;
     document.getElementById('setting-group-avatar-radius').value = avatarRadius;
     document.getElementById('setting-group-avatar-radius-value').textContent = `${avatarRadius}%`;
-    document.getElementById('setting-group-input-expand').checked = group.inputExpandEnabled || false;
     
     const radiusSlider = document.getElementById('setting-group-avatar-radius');
     const radiusValue = document.getElementById('setting-group-avatar-radius-value');
@@ -1167,8 +1166,6 @@ async function saveGroupSettingsFromSidebar(showToastFlag = true) {
     }
 
     group.avatarRadius = parseInt(document.getElementById('setting-group-avatar-radius').value, 10);
-    group.inputExpandEnabled = document.getElementById('setting-group-input-expand').checked;
-    applyInputExpand(group.inputExpandEnabled);
 
     group.showTimestamp = document.getElementById('setting-group-show-timestamp').checked;
     group.timestampStyle = document.getElementById('setting-group-timestamp-style').value;
