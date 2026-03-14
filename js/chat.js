@@ -285,20 +285,8 @@ function setupChatRoom() {
         }
     });
 
-    getReplyBtn.addEventListener('click', async () => {
-        // 点击获取回复时激活音频上下文
-        if (typeof MinimaxTTSService !== 'undefined') {
-            await MinimaxTTSService.activateAudioContext();
-        }
-        getAiReply(currentChatId, currentChatType);
-    });
-    regenerateBtn.addEventListener('click', async () => {
-        // 点击重新生成时激活音频上下文
-        if (typeof MinimaxTTSService !== 'undefined') {
-            await MinimaxTTSService.activateAudioContext();
-        }
-        handleRegenerate();
-    });
+    getReplyBtn.addEventListener('click', () => getAiReply(currentChatId, currentChatType));
+    regenerateBtn.addEventListener('click', handleRegenerate);
 
     const abortReplyBtn = document.getElementById('abort-reply-btn');
     if (abortReplyBtn) {
