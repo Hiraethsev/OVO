@@ -1,29 +1,6 @@
 // --- 核心聊天逻辑 (js/chat.js) ---
 // 此文件保留核心入口和胶水代码，具体功能已拆分至 js/modules/chat_*.js
 
-const AI_CHAT_MODE_KEY = 'aiChatMode';
-const AI_MODE_ASSISTANT = 'assistant';
-const AI_MODE_COMPANION = 'companion';
-
-function getAiChatMode() {
-    const v = (typeof localStorage !== 'undefined' && localStorage.getItem(AI_CHAT_MODE_KEY)) || AI_MODE_ASSISTANT;
-    return v === AI_MODE_COMPANION ? AI_MODE_COMPANION : AI_MODE_ASSISTANT;
-}
-
-function setAiChatMode(mode) {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(AI_CHAT_MODE_KEY, mode);
-}
-
-function getAiChatModeTitle() {
-    return getAiChatMode() === AI_MODE_COMPANION ? 'AI 伙伴' : 'AI 助手';
-}
-
-function updateChatTitleByAiMode() {
-    if (typeof chatRoomTitle !== 'undefined' && chatRoomTitle) {
-        chatRoomTitle.textContent = getAiChatModeTitle();
-    }
-}
-
 function setupChatRoom() {
     const memoryJournalBtn = document.getElementById('memory-journal-btn');
     const deleteHistoryBtn = document.getElementById('delete-history-btn');
@@ -307,21 +284,6 @@ function setupChatRoom() {
             }, 100);
         }
     });
-
-    const aiModeToggleBtn = document.getElementById('ai-mode-toggle-btn');
-    if (aiModeToggleBtn) {
-        function syncAiModeButtonLabel() {
-            aiModeToggleBtn.textContent = getAiChatModeTitle();
-            aiModeToggleBtn.title = '当前：' + getAiChatModeTitle() + '，点击切换';
-        }
-        syncAiModeButtonLabel();
-        aiModeToggleBtn.addEventListener('click', () => {
-            const next = getAiChatMode() === AI_MODE_ASSISTANT ? AI_MODE_COMPANION : AI_MODE_ASSISTANT;
-            setAiChatMode(next);
-            updateChatTitleByAiMode();
-            syncAiModeButtonLabel();
-        });
-    }
 
     getReplyBtn.addEventListener('click', async () => {
         // 点击获取回复时激活音频上下文
@@ -646,7 +608,9 @@ function openChatRoom(chatId, type) {
     }
     exitMultiSelectMode();
     cancelMessageEdit();
-    updateChatTitleByAiMode();
+    if (typeof chatRoomTitle !== 'undefined' && chatRoomTitle) {
+        chatRoomTitle.textContent = (type === 'private') ? (chat.remarkName || chat.realName || chat.name) : chat.name;
+    }
     const subtitle = document.getElementById('chat-room-subtitle');
     if (type === 'private') {
         subtitle.style.display = (chat.showStatus !== false) ? 'flex' : 'none';
