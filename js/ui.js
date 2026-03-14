@@ -80,6 +80,9 @@ const switchScreen = (targetId) => {
     if (targetId === 'piggy-bank-screen' && typeof renderPiggyBankScreen === 'function') {
         renderPiggyBankScreen();
     }
+    if (targetId === 'family-card-list-screen' && typeof renderFamilyCardList === 'function') {
+        renderFamilyCardList();
+    }
     if (targetId === 'music-screen') {
         if (typeof initMusicPlayer === 'function') initMusicPlayer();
         if (typeof onShowMusicScreen === 'function') onShowMusicScreen();
@@ -472,11 +475,7 @@ function setupHomeScreen() {
         e.preventDefault();
         applyHomeScreenMode('night');
     });
-    homeScreen.querySelector('.app-icon[data-target="appearance-settings-screen"]')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof showToast === 'function') showToast('正在开发中');
-    });
+    /* 外观设置：点击进入页面，由 showScreen 时调用 renderAppearanceSettingsScreen */
     document.querySelector('[data-target="world-book-screen"]').addEventListener('click', renderWorldBookList);
     document.querySelector('[data-target="customize-screen"]').addEventListener('click', renderCustomizeForm);
     document.querySelector('[data-target="tutorial-screen"]').addEventListener('click', renderTutorialContent);

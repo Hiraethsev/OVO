@@ -91,21 +91,25 @@ function setupImageRecognition() {
         imageUploadInput.click();
     });
     imageUploadInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            try {
-                const compressedUrl = await compressImage(file, {
-                    quality: 0.8,
-                    maxWidth: 1024,
-                    maxHeight: 1024
-                });
-                sendImageForRecognition(compressedUrl);
-            } catch (error) {
-                console.error('Image compression failed:', error);
-                showToast('图片处理失败，请重试');
-            } finally {
-                e.target.value = null;
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const opts = { quality: 0.8, maxWidth: 1024, maxHeight: 1024 };
+        try {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                try {
+                    const compressedUrl = await compressImage(file, opts);
+                    sendImageForRecognition(compressedUrl);
+                } catch (err) {
+                    console.error('Image compression failed:', err);
+                    showToast(`第 ${i + 1} 张图片处理失败，请重试`);
+                }
             }
+            if (files.length > 1) {
+                showToast(`已发送 ${files.length} 张图片`);
+            }
+        } finally {
+            e.target.value = null;
         }
     });
 }
@@ -171,6 +175,17 @@ function setupWalletSystem() {
     walletBtn.addEventListener('click', () => {
         if (currentChatType === 'private') {
             sendTransferForm.reset();
+            const methodList = document.getElementById('transfer-payment-methods');
+            if (methodList) {
+                const balance = typeof getPiggyBalance === 'function' ? getPiggyBalance() : 520;
+                let html = '<label class="payment-method-item"><input type="radio" name="transfer-pay-method" value="balance" checked><span class="pm-name">余额</span><span class="pm-balance">' + balance + '</span></label>';
+                const received = (db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards.filter(c => c.status === 'active') : [];
+                received.forEach(c => {
+                    const remaining = Math.max(0, c.limit - (c.usedAmount || 0));
+                    html += '<label class="payment-method-item"><input type="radio" name="transfer-pay-method" value="' + c.id + '"><span class="pm-name">' + (c.fromCharName || '') + '的亲属卡</span><span class="pm-balance">剩余 ' + remaining + '</span></label>';
+                });
+                methodList.innerHTML = html;
+            }
             sendTransferModal.classList.add('visible');
         } else if (currentChatType === 'group') {
             // currentGroupAction 应该在 group_chat.js 或全局定义
@@ -194,9 +209,34 @@ function setupWalletSystem() {
         if (currentChatType === 'group' && typeof currentGroupAction !== 'undefined' && currentGroupAction.recipients && currentGroupAction.recipients.length > 1) {
             totalDeduct = amount * currentGroupAction.recipients.length;
         }
+        const payMethodRadio = document.querySelector('input[name="transfer-pay-method"]:checked');
+        const payMethod = payMethodRadio ? payMethodRadio.value : 'balance';
+        if (payMethod !== 'balance' && db.piggyBank && db.piggyBank.receivedFamilyCards) {
+            const card = db.piggyBank.receivedFamilyCards.find(c => c.id === payMethod);
+            if (card && card.status === 'active') {
+                const remaining = card.limit - (card.usedAmount || 0);
+                if (remaining < totalDeduct) {
+                    showToast('亲属卡额度不足');
+                    return;
+                }
+            } else {
+                showToast('请选择有效的支付方式');
+                return;
+            }
+        }
         if (typeof getPiggyBalance === 'function' && getPiggyBalance() < totalDeduct) {
             showToast('存钱罐余额不足，无法转账');
             return;
+        }
+        if (payMethod !== 'balance' && db.piggyBank && db.piggyBank.receivedFamilyCards) {
+            const card = db.piggyBank.receivedFamilyCards.find(c => c.id === payMethod);
+            if (card) {
+                card.usedAmount = (card.usedAmount || 0) + totalDeduct;
+                if (!card.transactions) card.transactions = [];
+                const chat = currentChatType === 'private' ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+                const toName = currentChatType === 'private' ? (chat && chat.realName) : (currentGroupAction && currentGroupAction.recipients && currentGroupAction.recipients.length ? (chat.members || []).map(m => m.realName).filter(Boolean).join('、') : '');
+                card.transactions.unshift({ id: 'rfct_' + Date.now(), amount: totalDeduct, scene: '转账', detail: remark || '转账', targetName: toName || '', time: Date.now() });
+            }
         }
         if (typeof addPiggyTransaction === 'function') {
             const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
@@ -375,6 +415,51 @@ async function respondToTransfer(action) {
     document.getElementById('receive-transfer-actionsheet').classList.remove('visible');
     currentTransferMessageId = null;
 }
+
+/**
+ * 用户接收/退还角色发的亲属卡（私聊）
+ * @param {string} msgId - 角色发送亲属卡的那条消息的 id
+ * @param {'accept'|'return'} action
+ */
+window.sendFamilyCardResponse = async function(msgId, action) {
+    if (currentChatType !== 'private') return;
+    const character = db.characters.find(c => c.id === currentChatId);
+    if (!character) return;
+    const message = character.history.find(m => m.id === msgId);
+    if (!message || !message.receivedFamilyCardId || message.receivedFamilyCardStatus !== 'pending') return;
+
+    const statusToSet = action === 'accept' ? 'accepted' : 'returned';
+    message.receivedFamilyCardStatus = statusToSet;
+
+    if (action === 'return' && db.piggyBank && db.piggyBank.receivedFamilyCards) {
+        const card = db.piggyBank.receivedFamilyCards.find(c => c.id === message.receivedFamilyCardId);
+        if (card) card.status = 'returned';
+    }
+
+    const fcCardOnScreen = messageArea.querySelector(`.message-wrapper[data-id="${msgId}"] .family-card-receipt`);
+    if (fcCardOnScreen) {
+        fcCardOnScreen.classList.remove('accepted', 'returned');
+        fcCardOnScreen.classList.add(statusToSet);
+        const statusElem = fcCardOnScreen.querySelector('.family-card-status-text');
+        if (statusElem) statusElem.textContent = statusToSet === 'accepted' ? '已接收' : '已退还';
+        const actions = fcCardOnScreen.querySelector('.receipt-actions');
+        if (actions) actions.remove();
+    }
+
+    const verb = action === 'accept' ? '接收' : '退还';
+    const contextMessageContent = `[${character.myName}${verb}${character.realName}的亲属卡]`;
+    const contextMessage = {
+        id: 'msg_' + Date.now(),
+        role: 'user',
+        content: contextMessageContent,
+        parts: [{ type: 'text', text: contextMessageContent }],
+        timestamp: Date.now()
+    };
+    character.history.push(contextMessage);
+    if (typeof addMessageBubble === 'function') addMessageBubble(contextMessage, currentChatId, currentChatType);
+    if (typeof saveData === 'function') await saveData();
+    if (typeof renderChatList === 'function') renderChatList();
+};
 
 function setupGiftSystem() {
     const giftBtn = document.getElementById('gift-btn');

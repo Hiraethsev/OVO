@@ -1,5 +1,22 @@
 // --- 偷看手机功能 (js/modules/peek.js) ---
 
+/** 当前打开的偷看对话（代发消息时用于发送/API回复） */
+let currentPeekConversation = null;
+/** NPC 主动发来的好友申请（弹窗用） */
+let peekPendingFriendRequestConversation = null;
+
+function normalizePeekConversation(conv, index) {
+    if (!conv) return;
+    if (!conv.partnerId) conv.partnerId = 'peek_npc_' + Date.now() + '_' + (index != null ? index : Math.random().toString(36).slice(2, 10));
+    if (typeof conv.suspicionLevel !== 'number') conv.suspicionLevel = 0;
+    if (typeof conv.isFriend !== 'boolean') conv.isFriend = false;
+    if (typeof conv.friendRequestPending !== 'boolean') conv.friendRequestPending = false;
+    if (conv.supplementPersona == null) conv.supplementPersona = '';
+    if (conv.partnerPersona == null) conv.partnerPersona = '';
+    if (conv.partnerRelation == null) conv.partnerRelation = '熟人';
+    if (!Array.isArray(conv.history)) conv.history = [];
+}
+
 function peekEscapeHtml(str) {
     if (str == null) return '';
     const s = String(str);
@@ -128,7 +145,7 @@ function setupPeekFeature() {
         }
 
         if (!character.peekScreenSettings) {
-            character.peekScreenSettings = { wallpaper: '', customIcons: {}, unlockAvatar: '', unlockCommentsEnabled: false, charAwarePeek: false, refreshCounts: {} };
+            character.peekScreenSettings = { wallpaper: '', customIcons: {}, unlockAvatar: '', unlockCommentsEnabled: false, charAwarePeek: false, impersonateEnabled: false, refreshCounts: {}, browserDetailEnabled: false, browserDetailWords: { min: 200, max: 500 } };
         }
 
         character.peekScreenSettings.wallpaper = document.getElementById('peek-wallpaper-url-input').value.trim();
@@ -153,6 +170,8 @@ function setupPeekFeature() {
         character.peekScreenSettings.unlockCommentsEnabled = document.getElementById('peek-unlock-comments-enabled').checked;
         const charAwarePeekEl = document.getElementById('peek-char-aware-peek-enabled');
         character.peekScreenSettings.charAwarePeek = charAwarePeekEl ? charAwarePeekEl.checked : false;
+        const impersonateEl = document.getElementById('peek-impersonate-enabled');
+        character.peekScreenSettings.impersonateEnabled = impersonateEl ? impersonateEl.checked : false;
 
         // 刷新条数：聊天、时光想说、备忘录
         if (!character.peekScreenSettings.refreshCounts) character.peekScreenSettings.refreshCounts = {};
@@ -163,6 +182,15 @@ function setupPeekFeature() {
         character.peekScreenSettings.refreshCounts.messages = { min: parseNum('peek-refresh-min-messages', 3), max: parseNum('peek-refresh-max-messages', 5) };
         character.peekScreenSettings.refreshCounts.timeThoughts = { min: parseNum('peek-refresh-min-timeThoughts', 3), max: parseNum('peek-refresh-max-timeThoughts', 5) };
         character.peekScreenSettings.refreshCounts.memos = { min: parseNum('peek-refresh-min-memos', 3), max: parseNum('peek-refresh-max-memos', 4) };
+
+        // 浏览器详情开关与字数
+        const bdCheckbox = document.getElementById('peek-browser-detail-enabled');
+        character.peekScreenSettings.browserDetailEnabled = bdCheckbox ? bdCheckbox.checked : false;
+        if (!character.peekScreenSettings.browserDetailWords) {
+            character.peekScreenSettings.browserDetailWords = { min: 200, max: 500 };
+        }
+        character.peekScreenSettings.browserDetailWords.min = parseNum('peek-browser-detail-min-words', 200);
+        character.peekScreenSettings.browserDetailWords.max = parseNum('peek-browser-detail-max-words', 500);
 
         await saveData();
         renderPeekScreen(); 
@@ -187,7 +215,10 @@ function setupPeekFeature() {
             if (cachedData && cachedData.conversations) {
                 const conversation = cachedData.conversations.find(c => c.partnerName === partnerName);
                 if (conversation) {
-                    renderPeekConversation(conversation.history, conversation.partnerName);
+                    const idx = cachedData.conversations.indexOf(conversation);
+                    normalizePeekConversation(conversation, idx);
+                    currentPeekConversation = conversation;
+                    renderPeekConversation(conversation);
                     switchScreen('peek-conversation-screen');
                 } else {
                     showToast('找不到对话记录');
@@ -200,10 +231,24 @@ function setupPeekFeature() {
 
     const peekConversationScreen = document.getElementById('peek-conversation-screen');
     peekConversationScreen.addEventListener('click', (e) => {
-        if (e.target.closest('.action-btn')) {
+        if (e.target.closest('.action-btn') && !e.target.closest('#peek-impersonate-bar')) {
             generateAndRenderPeekContent('messages', { forceRefresh: true });
         }
     });
+
+    document.getElementById('peek-impersonate-send-btn')?.addEventListener('click', sendPeekImpersonateMessage);
+    document.getElementById('peek-impersonate-api-btn')?.addEventListener('click', requestPeekNPCReply);
+    document.getElementById('peek-impersonate-friend-btn')?.addEventListener('click', peekAddNPCAsFriend);
+    document.getElementById('peek-impersonate-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendPeekImpersonateMessage();
+        }
+    });
+    document.getElementById('peek-friend-request-accept-btn')?.addEventListener('click', peekAcceptFriendRequest);
+    document.getElementById('peek-friend-request-reject-btn')?.addEventListener('click', peekRejectFriendRequest);
+    document.getElementById('peek-edit-persona-save-btn')?.addEventListener('click', savePeekEditPersona);
+    document.getElementById('peek-edit-persona-cancel-btn')?.addEventListener('click', () => document.getElementById('peek-edit-persona-modal')?.classList.remove('visible'));
 
     const refreshAlbumBtn = document.getElementById('refresh-album-btn');
     if(refreshAlbumBtn) {
@@ -384,7 +429,7 @@ async function deleteAllPeekData() {
 
 function renderPeekSettings() {
     const character = db.characters.find(c => c.id === currentChatId);
-    const peekSettings = character?.peekScreenSettings || { wallpaper: '', customIcons: {}, unlockAvatar: '', unlockCommentsEnabled: false, charAwarePeek: false, refreshCounts: {} };
+    const peekSettings = character?.peekScreenSettings || { wallpaper: '', customIcons: {}, unlockAvatar: '', unlockCommentsEnabled: false, charAwarePeek: false, impersonateEnabled: false, refreshCounts: {} };
 
     // 1. 设置壁纸输入框
     const wallpaperInput = document.getElementById('peek-wallpaper-url-input');
@@ -406,6 +451,10 @@ function renderPeekSettings() {
     const charAwarePeekCheckbox = document.getElementById('peek-char-aware-peek-enabled');
     if (charAwarePeekCheckbox) {
         charAwarePeekCheckbox.checked = !!peekSettings.charAwarePeek;
+    }
+    const impersonateCheckbox = document.getElementById('peek-impersonate-enabled');
+    if (impersonateCheckbox) {
+        impersonateCheckbox.checked = !!peekSettings.impersonateEnabled;
     }
 
     // 3. 生成应用图标设置（支持 URL、本地上传、重置）
@@ -442,6 +491,15 @@ function renderPeekSettings() {
         if (minEl) minEl.value = Number.isFinite(c.min) ? c.min : d.min;
         if (maxEl) maxEl.value = Number.isFinite(c.max) ? c.max : d.max;
     });
+
+    // 浏览器详情开关与字数
+    const browserDetailCheckbox = document.getElementById('peek-browser-detail-enabled');
+    if (browserDetailCheckbox) browserDetailCheckbox.checked = !!peekSettings.browserDetailEnabled;
+    const bWords = peekSettings.browserDetailWords || { min: 200, max: 500 };
+    const minWordsEl = document.getElementById('peek-browser-detail-min-words');
+    const maxWordsEl = document.getElementById('peek-browser-detail-max-words');
+    if (minWordsEl) minWordsEl.value = Number.isFinite(bWords.min) ? bWords.min : 200;
+    if (maxWordsEl) maxWordsEl.value = Number.isFinite(bWords.max) ? bWords.max : 500;
 }
 
 /** 当角色开启「知晓用户窥屏」时，记录用户刚查看的应用及内容，并更新 lastPeekViewedAt */
@@ -783,44 +841,288 @@ function showTimeThoughtDetail(thought) {
     });
 }
 
-function renderPeekConversation(history, partnerName) {
+function renderPeekConversation(conversation) {
     const titleEl = document.getElementById('peek-conversation-title');
     const messageAreaEl = document.getElementById('peek-message-area');
+    const impersonateBar = document.getElementById('peek-impersonate-bar');
+    const char = db.characters.find(c => c.id === currentChatId);
+    const impersonateEnabled = char?.peekScreenSettings?.impersonateEnabled && conversation;
+
+    const partnerName = conversation?.partnerName || '...';
+    const history = conversation?.history || [];
 
     titleEl.textContent = partnerName;
     messageAreaEl.innerHTML = '';
 
     if (!history || history.length === 0) {
         messageAreaEl.innerHTML = '<p class="placeholder-text">正在生成对话...</p>';
-        return;
+    } else {
+        history.forEach(msg => {
+            const isSentByChar = msg.sender === 'char';
+            const isImpersonated = !!msg.isImpersonated;
+            const wrapper = document.createElement('div');
+            wrapper.className = `message-wrapper ${isSentByChar ? 'sent' : 'received'}`;
+
+            const bubbleRow = document.createElement('div');
+            bubbleRow.className = 'message-bubble-row';
+
+            const bubble = document.createElement('div');
+            bubble.className = `message-bubble ${isSentByChar ? 'sent' : 'received'}`;
+            bubble.textContent = msg.content;
+            // isImpersonated 仅保留在数据中，界面不显示任何标注，以假乱真
+
+            if (isSentByChar) {
+                bubbleRow.appendChild(bubble);
+            } else {
+                const avatar = document.createElement('img');
+                avatar.className = 'message-avatar';
+                avatar.src = 'https://i.postimg.cc/Y96LPskq/o-o-2.jpg';
+                bubbleRow.appendChild(avatar);
+                bubbleRow.appendChild(bubble);
+            }
+
+            wrapper.appendChild(bubbleRow);
+            messageAreaEl.appendChild(wrapper);
+        });
+        messageAreaEl.scrollTop = messageAreaEl.scrollHeight;
     }
 
-    history.forEach(msg => {
-        const isSentByChar = msg.sender === 'char'; 
-        const wrapper = document.createElement('div');
-        wrapper.className = `message-wrapper ${isSentByChar ? 'sent' : 'received'}`;
+    if (impersonateBar) {
+        impersonateBar.style.display = impersonateEnabled ? 'block' : 'none';
+    }
+    const friendBtn = document.getElementById('peek-impersonate-friend-btn');
+    if (friendBtn) {
+        const isFriend = conversation?.isFriend === true;
+        friendBtn.textContent = isFriend ? '已是好友' : '添加好友';
+        friendBtn.disabled = isFriend;
+    }
+}
 
-        const bubbleRow = document.createElement('div');
-        bubbleRow.className = 'message-bubble-row';
+async function sendPeekImpersonateMessage() {
+    const input = document.getElementById('peek-impersonate-input');
+    const text = (input && input.value || '').trim();
+    if (!text) {
+        showToast('请输入消息内容');
+        return;
+    }
+    if (!currentPeekConversation) {
+        showToast('当前对话已关闭');
+        return;
+    }
+    const char = db.characters.find(c => c.id === currentChatId);
+    if (!char || !char.peekData?.messages?.conversations) {
+        showToast('数据异常');
+        return;
+    }
+    currentPeekConversation.history = currentPeekConversation.history || [];
+    currentPeekConversation.history.push({ sender: 'char', content: text, isImpersonated: true });
+    if (input) input.value = '';
+    await saveData();
+    renderPeekConversation(currentPeekConversation);
+    showToast('已发送');
+}
 
-        const bubble = document.createElement('div');
-        bubble.className = `message-bubble ${isSentByChar ? 'sent' : 'received'}`;
-        bubble.textContent = msg.content;
+async function requestPeekNPCReply() {
+    if (!currentPeekConversation) {
+        showToast('请先打开一个对话');
+        return;
+    }
+    const char = db.characters.find(c => c.id === currentChatId);
+    if (!char) return;
+    let apiConfig = db.apiSettings;
+    if (db.peekApiSettings && db.peekApiSettings.url && db.peekApiSettings.key && db.peekApiSettings.model) {
+        apiConfig = db.peekApiSettings;
+    }
+    const { url, key, model } = apiConfig;
+    if (!url || !key || !model) {
+        showToast('请先在设置中配置 API');
+        return;
+    }
+    const npcName = currentPeekConversation.partnerName;
+    const npcPersona = (currentPeekConversation.partnerPersona || '') + (currentPeekConversation.supplementPersona ? '\n补充：' + currentPeekConversation.supplementPersona : '') || '与角色认识的普通人';
+    const charName = char.realName;
+    const relation = currentPeekConversation.partnerRelation || '熟人';
+    const suspicion = currentPeekConversation.suspicionLevel != null ? currentPeekConversation.suspicionLevel : 0;
+    const history = currentPeekConversation.history || [];
+    const recentLines = history.slice(-16).map(m => {
+        const who = m.sender === 'char' ? charName : npcName;
+        const tag = m.isImpersonated ? ' [实际是别人冒充' + charName + '发的]' : '';
+        return who + '：' + (m.content || '') + tag;
+    }).join('\n');
 
-        if (isSentByChar) {
-            bubbleRow.appendChild(bubble);
+    const systemPrompt = `你是「${npcName}」，正在和「${charName}」聊天。你的人设：${npcPersona}。你和${charName}是${relation}关系。
+
+以下近期对话中，有些消息可能不是${charName}本人发的，而是TA的恋人在偷偷用TA手机和你聊。当前你对「对方是不是本人」的怀疑度：${suspicion}/100（0=完全没察觉，100=基本确定不是本人）。
+
+近期对话：
+---
+${recentLines}
+---
+
+请根据人设和怀疑度，生成你的回复。可以自然聊天，也可以若有所察地试探。若对话氛围合适且尚未是好友，可表达想加对方为好友的意愿，并设置 "suggestFriend": true。
+只输出一个JSON，不要其他文字：
+{"replies": ["回复1", "回复2"], "newSuspicion": 数字0-100, "suspicionReason": "可选", "suggestFriend": false或true}`;
+
+    showToast('正在生成回复…');
+    try {
+        const endpoint = (url.endsWith('/') ? url.slice(0, -1) : url) + '/v1/chat/completions';
+        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
+        const requestBody = { model: model, messages: [{ role: 'user', content: systemPrompt }], temperature: 0.8 };
+        const contentStr = await fetchAiResponse(apiConfig, requestBody, headers, endpoint);
+        const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('未解析到有效JSON');
+        const data = JSON.parse(jsonMatch[0]);
+        const replies = Array.isArray(data.replies) ? data.replies : (data.reply ? [data.reply] : []);
+        const newSuspicion = typeof data.newSuspicion === 'number' ? Math.max(0, Math.min(100, data.newSuspicion)) : suspicion;
+        if (replies.length > 0) {
+            currentPeekConversation.history = currentPeekConversation.history || [];
+            replies.forEach(t => currentPeekConversation.history.push({ sender: 'partner', content: String(t).trim() }));
+            currentPeekConversation.suspicionLevel = newSuspicion;
+            await saveData();
+            renderPeekConversation(currentPeekConversation);
+            showToast('对方已回复');
         } else {
-            const avatar = document.createElement('img');
-            avatar.className = 'message-avatar';
-            avatar.src = 'https://i.postimg.cc/Y96LPskq/o-o-2.jpg';
-            bubbleRow.appendChild(avatar);
-            bubbleRow.appendChild(bubble);
+            showToast('未生成到回复，请重试');
         }
-        
-        wrapper.appendChild(bubbleRow);
-        messageAreaEl.appendChild(wrapper);
-    });
-    messageAreaEl.scrollTop = messageAreaEl.scrollHeight;
+        if (data.suggestFriend === true && !currentPeekConversation.isFriend) {
+            peekShowFriendRequestModal(currentPeekConversation);
+        }
+    } catch (err) {
+        console.error(err);
+        showApiError(err);
+    }
+}
+
+async function peekAddNPCAsFriend() {
+    if (!currentPeekConversation) return;
+    if (currentPeekConversation.isFriend) {
+        showToast('已经是好友了');
+        return;
+    }
+    const char = db.characters.find(c => c.id === currentChatId);
+    if (!char) return;
+    if (!db.characters.some(c => c.source === 'peek' && c.peekPartnerId === currentPeekConversation.partnerId)) {
+        const newChar = {
+            id: 'peek_friend_' + (currentPeekConversation.partnerId || Date.now()) + '_' + Date.now(),
+            name: currentPeekConversation.partnerName,
+            realName: currentPeekConversation.partnerName,
+            avatar: 'https://i.postimg.cc/Y96LPskq/o-o-2.jpg',
+            persona: currentPeekConversation.partnerPersona || '',
+            source: 'peek',
+            peekPartnerId: currentPeekConversation.partnerId,
+            peekOwnerCharId: char.id,
+            history: [],
+            myName: char.myName || '用户',
+            myPersona: char.myPersona || '',
+            supplementPersonaEnabled: false,
+            supplementPersonaAiEnabled: false,
+            supplementPersonaText: (currentPeekConversation.supplementPersona || '').trim()
+        };
+        db.characters.push(newChar);
+        currentPeekConversation.isFriend = true;
+        await saveData();
+        renderPeekConversation(currentPeekConversation);
+        showToast('已添加为好友，可在联系人中与TA聊天');
+    } else {
+        currentPeekConversation.isFriend = true;
+        await saveData();
+        renderPeekConversation(currentPeekConversation);
+        showToast('已是好友');
+    }
+}
+
+function peekShowFriendRequestModal(conversation) {
+    if (!conversation) return;
+    peekPendingFriendRequestConversation = conversation;
+    const nameEl = document.getElementById('peek-friend-request-name');
+    const avatarEl = document.getElementById('peek-friend-request-avatar');
+    if (nameEl) nameEl.textContent = conversation.partnerName || '对方';
+    if (avatarEl) avatarEl.src = 'https://i.postimg.cc/Y96LPskq/o-o-2.jpg';
+    document.getElementById('peek-friend-request-modal')?.classList.add('visible');
+}
+
+async function peekAcceptFriendRequest() {
+    if (!peekPendingFriendRequestConversation) return;
+    currentPeekConversation = peekPendingFriendRequestConversation;
+    const conv = peekPendingFriendRequestConversation;
+    peekPendingFriendRequestConversation = null;
+    document.getElementById('peek-friend-request-modal')?.classList.remove('visible');
+    await peekAddNPCAsFriend();
+    if (currentPeekConversation === conv) renderPeekConversation(currentPeekConversation);
+}
+
+function peekRejectFriendRequest() {
+    peekPendingFriendRequestConversation = null;
+    document.getElementById('peek-friend-request-modal')?.classList.remove('visible');
+}
+
+async function peekSupplementPersonaFromConversation() {
+    if (!currentPeekConversation) {
+        showToast('请先打开一个对话');
+        return;
+    }
+    const char = db.characters.find(c => c.id === currentChatId);
+    if (!char) return;
+    let apiConfig = db.apiSettings;
+    if (db.peekApiSettings && db.peekApiSettings.url && db.peekApiSettings.key && db.peekApiSettings.model) apiConfig = db.peekApiSettings;
+    if (!apiConfig || !apiConfig.url || !apiConfig.key || !apiConfig.model) {
+        showToast('请先配置 API');
+        return;
+    }
+    const npcName = currentPeekConversation.partnerName || '对方';
+    const history = currentPeekConversation.history || [];
+    const recent = history.slice(-12);
+    if (recent.length === 0) {
+        showToast('暂无对话内容可提取');
+        return;
+    }
+    const convText = recent.map(m => {
+        const who = m.sender === 'char' ? (char.realName || '角色') : npcName;
+        return who + '：' + (m.content || '').trim();
+    }).join('\n');
+    const basePersona = (currentPeekConversation.partnerPersona || '').slice(0, 500);
+    const existingSupplement = (currentPeekConversation.supplementPersona || '').slice(0, 800);
+    const systemPrompt = '你是一个人设补充助手。请根据「最近对话」**只提取【该 NPC 在对话中透露的、关于自己的信息】**，整理成简短的人设条目。\n\n要求：只输出「关于这个 NPC 我们新知道了什么」，例如：提到喜好、经历、习惯、身份等，按「条目：内容」格式补充。不要总结对话过程。若没有新信息则返回空。\n\n只返回 JSON：{"supplement": "条目1：xxx\\n条目2：xxx"} 或 {"supplement": ""}。\n\n已有基础人设（节选）:\n' + basePersona + '\n\n已补充人设（节选）:\n' + existingSupplement + '\n\n最近对话:\n' + convText;
+    showToast('正在提取人设…');
+    try {
+        const url = apiConfig.url.endsWith('/') ? apiConfig.url.slice(0, -1) : apiConfig.url;
+        const endpoint = url + '/v1/chat/completions';
+        const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiConfig.key };
+        const requestBody = { model: apiConfig.model, messages: [{ role: 'user', content: systemPrompt }], temperature: 0.3 };
+        const contentStr = await fetchAiResponse(apiConfig, requestBody, headers, endpoint);
+        const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('未解析到有效JSON');
+        const json = JSON.parse(jsonMatch[0]);
+        const supplement = (json && json.supplement && String(json.supplement).trim()) ? String(json.supplement).trim() : '';
+        if (supplement) {
+            currentPeekConversation.supplementPersona = ((currentPeekConversation.supplementPersona || '').trim() ? (currentPeekConversation.supplementPersona || '').trim() + '\n\n' : '') + supplement;
+            await saveData();
+            renderPeekConversation(currentPeekConversation);
+            showToast('已补充人设');
+        } else {
+            showToast('未提取到新的人设信息');
+        }
+    } catch (err) {
+        console.error(err);
+        showApiError(err);
+    }
+}
+
+function openPeekEditPersonaModal() {
+    if (!currentPeekConversation) return;
+    const ta = document.getElementById('peek-edit-persona-textarea');
+    if (ta) ta.value = currentPeekConversation.supplementPersona || '';
+    document.getElementById('peek-edit-persona-modal')?.classList.add('visible');
+}
+
+function savePeekEditPersona() {
+    if (!currentPeekConversation) return;
+    const ta = document.getElementById('peek-edit-persona-textarea');
+    if (ta) currentPeekConversation.supplementPersona = (ta.value || '').trim();
+    saveData();
+    document.getElementById('peek-edit-persona-modal')?.classList.remove('visible');
+    renderPeekConversation(currentPeekConversation);
+    showToast('已保存');
 }
 
 function renderPeekScreen() {
@@ -1083,13 +1385,23 @@ function renderPeekWallet(data) {
                 </li>`;
             }).join('') + '</ul>';
         };
+        const familyCard = (db.piggyBank && db.piggyBank.familyCards) ? db.piggyBank.familyCards.find(c => c.targetCharId === currentChatId && c.status === 'active') : null;
+        const fcTx = familyCard && familyCard.transactions ? familyCard.transactions : [];
+        const fcListHtml = fcTx.length === 0 ? '<p class="wallet-empty-hint">暂无消费记录</p>' : '<ul class="wallet-list">' + fcTx.map(t => {
+            const amt = t.amount != null ? t.amount : '';
+            const remark = peekEscapeHtml((t.scene || '') + (t.detail ? ' ' + t.detail : ''));
+            const time = t.time ? new Date(t.time).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+            return `<li class="wallet-list-item"><div class="left"><div class="remark">${remark || '—'}</div><div class="meta">${time}</div></div><span class="amount expense">-¥${amt}</span></li>`;
+        }).join('') + '</ul>';
         listHtml = `
             <div class="wallet-tabs">
                 <button type="button" class="wallet-tab active" data-wallet-tab="income">收入</button>
                 <button type="button" class="wallet-tab" data-wallet-tab="expense">支出</button>
+                <button type="button" class="wallet-tab" data-wallet-tab="familycard">亲属卡</button>
             </div>
             <div class="wallet-tab-panel" data-panel="income">${renderList(income, 'income')}</div>
             <div class="wallet-tab-panel" data-panel="expense" style="display:none;">${renderList(expense, 'expense')}</div>
+            <div class="wallet-tab-panel" data-panel="familycard" style="display:none;">${familyCard ? ('<p class="wallet-summary-label" style="margin-bottom:8px;">' + peekEscapeHtml(familyCard.bankName || '亲属卡') + ' 剩余 ' + Math.max(0, familyCard.limit - (familyCard.usedAmount || 0)) + '</p>' + fcListHtml) : '<p class="wallet-empty-hint">暂无亲属卡</p>'}</div>
         `;
     }
 
@@ -1209,12 +1521,13 @@ function renderPeekBrowser(historyItems) {
     if (!historyItems || historyItems.length === 0) {
         itemsHtml = '<p class="placeholder-text">正在生成浏览记录...</p>';
     } else {
-        historyItems.forEach(item => {
+        historyItems.forEach((item, index) => {
+            const hasDetail = item.detail ? ' has-detail' : '';
             itemsHtml += `
-                <li class="browser-history-item">
-                    <h3 class="history-item-title">${item.title}</h3>
-                    <p class="history-item-url">${item.url}</p>
-                    <div class="history-item-annotation">${item.annotation}</div>
+                <li class="browser-history-item${hasDetail}" data-index="${index}">
+                    <h3 class="history-item-title">${peekEscapeHtml(item.title)}</h3>
+                    <p class="history-item-url">${peekEscapeHtml(item.url)}</p>
+                    <div class="history-item-annotation">${peekEscapeHtml(item.annotation)}</div>
                 </li>
             `;
         });
@@ -1231,6 +1544,36 @@ function renderPeekBrowser(historyItems) {
     screen.querySelector('.action-btn').addEventListener('click', () => {
         generateAndRenderPeekContent('browser', { forceRefresh: true });
     });
+
+    if (historyItems && historyItems.length > 0) {
+        screen.querySelectorAll('.browser-history-item.has-detail').forEach(el => {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.dataset.index, 10);
+                const item = historyItems[idx];
+                if (item && item.detail) {
+                    renderBrowserDetail(item);
+                    switchScreen('peek-browser-detail-screen');
+                }
+            });
+        });
+    }
+}
+
+function renderBrowserDetail(item) {
+    const screen = document.getElementById('peek-browser-detail-screen');
+    if (!screen) return;
+    screen.innerHTML = `
+        <header class="app-header">
+            <button class="back-btn" data-target="peek-browser-screen">‹</button>
+            <div class="title-container"><h1 class="title">${peekEscapeHtml(item.title)}</h1></div>
+        </header>
+        <main class="content browser-detail-content">
+            <p class="browser-detail-url">${peekEscapeHtml(item.url)}</p>
+            <div class="browser-detail-body">${item.detail}</div>
+            <div class="browser-detail-annotation">${peekEscapeHtml(item.annotation)}</div>
+        </main>
+    `;
 }
 
 function renderPeekDrafts(draft) {
@@ -1394,7 +1737,25 @@ function generatePeekContentPrompt(char, appType, mainChatContext) {
     switch (appType) {
         case 'messages': {
             const { min: msgMin, max: msgMax } = getRefreshRange('messages');
-            prompt += `
+            const impersonateEnabled = char.peekScreenSettings?.impersonateEnabled;
+            if (impersonateEnabled) {
+                prompt += `
+            {
+              "conversations": [
+                {
+                  "partnerName": "与Ta对话的人的称呼（如：小明、闺蜜阿琳）",
+                  "partnerPersona": "此人的基础人设，30-80字：性格、身份、与${char.realName}的关系等",
+                  "partnerRelation": "与${char.realName}的关系（如：同事、同学、闺蜜、前任、网友等）",
+                  "history": [
+                    { "sender": "char", "content": "${char.realName}发送的消息内容" },
+                    { "sender": "partner", "content": "对方发送的消息内容" }
+                  ]
+                }
+              ]
+            }
+            请为 ${char.realName} 编造${msgMin}-${msgMax}个最近的对话。每个对话必须包含 partnerName、partnerPersona、partnerRelation 和 history。对话内容需要强烈反映Ta的人设以及和我的聊天上下文。`;
+            } else {
+                prompt += `
             {
               "conversations": [
                 {
@@ -1407,6 +1768,7 @@ function generatePeekContentPrompt(char, appType, mainChatContext) {
               ]
            }
            请为 ${char.realName} 编造${msgMin}-${msgMax}个最近的对话。对话内容需要强烈反映Ta的人设以及和我的聊天上下文。`;
+            }
             break;
         }
         case 'steps':
@@ -1455,15 +1817,20 @@ function generatePeekContentPrompt(char, appType, mainChatContext) {
             }
             请生成3-4件商品，这些商品应该反映Ta的兴趣、需求或我们最近聊到的话题。`;
             break;
-        case 'browser':
+        case 'browser': {
+            const browserDetailEnabled = char.peekScreenSettings?.browserDetailEnabled || false;
+            const bWords = char.peekScreenSettings?.browserDetailWords || { min: 200, max: 500 };
+            const wordMin = bWords.min || 200;
+            const wordMax = bWords.max || 500;
             prompt += `
             {
               "history": [
-                { "title": "网页标题", "url": "example.com/path", "annotation": "角色对于这条浏览记录的想法或批注" }
+                { "title": "网页标题", "url": "example.com/path", "annotation": "角色对于这条浏览记录的想法或批注"${browserDetailEnabled ? `, "detail": "帖子/网页正文详情，${wordMin}-${wordMax}字"` : ''} }
               ]
             }
-            请生成3-5条浏览记录。记录本身要符合Ta的人设和我们的聊天上下文，'annotation'字段则要站在角色自己的视角，记录Ta对这条浏览记录的想法或批注。`;
+            请生成3-5条浏览记录。记录本身要符合Ta的人设和我们的聊天上下文，'annotation'字段则要站在角色自己的视角，记录Ta对这条浏览记录的想法或批注。${browserDetailEnabled ? `每条记录必须包含'detail'字段，是该网页/帖子的正文详情内容，每条详情${wordMin}到${wordMax}字，可使用HTML标签排版。` : ''}`;
             break;
+        }
         case 'drafts':
             prompt += `
             {
@@ -1692,7 +2059,11 @@ async function generateAndRenderPeekContent(appType, options = {}) {
        return;
     }
 
-    let { url, key, model, provider } = db.apiSettings;
+    let apiConfig = db.apiSettings;
+    if (db.peekApiSettings && db.peekApiSettings.url && db.peekApiSettings.key && db.peekApiSettings.model) {
+        apiConfig = db.peekApiSettings;
+    }
+    let { url, key, model, provider } = apiConfig;
     if (!url || !key || !model) {
         showToast('请先在“api”应用中完成设置！');
         return switchScreen('api-settings-screen');
@@ -1774,7 +2145,7 @@ async function generateAndRenderPeekContent(appType, options = {}) {
         const endpoint = `${url}/v1/chat/completions`;
         const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
 
-        const contentStr = await fetchAiResponse(db.apiSettings, requestBody, headers, endpoint);
+        const contentStr = await fetchAiResponse(apiConfig, requestBody, headers, endpoint);
         
         const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error("AI响应中未找到有效的JSON对象。");
@@ -1799,6 +2170,19 @@ async function generateAndRenderPeekContent(appType, options = {}) {
 
         if (!isValid) {
             throw new Error("AI返回的数据格式不符合应用要求。");
+        }
+
+        if (appType === 'messages' && Array.isArray(generatedData.conversations)) {
+            generatedData.conversations.forEach((conv, idx) => {
+                if (!conv.partnerId) conv.partnerId = 'peek_npc_' + Date.now() + '_' + idx;
+                if (typeof conv.suspicionLevel !== 'number') conv.suspicionLevel = 0;
+                if (typeof conv.isFriend !== 'boolean') conv.isFriend = false;
+                if (typeof conv.friendRequestPending !== 'boolean') conv.friendRequestPending = false;
+                if (!conv.supplementPersona) conv.supplementPersona = '';
+                if (!conv.partnerPersona) conv.partnerPersona = '';
+                if (!conv.partnerRelation) conv.partnerRelation = '熟人';
+                conv.history = conv.history || [];
+            });
         }
 
         char.peekData[appType] = generatedData;

@@ -3,19 +3,58 @@
 function setupTutorialApp() {
     const tutorialContentArea = document.getElementById('tutorial-content-area');
     tutorialContentArea.addEventListener('click', (e) => {
-        const header = e.target.closest('.tutorial-header');
+        const header = e.target.closest('.tutorial-header') || 
+                       e.target.closest('.tutorial-modern-header') || 
+                       e.target.closest('.tutorial-rabbit-card-title');
         if (header) {
             header.parentElement.classList.toggle('open');
         }
     });
 }
 
-function renderUpdateLog() {
-    const tutorialContent = document.getElementById('tutorial-content-area');
+function renderUpdateLog(container) {
+    const tutorialContent = container || document.getElementById('tutorial-content-area');
     if (!tutorialContent) return;
+    const mode = typeof getAppearanceMode === 'function' ? getAppearanceMode() : 'classic';
 
+    if (mode === 'rabbit') {
+        const btn = document.createElement('button');
+        btn.className = 'tutorial-rabbit-update-btn';
+        btn.innerHTML = '查看更新日志';
+        
+        let notesHtml = '';
+        updateLog.forEach((log, index) => {
+            notesHtml += `
+                <div style="margin-bottom: 15px; ${index < updateLog.length - 1 ? 'padding-bottom: 10px; border-bottom: 1px dashed #f5f0f1;' : ''}">
+                    <h4 style="font-size: 15px; color: #555; margin: 0 0 5px 0;">版本 ${log.version} (${log.date})</h4>
+                    <ul style="padding-left: 20px; margin: 0; list-style-type: '· ';">
+                        ${log.notes.map(note => `<li style="margin-bottom: 5px; color: #666;">${note}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        });
+
+        const modal = document.createElement('div');
+        modal.className = 'rabbit-update-modal';
+        modal.innerHTML = `
+            <div class="rabbit-update-content">
+                <h3 style="text-align:center; color:#555; margin-top:0;">更新日志</h3>
+                ${notesHtml}
+                <button class="rabbit-update-close">关闭</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        btn.onclick = () => modal.classList.add('show');
+        modal.querySelector('.rabbit-update-close').onclick = () => modal.classList.remove('show');
+        
+        tutorialContent.appendChild(btn);
+        return;
+    }
+
+    const isModern = mode === 'modern';
     const updateSection = document.createElement('div');
-    updateSection.className = 'tutorial-item'; 
+    updateSection.className = isModern ? 'tutorial-modern-item' : 'tutorial-item'; 
 
     let notesHtml = '';
     updateLog.forEach((log, index) => {
@@ -30,9 +69,11 @@ function renderUpdateLog() {
     });
 
     updateSection.innerHTML = `
-        <div class="tutorial-header">更新日志</div>
-        <div class="tutorial-content" style="padding-top: 15px;">
-            ${notesHtml}
+        <div class="${isModern ? 'tutorial-modern-header' : 'tutorial-header'}">更新日志</div>
+        <div class="${isModern ? 'tutorial-modern-content' : 'tutorial-content'}">
+            <div class="${isModern ? 'tutorial-modern-content-inner' : ''}" style="${isModern ? '' : 'padding-top: 15px;'}">
+                ${notesHtml}
+            </div>
         </div>
     `;
     
@@ -325,6 +366,46 @@ let loadingBtn = false
 
 function renderTutorialContent() {
     const tutorialContentArea = document.getElementById('tutorial-content-area');
+    const mode = typeof getAppearanceMode === 'function' ? getAppearanceMode() : 'classic';
+    const isModern = mode === 'modern';
+    const isRabbit = mode === 'rabbit';
+    
+    tutorialContentArea.innerHTML = '';
+    
+    // 清理可能遗留的旧 class
+    tutorialContentArea.classList.remove('tutorial-modern-layout', 'tutorial-rabbit-layout');
+    
+    if (isModern) {
+        tutorialContentArea.classList.add('tutorial-modern-layout');
+    } else if (isRabbit) {
+        tutorialContentArea.classList.add('tutorial-rabbit-layout');
+    }
+
+    let modernGroups = {};
+    if (isModern) {
+        const createGroup = (title) => {
+            const group = document.createElement('div');
+            group.className = 'tutorial-modern-group';
+            if (title) {
+                const titleEl = document.createElement('div');
+                titleEl.className = 'tutorial-modern-group-title';
+                titleEl.textContent = title;
+                group.appendChild(titleEl);
+            }
+            const list = document.createElement('div');
+            list.className = 'tutorial-modern-list';
+            group.appendChild(list);
+            tutorialContentArea.appendChild(group);
+            return list;
+        };
+        modernGroups.docs = createGroup('使用说明');
+        modernGroups.data = createGroup('数据管理');
+        modernGroups.clean = createGroup('数据清理');
+        modernGroups.github = createGroup('云端备份');
+    }
+
+    const docsContainer = isModern ? modernGroups.docs : tutorialContentArea;
+
     const tutorials = [
         {title: '写在前面', imageUrls: ['https://i.postimg.cc/3RJfvgzq/xie-zai-qian-mian(1).jpg']},
         {
@@ -337,20 +418,47 @@ function renderTutorialContent() {
         },
         {title: '404-群聊', imageUrls: ['https://i.postimg.cc/X7LSmRTJ/404.jpg']}
     ];
-    tutorialContentArea.innerHTML = '';
-    renderUpdateLog();
+
+    renderUpdateLog(docsContainer);
+
     tutorials.forEach(tutorial => {
         const item = document.createElement('div');
-        item.className = 'tutorial-item';
         const imagesHtml = tutorial.imageUrls.map(url => `<img src="${url}" alt="${tutorial.title}教程图片">`).join('');
-        item.innerHTML = `<div class="tutorial-header">${tutorial.title}</div><div class="tutorial-content">${imagesHtml}</div>`;
-        tutorialContentArea.appendChild(item);
+        
+        if (isRabbit) {
+            item.className = 'tutorial-rabbit-card';
+            item.innerHTML = `
+                <div class="tutorial-rabbit-card-title">${tutorial.title}</div>
+                <div class="tutorial-rabbit-content">
+                    <div class="tutorial-rabbit-content-inner">${imagesHtml}</div>
+                </div>
+            `;
+        } else {
+            item.className = isModern ? 'tutorial-modern-item' : 'tutorial-item';
+            item.innerHTML = `<div class="${isModern ? 'tutorial-modern-header' : 'tutorial-header'}">${tutorial.title}</div><div class="${isModern ? 'tutorial-modern-content' : 'tutorial-content'}"><div class="${isModern ? 'tutorial-modern-content-inner' : ''}">${imagesHtml}</div></div>`;
+        }
+        docsContainer.appendChild(item);
     });
 
-    const backupDataBtn = document.createElement('button');
-    backupDataBtn.className = 'btn btn-primary';
-    backupDataBtn.textContent = '备份数据';
-    backupDataBtn.disabled = loadingBtn
+    const createActionItem = (tag, text, classicClass, isDanger = false) => {
+        const el = document.createElement(tag);
+        if (isModern) {
+            el.className = 'tutorial-modern-action' + (isDanger ? ' danger' : '');
+            el.innerHTML = `<span>${text}</span><span class="arrow">›</span>`;
+        } else if (isRabbit) {
+            el.className = 'tutorial-rabbit-action' + (isDanger ? ' danger' : ' neutral');
+            el.textContent = text;
+        } else {
+            el.className = classicClass;
+            el.textContent = text;
+            el.style.marginTop = '10px';
+            el.style.display = 'block';
+        }
+        return el;
+    };
+
+    const backupDataBtn = createActionItem('button', '备份数据', 'btn btn-primary');
+    backupDataBtn.disabled = loadingBtn;
 
     backupDataBtn.addEventListener('click', async () => {
         if(loadingBtn){
@@ -422,11 +530,7 @@ function renderTutorialContent() {
     `;
     if (!document.getElementById(partialExportModalId)) document.body.appendChild(partialExportModal);
 
-    const partialExportBtn = document.createElement('button');
-    partialExportBtn.className = 'btn btn-primary';
-    partialExportBtn.textContent = '分类导出数据';
-    partialExportBtn.style.marginTop = '10px';
-    partialExportBtn.style.display = 'block';
+    const partialExportBtn = createActionItem('button', '分类导出数据', 'btn btn-primary');
     partialExportBtn.disabled = loadingBtn;
     partialExportBtn.addEventListener('click', () => {
         const container = document.getElementById('partial-export-checkboxes');
@@ -530,11 +634,7 @@ function renderTutorialContent() {
     `;
     if (!document.getElementById(advancedCleanModalId)) document.body.appendChild(advancedCleanModal);
 
-    const advancedCleanBtn = document.createElement('button');
-    advancedCleanBtn.className = 'btn btn-neutral';
-    advancedCleanBtn.textContent = '高级清理';
-    advancedCleanBtn.style.marginTop = '15px';
-    advancedCleanBtn.style.display = 'block';
+    const advancedCleanBtn = createActionItem('button', '高级清理', 'btn btn-neutral');
     advancedCleanBtn.disabled = loadingBtn;
 
     advancedCleanBtn.addEventListener('click', () => {
@@ -651,6 +751,256 @@ function renderTutorialContent() {
         } finally {
             loadingBtn = false;
             advancedCleanBtn.disabled = false;
+        }
+    });
+
+    // 角色高级清理：按角色/群聊多选 + 按数据项多选，只清空选中对象的选中数据
+    const CHAR_CLEAN_DATA_OPTIONS = [
+        { key: 'history', label: '聊天记录' },
+        { key: 'statusPanel', label: '状态面板数据' },
+        { key: 'gallery', label: '相册' },
+        { key: 'callHistory', label: '通话记录' },
+        { key: 'peekData', label: '窥屏数据' },
+        { key: 'userAvatarLibrary', label: '用户头像库' },
+        { key: 'charAvatarLibrary', label: '角色头像库' },
+        { key: 'worldBookIds', label: '绑定世界书' }
+    ];
+    const charCleanModalId = 'char-advanced-clean-modal';
+    const charCleanModal = document.createElement('div');
+    charCleanModal.id = charCleanModalId;
+    charCleanModal.className = 'modal-overlay';
+    charCleanModal.style.display = 'none';
+    charCleanModal.style.alignItems = 'center';
+    charCleanModal.style.justifyContent = 'center';
+    charCleanModal.innerHTML = `
+        <div class="modal-window char-advanced-clean-window" style="max-width: 380px; max-height: 85vh; display: flex; flex-direction: column; padding: 18px;">
+            <h3 style="margin:0 0 8px; font-size:1.05rem;">角色高级清理</h3>
+            <p style="font-size: 0.85rem; color: #666; margin: 0 0 16px; line-height: 1.45;">选择要清理的角色/群聊，再选择要清空的数据项。仅清空所选对象的数据，不删除角色/群聊本身。</p>
+            <div style="flex:1; min-height:0; overflow-y: auto; margin-bottom: 16px;">
+                <div class="char-clean-section-head">
+                    <span style="font-weight:600; font-size:0.9rem;">选择角色/群聊</span>
+                    <span class="char-clean-head-actions">
+                        <button type="button" id="char-clean-entity-select-all" class="btn btn-neutral char-clean-head-btn">全选</button>
+                        <button type="button" id="char-clean-entity-select-none" class="btn btn-neutral char-clean-head-btn">取消全选</button>
+                    </span>
+                </div>
+                <div id="char-clean-entity-list" class="char-clean-entity-list"></div>
+                <div class="char-clean-section-head" style="margin-top:16px;">
+                    <span style="font-weight:600; font-size:0.9rem;">选择要清理的数据项</span>
+                    <span class="char-clean-head-actions">
+                        <button type="button" id="char-clean-options-select-all" class="btn btn-neutral char-clean-head-btn">全选</button>
+                        <button type="button" id="char-clean-options-select-none" class="btn btn-neutral char-clean-head-btn">取消全选</button>
+                    </span>
+                </div>
+                <div id="char-clean-options-list" class="char-clean-options-list"></div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-shrink: 0; padding-top: 4px; border-top: 1px solid #eee;">
+                <button type="button" id="char-clean-do-btn" class="btn btn-danger" style="flex:1;">执行清理</button>
+                <button type="button" id="char-clean-cancel-btn" class="btn btn-neutral" style="flex:1;">取消</button>
+            </div>
+        </div>
+    `;
+    if (!document.getElementById(charCleanModalId)) document.body.appendChild(charCleanModal);
+
+    const charCleanBtn = createActionItem('button', '角色高级清理', 'btn btn-neutral');
+    charCleanBtn.disabled = loadingBtn;
+
+    function renderCharCleanEntityList() {
+        const container = document.getElementById('char-clean-entity-list');
+        if (!container) return;
+        container.innerHTML = '';
+        const chars = db.characters || [];
+        const groups = db.groups || [];
+        if (chars.length === 0 && groups.length === 0) {
+            container.innerHTML = '<div style="color:#999; font-size:0.89rem;">暂无角色或群聊</div>';
+            return;
+        }
+        chars.forEach(c => {
+            const label = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.dataset.type = 'char';
+            cb.dataset.id = c.id;
+            label.appendChild(cb);
+            if (c.avatar) {
+                const img = document.createElement('img');
+                img.src = c.avatar;
+                img.alt = '';
+                img.className = 'char-clean-avatar';
+                label.appendChild(img);
+            } else {
+                const placeholder = document.createElement('span');
+                placeholder.className = 'char-clean-avatar';
+                placeholder.style.cssText = 'background:#e0e0e0; display:block; flex-shrink:0;';
+                label.appendChild(placeholder);
+            }
+            const span = document.createElement('span');
+            span.className = 'char-clean-name';
+            span.textContent = (c.remarkName || c.realName || '未命名角色').trim() || c.id;
+            label.appendChild(span);
+            container.appendChild(label);
+        });
+        groups.forEach(g => {
+            const label = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.dataset.type = 'group';
+            cb.dataset.id = g.id;
+            label.appendChild(cb);
+            if (g.avatar) {
+                const img = document.createElement('img');
+                img.src = g.avatar;
+                img.alt = '';
+                img.className = 'char-clean-avatar';
+                label.appendChild(img);
+            } else {
+                const placeholder = document.createElement('span');
+                placeholder.className = 'char-clean-avatar';
+                placeholder.style.cssText = 'background:#e0e0e0; display:block; flex-shrink:0;';
+                label.appendChild(placeholder);
+            }
+            const span = document.createElement('span');
+            span.className = 'char-clean-name';
+            span.textContent = '[群] ' + ((g.name || '未命名群聊').trim() || g.id);
+            label.appendChild(span);
+            container.appendChild(label);
+        });
+    }
+
+    charCleanBtn.addEventListener('click', () => {
+        renderCharCleanEntityList();
+        const optContainer = document.getElementById('char-clean-options-list');
+        optContainer.innerHTML = '';
+        CHAR_CLEAN_DATA_OPTIONS.forEach(opt => {
+            const label = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.dataset.key = opt.key;
+            cb.checked = opt.key === 'history';
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(opt.label));
+            optContainer.appendChild(label);
+        });
+        document.getElementById(charCleanModalId).style.display = 'flex';
+    });
+
+    document.getElementById('char-clean-entity-select-all').addEventListener('click', () => {
+        document.querySelectorAll('#char-clean-entity-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('char-clean-entity-select-none').addEventListener('click', () => {
+        document.querySelectorAll('#char-clean-entity-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+    document.getElementById('char-clean-options-select-all').addEventListener('click', () => {
+        document.querySelectorAll('#char-clean-options-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('char-clean-options-select-none').addEventListener('click', () => {
+        document.querySelectorAll('#char-clean-options-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+    document.getElementById('char-clean-cancel-btn').addEventListener('click', () => {
+        document.getElementById(charCleanModalId).style.display = 'none';
+    });
+    document.getElementById('char-clean-do-btn').addEventListener('click', async () => {
+        const selectedEntities = [];
+        document.querySelectorAll('#char-clean-entity-list input[type="checkbox"]:checked').forEach(cb => {
+            selectedEntities.push({ type: cb.dataset.type, id: cb.dataset.id });
+        });
+        const selectedKeys = [];
+        document.querySelectorAll('#char-clean-options-list input[type="checkbox"]:checked').forEach(cb => selectedKeys.push(cb.dataset.key));
+        if (selectedEntities.length === 0) {
+            showToast('请至少选择一个角色或群聊');
+            return;
+        }
+        if (selectedKeys.length === 0) {
+            showToast('请至少选择一项要清理的数据');
+            return;
+        }
+        const keyLabels = selectedKeys.map(k => CHAR_CLEAN_DATA_OPTIONS.find(o => o.key === k).label).join('、');
+        if (!confirm(`将对 ${selectedEntities.length} 个对象清理以下数据：\n\n${keyLabels}\n\n此操作不可恢复，确定继续？`)) return;
+
+        document.getElementById(charCleanModalId).style.display = 'none';
+        if (loadingBtn) return;
+        loadingBtn = true;
+        charCleanBtn.disabled = true;
+
+        try {
+            showToast('正在执行角色高级清理...');
+            const report = [];
+            for (const { type, id } of selectedEntities) {
+                if (type === 'char') {
+                    const char = (db.characters || []).find(c => c.id === id);
+                    if (!char) continue;
+                    const name = char.remarkName || char.realName || '未命名角色';
+                    let cleared = [];
+                    if (selectedKeys.includes('history') && Array.isArray(char.history)) {
+                        char.history = [];
+                        cleared.push('聊天记录');
+                    }
+                    if (selectedKeys.includes('statusPanel') && char.statusPanel) {
+                        char.statusPanel.history = [];
+                        char.statusPanel.currentStatusRaw = '';
+                        char.statusPanel.currentStatusHtml = '';
+                        cleared.push('状态面板');
+                    }
+                    if (selectedKeys.includes('gallery') && Array.isArray(char.gallery)) {
+                        char.gallery = [];
+                        cleared.push('相册');
+                    }
+                    if (selectedKeys.includes('callHistory') && Array.isArray(char.callHistory)) {
+                        char.callHistory = [];
+                        cleared.push('通话记录');
+                    }
+                    if (selectedKeys.includes('peekData') && char.peekData && typeof char.peekData === 'object') {
+                        char.peekData = {};
+                        cleared.push('窥屏数据');
+                    }
+                    if (selectedKeys.includes('userAvatarLibrary') && Array.isArray(char.userAvatarLibrary)) {
+                        char.userAvatarLibrary = [];
+                        cleared.push('用户头像库');
+                    }
+                    if (selectedKeys.includes('charAvatarLibrary') && Array.isArray(char.charAvatarLibrary)) {
+                        char.charAvatarLibrary = [];
+                        cleared.push('角色头像库');
+                    }
+                    if (selectedKeys.includes('worldBookIds') && Array.isArray(char.worldBookIds)) {
+                        char.worldBookIds = [];
+                        cleared.push('绑定世界书');
+                    }
+                    if (cleared.length) report.push(`${name}：${cleared.join('、')}`);
+                } else if (type === 'group') {
+                    const group = (db.groups || []).find(g => g.id === id);
+                    if (!group) continue;
+                    const name = group.name || '未命名群聊';
+                    let cleared = [];
+                    if (selectedKeys.includes('history') && Array.isArray(group.history)) {
+                        group.history = [];
+                        cleared.push('聊天记录');
+                    }
+                    if (selectedKeys.includes('callHistory') && Array.isArray(group.callHistory)) {
+                        group.callHistory = [];
+                        cleared.push('通话记录');
+                    }
+                    if (selectedKeys.includes('worldBookIds') && Array.isArray(group.worldBookIds)) {
+                        group.worldBookIds = [];
+                        cleared.push('绑定世界书');
+                    }
+                    if (cleared.length) report.push(`[群] ${name}：${cleared.join('、')}`);
+                }
+            }
+            await saveData(db);
+            showToast('角色高级清理完成');
+            if (report.length > 0) {
+                alert('角色高级清理完成！\n\n' + report.slice(0, 15).join('\n') + (report.length > 15 ? '\n… 等 ' + report.length + ' 项' : ''));
+            } else {
+                alert('角色高级清理完成（所选对象中无匹配数据）');
+            }
+            if (typeof window.refreshChatList === 'function') window.refreshChatList();
+        } catch (e) {
+            console.error('角色高级清理失败:', e);
+            showToast('角色高级清理失败: ' + e.message);
+            alert('清理过程中发生错误：\n' + e.message);
+        } finally {
+            loadingBtn = false;
+            charCleanBtn.disabled = false;
         }
     });
 
@@ -782,12 +1132,8 @@ function renderTutorialContent() {
         });
     }
 
-    const cleanLocalImagesBtn = document.createElement('button');
+    const cleanLocalImagesBtn = createActionItem('button', '清理本地图片', 'btn btn-neutral');
     cleanLocalImagesBtn.id = 'clean-local-images-open-btn';
-    cleanLocalImagesBtn.className = 'btn btn-neutral';
-    cleanLocalImagesBtn.textContent = '清理本地图片';
-    cleanLocalImagesBtn.style.marginTop = '15px';
-    cleanLocalImagesBtn.style.display = 'block';
     cleanLocalImagesBtn.disabled = loadingBtn;
 
     cleanLocalImagesBtn.addEventListener('click', () => {
@@ -820,13 +1166,10 @@ function renderTutorialContent() {
         if (modalEl) modalEl.style.display = 'flex';
     });
 
-    const importDataBtn = document.createElement('label');
-    importDataBtn.className = 'btn btn-neutral';
-    importDataBtn.textContent = '导入数据';
-    importDataBtn.style.marginTop = '15px'
-    importDataBtn.style.display = 'block'
+    const importDataBtn = createActionItem('label', '导入数据', 'btn btn-neutral');
+    importDataBtn.setAttribute('for', 'import-data-input');
+    // For label, we can't easily disable click via disabled attr if it has 'for', but we preserve logic
     importDataBtn.disabled = loadingBtn;
-    importDataBtn.setAttribute('for', 'import-data-input')
     document.querySelector('#import-data-input').addEventListener('change', async (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -863,11 +1206,7 @@ function renderTutorialContent() {
 
     })
 
-    const cleanRedundantDataBtn = document.createElement('button');
-    cleanRedundantDataBtn.className = 'btn btn-neutral';
-    cleanRedundantDataBtn.textContent = '清除冗余/无用数据';
-    cleanRedundantDataBtn.style.marginTop = '15px';
-    cleanRedundantDataBtn.style.display = 'block';
+    const cleanRedundantDataBtn = createActionItem('button', '清除冗余/无用数据', 'btn btn-neutral');
     cleanRedundantDataBtn.disabled = loadingBtn;
 
     cleanRedundantDataBtn.addEventListener('click', async () => {
@@ -982,11 +1321,7 @@ function renderTutorialContent() {
         }
     });
 
-    const clearDataBtn = document.createElement('button');
-    clearDataBtn.className = 'btn btn-danger';
-    clearDataBtn.textContent = '清除所有数据';
-    clearDataBtn.style.marginTop = '15px';
-    clearDataBtn.style.display = 'block';
+    const clearDataBtn = createActionItem('button', '清除所有数据', 'btn btn-danger', true);
     clearDataBtn.disabled = loadingBtn;
 
     clearDataBtn.addEventListener('click', () => {
@@ -1033,13 +1368,9 @@ function renderTutorialContent() {
     tutorialContentArea.appendChild(partialExportBtn);
     tutorialContentArea.appendChild(importDataBtn);
 
-    const importPartialDataBtn = document.createElement('label');
-    importPartialDataBtn.className = 'btn btn-neutral';
-    importPartialDataBtn.textContent = '分类导入';
-    importPartialDataBtn.style.marginTop = '10px';
-    importPartialDataBtn.style.display = 'block';
-    importPartialDataBtn.disabled = loadingBtn;
+    const importPartialDataBtn = createActionItem('label', '分类导入', 'btn btn-neutral');
     importPartialDataBtn.setAttribute('for', 'import-partial-data-input');
+    importPartialDataBtn.disabled = loadingBtn;
     const partialInput = document.getElementById('import-partial-data-input');
     if (partialInput) {
         partialInput.addEventListener('change', async (event) => {
@@ -1075,11 +1406,58 @@ function renderTutorialContent() {
             event.target.value = null;
         });
     }
-    tutorialContentArea.appendChild(importPartialDataBtn);
-    tutorialContentArea.appendChild(advancedCleanBtn);
-    tutorialContentArea.appendChild(cleanLocalImagesBtn);
-    tutorialContentArea.appendChild(cleanRedundantDataBtn);
-    tutorialContentArea.appendChild(clearDataBtn);
+    if (isModern) {
+        modernGroups.data.appendChild(backupDataBtn);
+        modernGroups.data.appendChild(partialExportBtn);
+        modernGroups.data.appendChild(importDataBtn);
+        modernGroups.data.appendChild(importPartialDataBtn);
+
+        modernGroups.clean.appendChild(advancedCleanBtn);
+        modernGroups.clean.appendChild(charCleanBtn);
+        modernGroups.clean.appendChild(cleanLocalImagesBtn);
+        modernGroups.clean.appendChild(cleanRedundantDataBtn);
+        modernGroups.clean.appendChild(clearDataBtn);
+    } else {
+        tutorialContentArea.appendChild(backupDataBtn);
+        tutorialContentArea.appendChild(partialExportBtn);
+        tutorialContentArea.appendChild(importDataBtn);
+        tutorialContentArea.appendChild(importPartialDataBtn);
+        tutorialContentArea.appendChild(advancedCleanBtn);
+        tutorialContentArea.appendChild(charCleanBtn);
+        tutorialContentArea.appendChild(cleanLocalImagesBtn);
+        tutorialContentArea.appendChild(cleanRedundantDataBtn);
+        tutorialContentArea.appendChild(clearDataBtn);
+    }
+
+    // 反馈许愿 (Between Us) - 放在云端备份下面，样式与云端备份卡片一致（白底、无粉色）
+    const feedbackSection = document.createElement('a');
+    feedbackSection.href = 'https://betweenus.today/creator/yuanyuan';
+    feedbackSection.target = '_blank';
+    feedbackSection.rel = 'noopener noreferrer';
+    feedbackSection.style.cssText = 'display:block; text-decoration:none; color:inherit; margin-top:12px;';
+    const iconMessage = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+    feedbackSection.innerHTML = `
+        <div class="${isModern ? 'tutorial-modern-gh-card' : (isRabbit ? 'tutorial-rabbit-card' : 'btn-white')}" style="${isModern || isRabbit ? '' : 'display:block; cursor:pointer; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;'}">
+            <div style="display:flex; align-items:center; gap:12px; padding:${isRabbit ? '12px 20px' : '0'};">
+                <div style="width:40px; height:40px; border-radius:8px; background:${isRabbit ? '#f5f0f1' : '#f5f5f5'}; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:${isRabbit ? '#888' : '#666'};">
+                    ${iconMessage}
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div style="color:${isRabbit ? '#444' : '#333'}; font-weight:500; font-size:${isRabbit ? '15px' : '0.89rem'}; margin-bottom:2px;">反馈 · 许愿</div>
+                    <div style="font-size:0.81rem; color:#888;">匿名投喂 BUG / 想法 / 愿望，完全保密</div>
+                </div>
+                <svg style="width:14px; height:14px; color:#999; flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </div>
+        </div>
+    `;
+    feedbackSection.onmouseover = function() {
+        const card = this.querySelector('div');
+        if (card) card.style.opacity = '0.9';
+    };
+    feedbackSection.onmouseout = function() {
+        const card = this.querySelector('div');
+        if (card) card.style.opacity = '';
+    };
 
     // GitHub Backup UI
     const githubSection = document.createElement('div');
@@ -1087,20 +1465,20 @@ function renderTutorialContent() {
     const iconEyeClosed = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
 
     githubSection.innerHTML = `
-        <div style="font-size:0.89rem; color:#999; margin:20px 0 8px;">云端备份 (GitHub)</div>
-        <div class="btn-white" style="display:block; cursor:default; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
-            <div id="gh-collapse-header" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; padding-bottom:5px;">
+        ${isModern ? '' : (isRabbit ? '<div style="font-size:16px; font-weight:500; color:#555; margin:20px 0 12px; text-align:center; letter-spacing:1px;">云端备份 (GitHub)</div>' : '<div style="font-size:0.89rem; color:#999; margin:20px 0 8px;">云端备份 (GitHub)</div>')}
+        <div class="${isModern ? 'tutorial-modern-gh-card' : (isRabbit ? 'tutorial-rabbit-card' : 'btn-white')}" style="${isModern || isRabbit ? '' : 'display:block; cursor:default; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;'}">
+            <div id="gh-collapse-header" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; padding:${isRabbit ? '16px 20px' : '0 0 5px 0'};">
                 <div style="display:flex; align-items:center;">
-                    <span style="color:#333; font-weight:500;">🔧 配置参数</span>
+                    <span style="color:${isRabbit ? '#444' : '#333'}; font-weight:500;">${isModern ? '配置参数' : (isRabbit ? '配置参数' : '🔧 配置参数')}</span>
                     <div id="gh-help-btn" style="margin-left:8px; display:flex; align-items:center; padding:2px; cursor:pointer;">
-                        <svg style="width:16px; height:16px; color:#1890ff;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        <svg style="width:16px; height:16px; color:${isRabbit ? '#ccc' : '#1890ff'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     </div>
                 </div>
                 <svg class="toggle-icon" style="width:14px; height:14px; color:#999; transition:transform 0.3s;" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
             </div>
 
-            <div id="gh-config-area" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed #eee;">
-                <div style="margin-bottom:10px;">
+            <div id="gh-config-area" style="display:none; padding:${isRabbit ? '0 20px 20px' : '10px 0 0 0'}; border-top:${isRabbit ? '1px solid #fcfafb' : '1px dashed #eee'};">
+                <div style="margin-bottom:10px; margin-top:${isRabbit ? '16px' : '0'};">
                     <div style="font-size:0.81rem; color:#666; margin-bottom:5px;">GitHub Token</div>
                     <div style="position:relative;">
                         <input type="password" id="gh-token-input" placeholder="ghp_xxxx..." style="width:100%; border:1px solid #eee; padding:8px; padding-right:35px; border-radius:4px; font-size:0.89rem;">
@@ -1119,20 +1497,20 @@ function renderTutorialContent() {
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #f5f5f5; padding-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding:0 ${isRabbit ? '20px' : '0'}; border-top:1px solid #f5f5f5; padding-top:10px;">
                 <span>自动备份开关</span>
                 <label class="switch" style="position:relative; display:inline-block; width:40px; height:24px;">
                     <input type="checkbox" id="gh-auto-switch" style="opacity:0; width:0; height:0;">
                     <span style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#ccc; transition:.4s; border-radius:24px;" id="gh-switch-slider"></span>
                     <style>
-                        #gh-auto-switch:checked + #gh-switch-slider { background-color: #333; }
+                        #gh-auto-switch:checked + #gh-switch-slider { background-color: ${isModern ? '#34c759' : (isRabbit ? '#e8dfe1' : '#333')}; }
                         #gh-switch-slider:before { position:absolute; content:""; height:16px; width:16px; left:4px; bottom:4px; background-color:white; transition:.4s; border-radius:50%; }
                         #gh-auto-switch:checked + #gh-switch-slider:before { transform: translateX(16px); }
                     </style>
                 </label>
             </div>
 
-            <div id="gh-interval-setting" style="display:none; justify-content:space-between; align-items:center; margin-top:10px;">
+            <div id="gh-interval-setting" style="display:none; justify-content:space-between; align-items:center; margin-top:10px; padding:0 ${isRabbit ? '20px' : '0'};">
                 <span style="font-size:0.89rem; color:#666;">备份频率</span>
                 <select id="gh-interval-select" style="border:1px solid #eee; padding:5px; border-radius:4px; font-size:0.89rem; background:#fff;">
                     <option value="24">每 24 小时</option>
@@ -1141,17 +1519,23 @@ function renderTutorialContent() {
                 </select>
             </div>
 
-            <div style="margin-top:15px; display:flex; gap:10px;">
-                <div id="gh-backup-btn" style="flex:1; background:#333; color:#fff; text-align:center; padding:8px; border-radius:4px; font-size:0.89rem; cursor:pointer;">立即备份</div>
-                <div id="gh-restore-btn" style="flex:1; background:#1890ff; color:#fff; text-align:center; padding:8px; border-radius:4px; font-size:0.89rem; cursor:pointer;">恢复最新</div>
-                <div id="gh-check-btn" style="flex:1; background:#f5f5f5; color:#666; text-align:center; padding:8px; border-radius:4px; font-size:0.89rem; cursor:pointer;">检查状态</div>
+            <div style="margin-top:15px; padding:0 ${isRabbit ? '20px' : '0'}; display:flex; gap:10px;">
+                <div id="gh-backup-btn" class="gh-btn" style="flex:1; background:${isModern ? '#000' : (isRabbit ? '#f5f0f1' : '#333')}; color:${isRabbit ? '#555' : '#fff'}; text-align:center; padding:8px; border-radius:4px; font-size:0.89rem; cursor:pointer;">立即备份</div>
+                <div id="gh-restore-btn" class="gh-btn" style="flex:1; background:${isRabbit ? '#fff' : '#1890ff'}; color:${isRabbit ? '#555' : '#fff'}; border:${isRabbit ? '1px solid #f0eaeb' : 'none'}; text-align:center; padding:8px; border-radius:4px; font-size:0.89rem; cursor:pointer;">恢复最新</div>
+                <div id="gh-check-btn" class="gh-btn" style="flex:1; background:${isRabbit ? '#fdfbfb' : '#f5f5f5'}; color:#666; border:${isRabbit ? '1px solid #f0eaeb' : 'none'}; text-align:center; padding:8px; border-radius:4px; font-size:0.89rem; cursor:pointer;">检查状态</div>
             </div>
             
-            <div id="gh-status-msg" style="margin-top:10px; font-size:0.74rem; color:#999;"></div>
+            <div id="gh-status-msg" style="margin-top:10px; padding:0 ${isRabbit ? '20px' : '0'} 16px; font-size:0.74rem; color:#999;"></div>
         </div>
     `;
     
-    tutorialContentArea.appendChild(githubSection);
+    if (isModern) {
+        modernGroups.github.appendChild(githubSection);
+        modernGroups.github.appendChild(feedbackSection);
+    } else {
+        tutorialContentArea.appendChild(githubSection);
+        tutorialContentArea.appendChild(feedbackSection);
+    }
 
     const existingOverlay = document.getElementById('gh-help-overlay');
     if (existingOverlay) existingOverlay.remove();
@@ -1244,9 +1628,15 @@ function renderTutorialContent() {
     }
 }
 
-// 创建完整的备份数据
+// 创建完整的备份数据（确保主题预设、屏幕预设等 globalSettingKeys 全部导出）
 async function createFullBackupData() {
     const backupData = JSON.parse(JSON.stringify(db));
+    const keys = window.globalSettingKeysForBackup || [];
+    keys.forEach(k => {
+        if (db[k] !== undefined && backupData[k] === undefined) {
+            try { backupData[k] = JSON.parse(JSON.stringify(db[k])); } catch (e) { backupData[k] = db[k]; }
+        }
+    });
     backupData._exportVersion = '3.0';
     backupData._exportTimestamp = Date.now();
     return backupData;
@@ -1256,7 +1646,7 @@ async function createFullBackupData() {
 const THEATER_DB_KEYS = [
     'theaterScenarios', 'theaterPromptPresets',
     'theaterHtmlScenarios', 'theaterHtmlPromptPresets',
-    'theaterMode', 'theaterApiSettings'
+    'theaterMode', 'theaterApiSettings', 'theaterFontSize', 'theaterFontPreset'
 ];
 
 // 分类导出：只包含选中的表
@@ -1365,17 +1755,32 @@ async function importBackupData(data) {
             convertedData = newData;
         }
 
-        Object.keys(db).forEach(key => {
+        // 从备份恢复所有键（不限于当前 db 的键），避免漏掉主题预设、屏幕预设等
+        const metaKeys = ['_exportVersion', '_exportTimestamp', '_exportTables'];
+        Object.keys(convertedData).forEach(key => {
+            if (metaKeys.includes(key)) return;
             if (convertedData[key] !== undefined) {
                 db[key] = convertedData[key];
             }
         });
-        
+
+        // 补全角色/群聊缺失字段（如主题等），避免旧版备份或残缺数据导致预设丢失
+        (db.characters || []).forEach(c => {
+            if (c.theme === undefined || c.theme === null || c.theme === '') c.theme = 'white_pink';
+        });
+        (db.groups || []).forEach(g => {
+            if (g.theme === undefined || g.theme === null || g.theme === '') g.theme = 'white_pink';
+        });
+
         if (!db.pomodoroTasks) db.pomodoroTasks = [];
         if (!db.pomodoroSettings) db.pomodoroSettings = { boundCharId: null, userPersona: '', focusBackground: '', taskCardBackground: '', encouragementMinutes: 25, pokeLimit: 5, globalWorldBookIds: [] };
         if (!db.insWidgetSettings) db.insWidgetSettings = { avatar1: 'https://i.postimg.cc/Y96LPskq/o-o-2.jpg', bubble1: 'love u.', avatar2: 'https://i.postimg.cc/GtbTnxhP/o-o-1.jpg', bubble2: 'miss u.' };
         if (!db.homeWidgetSettings) db.homeWidgetSettings = JSON.parse(JSON.stringify(defaultWidgetSettings));
-
+        if (!Array.isArray(db.themePresets)) db.themePresets = [];
+        if (!db.themeSettings || typeof db.themeSettings !== 'object') db.themeSettings = { global: {}, wallpapers: {}, bottomNav: {}, chatScreen: {} };
+        if (!Array.isArray(db.iconPresets)) db.iconPresets = [];
+        if (!Array.isArray(db.homeWidgetPresets)) db.homeWidgetPresets = [];
+        if (!Array.isArray(db.widgetWallpaperPresets)) db.widgetWallpaperPresets = [];
 
         showToast('正在写入新数据...');
         await saveData(db);
@@ -1505,6 +1910,32 @@ const GitHubMgr = {
         }
     },
     
+    // 单文件上传上限（base64 字符数），超过则走分片。约 35MB base64 对应解码后约 26MB，低于 GitHub 100MB 限制
+    _SINGLE_FILE_MAX_B64: 35 * 1024 * 1024,
+    // 每片 base64 长度（字符数），分片时使用
+    _CHUNK_B64_SIZE: 35 * 1024 * 1024,
+    _CHUNKS_DIR: 'backup_chunks',
+
+    _uploadOneFile: async (repoPath, base64ContentForApi, message, existingSha) => {
+        const url = `https://api.github.com/repos/${GitHubMgr.config.repo}/contents/${encodeURIComponent(repoPath)}`;
+        const body = { message: message || 'Backup', content: base64ContentForApi };
+        if (existingSha) body.sha = existingSha;
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${GitHubMgr.config.token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const errJson = await res.json();
+            throw new Error(errJson.message || 'GitHub API Error');
+        }
+        return res;
+    },
+
     performUpload: async (onProgress) => {
         // 1. 预检权限
         onProgress('正在检查权限...');
@@ -1549,53 +1980,70 @@ const GitHubMgr = {
             reader.readAsDataURL(compressedBlob);
         });
 
-        onProgress('正在上传至 GitHub...');
-        let path = '';
-        let sha = null;
-        const customName = GitHubMgr.config.fileName;
-        
-        if (customName && customName.trim()) {
-            path = customName.trim();
-            if (!path.endsWith('.ee')) path += '.ee';
+        const useChunked = base64Content.length > GitHubMgr._SINGLE_FILE_MAX_B64;
+        const token = GitHubMgr.config.token;
+        const repo = GitHubMgr.config.repo;
+
+        if (!useChunked) {
+            // 小文件：单文件上传（兼容原有逻辑）
+            onProgress('正在上传至 GitHub...');
+            let path = '';
+            let sha = null;
+            const customName = GitHubMgr.config.fileName;
             
-            try {
-                const checkUrl = `https://api.github.com/repos/${GitHubMgr.config.repo}/contents/${encodeURIComponent(path)}`;
-                const checkRes = await fetch(checkUrl, {
-                    headers: { 'Authorization': `token ${GitHubMgr.config.token}` }
-                });
-                if (checkRes.ok) {
-                    const fileData = await checkRes.json();
-                    sha = fileData.sha;
+            if (customName && customName.trim()) {
+                path = customName.trim();
+                if (!path.endsWith('.ee')) path += '.ee';
+                try {
+                    const checkUrl = `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}`;
+                    const checkRes = await fetch(checkUrl, {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    if (checkRes.ok) {
+                        const fileData = await checkRes.json();
+                        sha = fileData.sha;
+                    }
+                } catch(e) {
+                    console.log('File does not exist or error checking:', e);
                 }
-            } catch(e) {
-                console.log('File does not exist or error checking:', e);
+            } else {
+                const dateStr = new Date().toISOString().slice(0, 10);
+                path = `AutoBackup_${dateStr}_${Date.now()}.ee`;
             }
+            await GitHubMgr._uploadOneFile(path, base64Content, 'Auto backup', sha);
         } else {
-            const dateStr = new Date().toISOString().slice(0, 10);
-            path = `AutoBackup_${dateStr}_${Date.now()}.ee`; 
-        }
-        
-        const url = `https://api.github.com/repos/${GitHubMgr.config.repo}/contents/${encodeURIComponent(path)}`;
-        
-        const body = {
-            message: `Auto backup`,
-            content: base64Content
-        };
-        if (sha) body.sha = sha; 
+            // 大文件：分片上传
+            const backupId = Date.now();
+            const chunkSize = GitHubMgr._CHUNK_B64_SIZE;
+            const totalChunks = Math.ceil(base64Content.length / chunkSize);
+            const chunkPaths = [];
+            const dir = GitHubMgr._CHUNKS_DIR;
 
-        const response = await fetch(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${GitHubMgr.config.token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github.v3+json'
-            },
-            body: JSON.stringify(body)
-        });
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * chunkSize;
+                const end = Math.min(start + chunkSize, base64Content.length);
+                const chunk = base64Content.slice(start, end);
+                const chunkPath = `${dir}/BackupChunk_${backupId}_part${i}.ee.chunk`;
+                chunkPaths.push(`BackupChunk_${backupId}_part${i}.ee.chunk`);
 
-        if(!response.ok) {
-            const errJson = await response.json();
-            throw new Error(errJson.message || 'GitHub API Error');
+                onProgress(`正在上传分片 ${i + 1}/${totalChunks}...`);
+                const contentForApi = btoa(chunk);
+                await GitHubMgr._uploadOneFile(chunkPath, contentForApi, `Backup chunk ${i + 1}/${totalChunks}`);
+            }
+
+            const manifest = {
+                backupId,
+                totalChunks,
+                chunkPaths,
+                timestamp: backupId
+            };
+            const manifestPath = `${dir}/BackupChunk_${backupId}_manifest.json`;
+            onProgress('正在上传清单...');
+            await GitHubMgr._uploadOneFile(
+                manifestPath,
+                btoa(JSON.stringify(manifest)),
+                'Backup manifest'
+            );
         }
 
         GitHubMgr.config.lastTime = Date.now();
@@ -1627,63 +2075,112 @@ const GitHubMgr = {
         btn.innerText = '恢复中...';
         btn.style.pointerEvents = 'none';
 
+        const token = GitHubMgr.config.token;
+        const repo = GitHubMgr.config.repo;
+        const baseUrl = `https://api.github.com/repos/${repo}/contents`;
+        const auth = { 'Authorization': `token ${token}` };
+
         try {
             const customName = GitHubMgr.config.fileName;
-            let targetFile = null;
+            let restoreChunked = false;
+            let targetSingle = null;
+            let targetManifest = null;
 
             if (customName && customName.trim()) {
                 let path = customName.trim();
                 if (!path.endsWith('.ee')) path += '.ee';
-                targetFile = { name: path };
+                targetSingle = { name: path };
             } else {
-                const url = `https://api.github.com/repos/${GitHubMgr.config.repo}/contents/`;
-                const res = await fetch(url, { headers: { 'Authorization': `token ${GitHubMgr.config.token}` } });
-                
-                if(!res.ok) {
-                    if(res.status === 404) throw new Error('仓库不存在或路径错误');
-                    if(res.status === 401) throw new Error('Token 无效或无权限');
-                    throw new Error('获取列表失败: ' + res.status);
+                const rootRes = await fetch(`${baseUrl}/`, { headers: auth });
+                if (!rootRes.ok) {
+                    if (rootRes.status === 404) throw new Error('仓库不存在或路径错误');
+                    if (rootRes.status === 401) throw new Error('Token 无效或无权限');
+                    throw new Error('获取列表失败: ' + rootRes.status);
                 }
-                
-                const files = await res.json();
-                
-                const backups = files.filter(f => f.name.startsWith('AutoBackup_') && f.name.endsWith('.ee'));
-                if(backups.length === 0) throw new Error('仓库中没有找到任何 .ee 备份文件');
-
-                backups.sort((a, b) => {
+                const rootFiles = await rootRes.json();
+                const singleBackups = rootFiles.filter(f => f.name.startsWith('AutoBackup_') && f.name.endsWith('.ee'));
+                singleBackups.sort((a, b) => {
                     const getTs = (name) => {
                         const match = name.match(/_(\d+)\.ee$/);
                         return match ? parseInt(match[1]) : 0;
                     };
                     return getTs(b.name) - getTs(a.name);
                 });
+                if (singleBackups.length > 0) targetSingle = { name: singleBackups[0].name, ts: singleBackups[0].name.match(/_(\d+)\.ee$/)?.[1] || 0 };
 
-                targetFile = backups[0];
+                const chunksDirRes = await fetch(`${baseUrl}/${encodeURIComponent(GitHubMgr._CHUNKS_DIR)}`, { headers: auth });
+                if (chunksDirRes.ok) {
+                    const chunkFiles = await chunksDirRes.json();
+                    const manifests = chunkFiles.filter(f => f.name.endsWith('_manifest.json') && f.name.startsWith('BackupChunk_'));
+                    if (manifests.length > 0) {
+                        manifests.sort((a, b) => {
+                            const getId = (name) => {
+                                const m = name.match(/BackupChunk_(\d+)_manifest/);
+                                return m ? parseInt(m[1]) : 0;
+                            };
+                            return getId(b.name) - getId(a.name);
+                        });
+                        targetManifest = { name: manifests[0].name };
+                    }
+                }
+
+                if (targetSingle && targetManifest) {
+                    const singleTs = parseInt(targetSingle.ts, 10) || 0;
+                    const chunkId = parseInt(targetManifest.name.match(/BackupChunk_(\d+)_manifest/)?.[1], 10) || 0;
+                    restoreChunked = chunkId > singleTs;
+                } else if (targetManifest) {
+                    restoreChunked = true;
+                }
             }
 
-            if (!targetFile) throw new Error('未找到可恢复的备份文件');
+            let data;
+            if (restoreChunked && targetManifest) {
+                showToast('正在下载分片清单...');
+                const manifestPath = `${GitHubMgr._CHUNKS_DIR}/${targetManifest.name}`;
+                const manifestRes = await fetch(`${baseUrl}/${encodeURIComponent(manifestPath)}`, {
+                    headers: { ...auth, 'Accept': 'application/vnd.github.v3.raw' }
+                });
+                if (!manifestRes.ok) throw new Error('下载清单失败: ' + manifestRes.status);
+                const manifestText = await manifestRes.text();
+                const manifest = JSON.parse(manifestText);
 
-            showToast('正在下载: ' + targetFile.name);
-
-            const dlUrl = `https://api.github.com/repos/${GitHubMgr.config.repo}/contents/${encodeURIComponent(targetFile.name)}`;
-            const dlRes = await fetch(dlUrl, {
-                headers: {
-                    'Authorization': `token ${GitHubMgr.config.token}`,
-                    'Accept': 'application/vnd.github.v3.raw'
+                let fullBase64 = '';
+                for (let i = 0; i < manifest.totalChunks; i++) {
+                    showToast(`正在下载分片 ${i + 1}/${manifest.totalChunks}...`);
+                    const chunkFileName = manifest.chunkPaths[i];
+                    const chunkPath = `${GitHubMgr._CHUNKS_DIR}/${chunkFileName}`;
+                    const chunkRes = await fetch(`${baseUrl}/${encodeURIComponent(chunkPath)}`, {
+                        headers: { ...auth, 'Accept': 'application/vnd.github.v3.raw' }
+                    });
+                    if (!chunkRes.ok) throw new Error('下载分片失败: ' + chunkRes.status);
+                    fullBase64 += await chunkRes.text();
                 }
-            });
 
-            if(!dlRes.ok) throw new Error('下载文件失败: ' + dlRes.status);
-            
-            showToast('下载完成，正在解压...');
-            const blob = await dlRes.blob();
-            
-            const decompressionStream = new DecompressionStream('gzip');
-            const decompressedStream = blob.stream().pipeThrough(decompressionStream);
-            const jsonString = await new Response(decompressedStream).text();
-            
-            const data = JSON.parse(jsonString);
-            
+                showToast('正在解码并解压...');
+                const binStr = atob(fullBase64);
+                const bytes = new Uint8Array(binStr.length);
+                for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+                const blob = new Blob([bytes], { type: 'application/octet-stream' });
+
+                const decompressionStream = new DecompressionStream('gzip');
+                const decompressedStream = blob.stream().pipeThrough(decompressionStream);
+                const jsonString = await new Response(decompressedStream).text();
+                data = JSON.parse(jsonString);
+            } else {
+                if (!targetSingle) throw new Error('未找到可恢复的备份文件');
+                showToast('正在下载: ' + targetSingle.name);
+                const dlRes = await fetch(`${baseUrl}/${encodeURIComponent(targetSingle.name)}`, {
+                    headers: { ...auth, 'Accept': 'application/vnd.github.v3.raw' }
+                });
+                if (!dlRes.ok) throw new Error('下载文件失败: ' + dlRes.status);
+                showToast('下载完成，正在解压...');
+                const blob = await dlRes.blob();
+                const decompressionStream = new DecompressionStream('gzip');
+                const decompressedStream = blob.stream().pipeThrough(decompressionStream);
+                const jsonString = await new Response(decompressedStream).text();
+                data = JSON.parse(jsonString);
+            }
+
             showToast('解压完成，开始导入...');
             const importResult = await importBackupData(data);
 

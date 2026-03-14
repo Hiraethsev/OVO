@@ -189,6 +189,14 @@ input:checked + .kkt-slider:before {
     background-color: #f5f5f5;
 }
 
+.block-trigger-btn {
+    color: #007aff !important;
+}
+
+.block-settings-panel .kkt-danger-btn {
+    margin-top: 8px;
+}
+
 
 /* 群聊设置页面的成员列表样式适配 */
 #group-settings-screen .group-member,

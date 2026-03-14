@@ -73,11 +73,9 @@ function renderMessages(isLoadMore = false, forceScrollToBottom = false) {
         
         let invisibleRegex;
         if (chat.showStatusUpdateMsg) {
-            // 在末尾添加 |<thinking>[\s\S]*?<\/thinking>
-            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?(?:接收|退还).*?的亲属卡\]|\[.*?(?:冻结|解冻|收回)了(?:给.*?的)?亲属卡\]|\[.*?调整(?:给.*?的)?亲属卡额度为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
         } else {
-            // 在末尾添加 |<thinking>[\s\S]*?<\/thinking>
-            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?(?:接收|退还).*?的亲属卡\]|\[.*?(?:冻结|解冻|收回)了(?:给.*?的)?亲属卡\]|\[.*?调整(?:给.*?的)?亲属卡额度为：.*?\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
         }
 
         const isSystemMsg = /\[system:.*?\]|\[system-display:.*?\]/.test(msg.content);
@@ -387,6 +385,7 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const updateStatusRegex = /\[(.*?)更新状态为[：:](.*?)\]/;
     const callInviteRegex = /\[(.*?)向(.*?)发起了(视频|语音)通话\]/;
     const callRejectRegex = /\[(.*?)拒绝了(.*?)的(视频|语音)通话\]/;
+    const reminderMsgRegex = /\[(.*?)(?:创建了提醒|添加了待办|完成了待办|提醒你|的待办到期|提醒.*?)[：:](.*?)\]/;
 
     const timeSkipMatch = content.match(timeSkipRegex);
     const inviteMatch = content.match(inviteRegex);
@@ -394,6 +393,7 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const updateStatusMatch = content.match(updateStatusRegex);
     const callInviteMatch = content.match(callInviteRegex);
     const callRejectMatch = content.match(callRejectRegex);
+    const reminderMsgMatch = message.isReminderMsg ? content.match(reminderMsgRegex) : null;
 
     // 私聊消息正则
     const privateRegex = /^\[Private: (.*?) -> (.*?): ([\s\S]+?)\]$/;
@@ -401,16 +401,19 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
 
     let invisibleRegex;
     if (chat.showStatusUpdateMsg) {
-        // 在末尾添加 |<thinking>[\s\S]*?<\/thinking>
-        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[系统情景通知：.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?(?:接收|退还).*?的亲属卡\]|\[.*?(?:冻结|解冻|收回)了(?:给.*?的)?亲属卡\]|\[.*?调整(?:给.*?的)?亲属卡额度为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[系统情景通知：.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
     } else {
-        // 在末尾添加 |<thinking>[\s\S]*?<\/thinking>
-        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[系统情景通知：.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?(?:接收|退还).*?的亲属卡\]|\[.*?(?:冻结|解冻|收回)了(?:给.*?的)?亲属卡\]|\[.*?调整(?:给.*?的)?亲属卡额度为：.*?\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[系统情景通知：.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
     }
 
     let isDebugHiddenMsg = false;
+    // 提醒事项消息：开关关闭时隐藏
+    const isHiddenReminder = message.isReminderMsg && chat.showReminderMsg === false;
+    // 头像操作消息：开关关闭时隐藏
+    const avatarActionMatch = content.match(/^\[avatar-action:([\s\S]+?)\]$/);
+    const isHiddenAvatarAction = !!avatarActionMatch && !chat.showAvatarActionMsg;
     // 在这里增加 || isThinking，只要标记为思考中，就强制走隐形消息逻辑
-    if (invisibleRegex.test(content) || privateRegex.test(content) || privateEndRegex.test(content) || isThinking) {
+    if (invisibleRegex.test(content) || privateRegex.test(content) || privateEndRegex.test(content) || isThinking || isHiddenReminder || isHiddenAvatarAction) {
         if (!isDebugMode) return null; 
         isDebugHiddenMsg = true;       
     }
@@ -446,8 +449,15 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
         }
         return wrapper;
     }
+    // 头像操作消息：开关开启时渲染为灰色系统通知
+    if (avatarActionMatch && chat.showAvatarActionMsg && !isThinking) {
+        wrapper.className = 'message-wrapper system-notification';
+        if (message.isContextDisabled) wrapper.classList.add('context-disabled');
+        wrapper.innerHTML = `<div class="system-notification-bubble">💫 ${DOMPurify.sanitize(avatarActionMatch[1])}</div>`;
+        return wrapper;
+    }
     // 【新增】 && !isThinking —— 只有当不是思考过程时，才允许渲染成系统通知气泡
-    if ((timeSkipMatch || inviteMatch || renameMatch || (updateStatusMatch && chat.showStatusUpdateMsg) || callInviteMatch || callRejectMatch) && !isThinking) {
+    if ((timeSkipMatch || inviteMatch || renameMatch || (updateStatusMatch && chat.showStatusUpdateMsg) || callInviteMatch || callRejectMatch || (reminderMsgMatch && chat.showReminderMsg !== false)) && !isThinking) {
         wrapper.className = 'message-wrapper system-notification';
         if (message.isContextDisabled) wrapper.classList.add('context-disabled');
         let bubbleText = '';
@@ -457,6 +467,7 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
         if (updateStatusMatch) bubbleText = `${updateStatusMatch[1]} 更新状态为：${updateStatusMatch[2]}`;
         if (callInviteMatch) bubbleText = `${callInviteMatch[1]}向${callInviteMatch[2]}发起了${callInviteMatch[3]}通话`;
         if (callRejectMatch) bubbleText = `${callRejectMatch[1]}拒绝了${callRejectMatch[2]}的${callRejectMatch[3]}通话`;
+        if (reminderMsgMatch) bubbleText = content.replace(/^\[/, '').replace(/\]$/, '');
         // 如果消息携带了 theaterScenarioId，则气泡可点击跳转到对应小剧场
         if (message.theaterScenarioId) {
             const bubble = document.createElement('div');
@@ -569,6 +580,7 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const privateSentTransferRegex = /\[.*?给你转账[：:]([\d.,]+)元[；;]备注[：:](.*?)\]/;
     const privateReceivedTransferRegex = /\[.*?的转账[：:]([\d.,]+)元[；;]备注[：:](.*?)\]/;
     const groupTransferRegex = /\[(.*?)\s*向\s*(.*?)\s*转账[：:]([\d.,]+)元[；;]备注[：:](.*?)\]/;
+    const familyCardGiftRegex = /\[(.+?)赠送(.+?)亲属卡[：:]额度([\d.,]+)元[；;]刷新周期[：:](.+?)\]/;
     const privateGiftRegex = /\[(?:.+?)送来的礼物[：:]([\s\S]+?)\]/;
     const groupGiftRegex = /\[(.*?)\s*向\s*(.*?)\s*送来了礼物[：:]([\s\S]+?)\]/;
     const imageRecogRegex = /\[.*?发来了一张图片[：:]\]/;
@@ -600,6 +612,9 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const privateSentTransferMatch = content.match(privateSentTransferRegex);
     const privateReceivedTransferMatch = content.match(privateReceivedTransferRegex);
     const groupTransferMatch = content.match(groupTransferRegex);
+    const familyCardGiftMatch = content.match(familyCardGiftRegex);
+    const familyCardData = (message.familyCardId && db.piggyBank && db.piggyBank.familyCards) ? db.piggyBank.familyCards.find(c => c.id === message.familyCardId) : null;
+    const receivedFamilyCardData = (message.receivedFamilyCardId && db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards.find(c => c.id === message.receivedFamilyCardId) : null;
     const privateGiftMatch = content.match(privateGiftRegex);
     const groupGiftMatch = content.match(groupGiftRegex);
     const imageRecogMatch = content.match(imageRecogRegex);
@@ -1050,6 +1065,54 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
                 bubbleElement.innerHTML = `<div class="pv-card-content">${displayContent}</div><div class="pv-card-image-overlay" style="background-image: url('${isSent ? 'https://i.postimg.cc/L8NFrBrW/1752307494497.jpg' : 'https://i.postimg.cc/1tH6ds9g/1752301200490.jpg'}');"></div><div class="pv-card-footer"><svg viewBox="0 0 24 24"><path d="M4,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M4,6V18H20V6H4M10,9A1,1 0 0,1 11,10A1,1 0 0,1 10,11A1,1 0 0,1 9,10A1,1 0 0,1 10,9M8,17L11,13L13,15L17,10L20,14V17H8Z"></path></svg><span>照片/视频・点击查看</span></div>`;
             }
         }
+    } else if (familyCardGiftMatch || familyCardData || receivedFamilyCardData) {
+        const card = familyCardData || receivedFamilyCardData;
+        const status = message.familyCardStatus || message.receivedFamilyCardStatus || 'pending';
+        const statusText = status === 'accepted' ? '已接收' : status === 'returned' ? '已退还' : status === 'revoked' ? '已收回' : '待接收';
+        const cardNum = card ? card.cardNumber : '****';
+        const limitNum = card ? card.limit : (familyCardGiftMatch ? familyCardGiftMatch[3] : '');
+        const periodText = card ? (card.refreshPeriod === 'daily' ? '每天' : card.refreshPeriod === 'weekly' ? '每周' : card.refreshPeriod === 'monthly' ? '每月' : (card.refreshDays || 30) + '天') : (familyCardGiftMatch ? familyCardGiftMatch[4] : '');
+        const holderName = isSent ? (card ? card.targetCharName : (familyCardGiftMatch ? familyCardGiftMatch[2] : '')) : (card ? card.fromCharName : '');
+        const now = new Date(timestamp);
+        const dateStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const cardIdShort = (card && card.id) ? card.id.slice(-8) : String(timestamp).slice(-8);
+        let actionButtonsHtml = '';
+        if (!isSent && status === 'pending') {
+            actionButtonsHtml = `
+                <div class="receipt-actions">
+                    <button class="receipt-action-btn family-card-accept" data-msg-id="${DOMPurify.sanitize(id)}">接收</button>
+                    <button class="receipt-action-btn family-card-return" data-msg-id="${DOMPurify.sanitize(id)}">退回</button>
+                </div>`;
+        }
+        bubbleElement = document.createElement('div');
+        bubbleElement.className = 'receipt-bubble family-card-receipt ' + (isSent ? 'sent' : 'received') + (status !== 'pending' ? ' ' + status : '');
+        bubbleElement.innerHTML = `
+            <div class="receipt-header">
+                <div class="receipt-brand">亲 属 卡</div>
+                <div class="receipt-id">CARD.${DOMPurify.sanitize(cardIdShort)}</div>
+            </div>
+            <div class="receipt-items">
+                <div class="receipt-item-row">
+                    <span class="receipt-item-name">持卡人</span>
+                    <span class="receipt-dots"></span>
+                    <span class="receipt-item-qty">${DOMPurify.sanitize(holderName || '—')}</span>
+                </div>
+                <div class="receipt-item-row">
+                    <span class="receipt-item-name">刷新周期</span>
+                    <span class="receipt-dots"></span>
+                    <span class="receipt-item-qty">${DOMPurify.sanitize(periodText || '—')}</span>
+                </div>
+            </div>
+            <div class="receipt-total-section">
+                <span class="receipt-total-price">¥${DOMPurify.sanitize(String(limitNum))}</span>
+            </div>
+            <div class="receipt-footer">
+                <div class="receipt-delivery-info">
+                    <span class="family-card-status-text">${DOMPurify.sanitize(statusText)}</span>
+                    <span>${DOMPurify.sanitize(dateStr)}</span>
+                </div>
+                ${actionButtonsHtml}
+            </div>`;
     } else if (privateSentTransferMatch || privateReceivedTransferMatch || groupTransferMatch) {
         const isSentTransfer = !!privateSentTransferMatch || (groupTransferMatch && isSent);
         const match = privateSentTransferMatch || privateReceivedTransferMatch || groupTransferMatch;
@@ -1200,8 +1263,8 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const timestampStyle = chat.timestampStyle || 'bubble';
 
     // Append Time Stamp to Bubble (if style is bubble)
-    // 小票、小剧场分享等卡片内部自带时间，不追加气泡外大时间戳
-    if (bubbleElement && timestampStyle === 'bubble' && !bubbleElement.classList.contains('receipt-bubble') && !bubbleElement.classList.contains('theater-share-card-bubble')) {
+    // 小票、小剧场分享、亲属卡等卡片内部自带时间，不追加气泡外大时间戳
+    if (bubbleElement && timestampStyle === 'bubble' && !bubbleElement.classList.contains('receipt-bubble') && !bubbleElement.classList.contains('theater-share-card-bubble') && !bubbleElement.classList.contains('family-card-receipt')) {
         bubbleElement.appendChild(timeSpan);
     }
     
@@ -1388,10 +1451,10 @@ function addMessageBubble(message, targetChatId, targetChatType) {
             let invisibleRegex;
             if (senderChat.showStatusUpdateMsg) {
                 // 在末尾添加 |<thinking>[\s\S]*?<\/thinking>
-                invisibleRegex = /\[system:.*?\]|\[.*?已接收礼物\]|\[.*?(?:接收|退回).*?的转账\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+                invisibleRegex = /\[system:.*?\]|\[.*?已接收礼物\]|\[.*?(?:接收|退回).*?的转账\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
             } else {
                 // 在末尾添加 |<thinking>[\s\S]*?<\/thinking>
-                invisibleRegex = /\[system:.*?\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[.*?(?:接收|退回).*?的转账\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+                invisibleRegex = /\[system:.*?\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[.*?(?:接收|退回).*?的转账\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
             }
             if (!invisibleRegex.test(message.content)) {
                 senderChat.unreadCount = (senderChat.unreadCount || 0) + 1;
@@ -1561,15 +1624,58 @@ function addMessageBubble(message, targetChatId, targetChatType) {
                     if (statusElem) statusElem.textContent = statusToSet === 'received' ? '已收款' : '已退回';
                 }
             }
+        }
+
+        const familyCardActionRegex = /\[(.*?)(接收|退还)(.*?)的亲属卡\]/;
+        if (message.content.match(familyCardActionRegex) && message.role === 'assistant') {
+            const actionMatch = message.content.match(familyCardActionRegex);
+            const statusToSet = actionMatch[2] === '接收' ? 'accepted' : 'returned';
+            const lastPendingFcIndex = character.history.slice().reverse().findIndex(m => m.role === 'user' && m.familyCardId && m.familyCardStatus === 'pending');
+            if (lastPendingFcIndex !== -1) {
+                const actualIndex = character.history.length - 1 - lastPendingFcIndex;
+                const fcMsg = character.history[actualIndex];
+                fcMsg.familyCardStatus = statusToSet;
+                const fcCardOnScreen = messageArea.querySelector(`.message-wrapper[data-id="${fcMsg.id}"] .family-card-receipt`);
+                if (fcCardOnScreen) {
+                    fcCardOnScreen.classList.remove('accepted', 'returned');
+                    fcCardOnScreen.classList.add(statusToSet);
+                    const statusElem = fcCardOnScreen.querySelector('.family-card-status-text');
+                    if (statusElem) statusElem.textContent = statusToSet === 'accepted' ? '已接收' : '已退还';
+                    const actions = fcCardOnScreen.querySelector('.receipt-actions');
+                    if (actions) actions.remove();
+                }
+            }
+        }
+        // 用户接收/退还角色发的亲属卡后，更新角色发的亲属卡消息气泡，且不渲染该条状态消息
+        const userFamilyCardActionRegex = /\[(.*?)(接收|退还)(.*?)的亲属卡\]/;
+        if (message.content.match(userFamilyCardActionRegex) && message.role === 'user') {
+            const actionMatch = message.content.match(userFamilyCardActionRegex);
+            const statusToSet = actionMatch[2] === '接收' ? 'accepted' : 'returned';
+            const lastPendingRfcIndex = character.history.slice().reverse().findIndex(m => m.role === 'assistant' && m.receivedFamilyCardId && m.receivedFamilyCardStatus === 'pending');
+            if (lastPendingRfcIndex !== -1) {
+                const actualIndex = character.history.length - 1 - lastPendingRfcIndex;
+                const rfcMsg = character.history[actualIndex];
+                rfcMsg.receivedFamilyCardStatus = statusToSet;
+                const fcCardOnScreen = messageArea.querySelector(`.message-wrapper[data-id="${rfcMsg.id}"] .family-card-receipt`);
+                if (fcCardOnScreen) {
+                    fcCardOnScreen.classList.remove('accepted', 'returned');
+                    fcCardOnScreen.classList.add(statusToSet);
+                    const statusElem = fcCardOnScreen.querySelector('.family-card-status-text');
+                    if (statusElem) statusElem.textContent = statusToSet === 'accepted' ? '已接收' : '已退还';
+                    const actions = fcCardOnScreen.querySelector('.receipt-actions');
+                    if (actions) actions.remove();
+                }
+            }
+            return;
         } else {
             let isContinuous = false;
             let invisibleRegex;
             if (character.showStatusUpdateMsg) {
                 // 修改：正则末尾增加了 |<thinking>[\s\S]*?<\/thinking>
-                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
             } else {
                 // 修改：正则末尾增加了 |<thinking>[\s\S]*?<\/thinking>
-                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
             }
             const isSystemMsg = /\[system:.*?\]|\[system-display:.*?\]/.test(message.content);
 
@@ -1714,10 +1820,10 @@ function addMessageBubble(message, targetChatId, targetChatType) {
         let invisibleRegex;
         if (group.showStatusUpdateMsg) {
             // 修改：正则末尾增加了 |<thinking>[\s\S]*?<\/thinking>
-            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
         } else {
             // 修改：正则末尾增加了 |<thinking>[\s\S]*?<\/thinking>
-            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
+            invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?拒绝了.*?的(?:视频|语音)通话\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
         }
         const isSystemMsg = /\[system:.*?\]|\[system-display:.*?\]/.test(message.content);
 

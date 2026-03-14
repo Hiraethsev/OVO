@@ -44,7 +44,15 @@ function setupAddCharModal() {
                 enabled: false,
                 interval: 60,
                 lastTriggerTime: 0
-            }
+            },
+            userAvatarLibrary: [],
+            charAvatarLibrary: [],
+            charCollectImageAsAvatarEnabled: false,
+            coupleAvatarLibrary: [],
+            charCollectCoupleAvatarEnabled: false,
+            phoneControlEnabled: false,
+            phoneControlViewLimit: 10,
+            phoneControlHistory: []
         };
         db.characters.push(newChar);
         await saveData();
@@ -225,7 +233,12 @@ async function createCharacterFromData(data, avatar, options) {
             enabled: false,
             interval: 60,
             lastTriggerTime: 0
-        }
+        },
+        userAvatarLibrary: [],
+        charAvatarLibrary: [],
+        charCollectImageAsAvatarEnabled: false,
+        coupleAvatarLibrary: [],
+        charCollectCoupleAvatarEnabled: false
     };
 
     // 解析开场白：仅在用户选择导入时处理；优先 data.alternate_greetings，否则用 first_mes

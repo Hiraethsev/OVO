@@ -115,6 +115,54 @@ function addFavoritesFromSelection() {
     });
 }
 
+// 多选收藏（合并为一条）：将选中的消息按时间顺序合并成一条收藏，便于连贯查看
+function addFavoritesFromSelectionMerged() {
+    if (!selectedMessageIds || selectedMessageIds.size === 0) {
+        showToast('请至少选择一条消息');
+        return;
+    }
+    const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+    if (!chat || !chat.history) return;
+
+    const messages = chat.history
+        .filter(m => selectedMessageIds.has(m.id))
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    if (messages.length === 0) return;
+
+    const chatName = getChatDisplayName(currentChatType, currentChatId);
+    const parts = [];
+    messages.forEach(m => {
+        const content = typeof m.content === 'string' ? m.content : (m.parts && m.parts[0] ? m.parts[0].text : '');
+        const text = getMessagePreview(content) || content || '';
+        if (text.trim()) parts.push(text.trim());
+    });
+    const mergedContent = parts.join('\n\n');
+
+    const first = messages[0];
+    const fav = {
+        id: 'fav_merged_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+        messageId: first.id,
+        chatId: currentChatId,
+        chatType: currentChatType,
+        chatName: chatName,
+        content: mergedContent,
+        timestamp: first.timestamp || Date.now(),
+        favoriteTime: Date.now(),
+        note: '',
+        sender: '多条消息',
+        favoriteBy: 'user',
+        characterId: null,
+        merged: true
+    };
+    if (!db.favorites) db.favorites = [];
+    db.favorites.push(fav);
+    saveData().then(() => {
+        if (typeof exitMultiSelectMode === 'function') exitMultiSelectMode();
+        showToast(`已合并 ${messages.length} 条消息为一条收藏`);
+        if (typeof triggerHapticFeedback === 'function') triggerHapticFeedback('medium');
+    });
+}
+
 // 角色静默收藏（仅收藏用户消息，不提示）
 function addCharacterFavorite(messageId, characterId, note) {
     const chat = db.characters.find(c => c.id === characterId);
@@ -150,6 +198,7 @@ function addCharacterFavorite(messageId, characterId, note) {
 
 // 打开收藏界面（从更多页进入）
 function openFavoritesScreen() {
+    if (favoritesMultiSelectMode) exitFavoritesMultiSelectMode();
     currentFavoritesFilter = 'user';
     renderFavoritesList(currentFavoritesFilter);
     switchScreen('favorites-screen');
@@ -226,6 +275,7 @@ function renderFavoritesList(filter) {
                     const note = (fav.note || '').trim();
                     return `
                     <div class="favorite-card character-favorite" data-favorite-id="${fav.id}">
+                        <div class="favorite-checkbox"></div>
                         <div class="favorite-card-content">${escapeHtml(previewShort)}</div>
                         ${note ? `<div class="favorite-card-note"><span class="character-thought-icon">💭</span>${escapeHtml(note)}</div>` : ''}
                         <div class="favorite-card-meta">
@@ -262,6 +312,7 @@ function renderFavoritesList(filter) {
                     const note = (fav.note || '').trim();
                     return `
                     <div class="favorite-card" data-favorite-id="${fav.id}">
+                        <div class="favorite-checkbox"></div>
                         <div class="favorite-card-content">${escapeHtml(previewShort)}</div>
                         <div class="favorite-card-meta">
                             <span class="favorite-card-time">${sendTimeStr}</span>
@@ -283,8 +334,74 @@ function renderFavoritesList(filter) {
         }
     }
 
-    container.querySelectorAll('.favorite-card').forEach(card => {
-        card.addEventListener('click', () => openFavoriteDetail(card.dataset.favoriteId));
+    // 点击由 initFavoritesScreen 中容器上的事件委托统一处理
+}
+
+let favoritesMultiSelectMode = false;
+let selectedFavoriteIds = new Set();
+
+function onFavoritesListClick(e) {
+    const card = e.target.closest('.favorite-card');
+    if (!card) return;
+    const favoriteId = card.dataset.favoriteId;
+    if (!favoriteId) return;
+
+    if (favoritesMultiSelectMode) {
+        if (selectedFavoriteIds.has(favoriteId)) {
+            selectedFavoriteIds.delete(favoriteId);
+            const cb = card.querySelector('.favorite-checkbox');
+            if (cb) cb.classList.remove('checked');
+        } else {
+            selectedFavoriteIds.add(favoriteId);
+            const cb = card.querySelector('.favorite-checkbox');
+            if (cb) cb.classList.add('checked');
+        }
+        updateFavoritesSelectCount();
+        return;
+    }
+    openFavoriteDetail(favoriteId);
+}
+
+function updateFavoritesSelectCount() {
+    const el = document.getElementById('favorites-select-count');
+    if (el) el.textContent = `已选 ${selectedFavoriteIds.size} 项`;
+    const deleteBtn = document.getElementById('favorites-batch-delete-btn');
+    if (deleteBtn) deleteBtn.disabled = selectedFavoriteIds.size === 0;
+}
+
+function enterFavoritesMultiSelectMode() {
+    favoritesMultiSelectMode = true;
+    selectedFavoriteIds.clear();
+    const screen = document.getElementById('favorites-screen');
+    const bar = document.getElementById('favorites-multi-select-bar');
+    const deleteBtn = document.getElementById('favorites-delete-btn');
+    if (screen) screen.classList.add('favorites-multi-select-mode');
+    if (bar) bar.style.display = 'flex';
+    if (deleteBtn) deleteBtn.style.display = 'none'; // 进入多选后隐藏删除图标，由底部栏操作
+    updateFavoritesSelectCount();
+}
+
+function exitFavoritesMultiSelectMode() {
+    favoritesMultiSelectMode = false;
+    selectedFavoriteIds.clear();
+    const screen = document.getElementById('favorites-screen');
+    const bar = document.getElementById('favorites-multi-select-bar');
+    const deleteBtn = document.getElementById('favorites-delete-btn');
+    if (screen) screen.classList.remove('favorites-multi-select-mode');
+    if (bar) bar.style.display = 'none';
+    if (deleteBtn) deleteBtn.style.display = '';
+    const container = document.getElementById('favorites-list-container');
+    if (container) container.querySelectorAll('.favorite-checkbox').forEach(cb => cb.classList.remove('checked'));
+}
+
+function deleteSelectedFavorites() {
+    if (selectedFavoriteIds.size === 0) return;
+    if (!confirm(`确定要删除选中的 ${selectedFavoriteIds.size} 条收藏吗？`)) return;
+    db.favorites = (db.favorites || []).filter(f => !selectedFavoriteIds.has(f.id));
+    saveData().then(() => {
+        showToast('已删除');
+        exitFavoritesMultiSelectMode();
+        renderFavoritesList(currentFavoritesFilter);
     });
 }
 
@@ -396,7 +513,7 @@ let currentFavoriteDetailId = null;
 // 初始化收藏界面事件
 function initFavoritesScreen() {
     const backBtn = document.querySelector('#favorites-screen .back-btn');
-    if (backBtn) backBtn.addEventListener('click', () => switchScreen('more-screen'));
+    if (backBtn) backBtn.addEventListener('click', () => { exitFavoritesMultiSelectMode(); switchScreen('more-screen'); });
 
     const detailBackBtn = document.querySelector('#favorites-detail-screen .back-btn');
     if (detailBackBtn) detailBackBtn.addEventListener('click', () => switchScreen('favorites-screen'));
@@ -404,10 +521,25 @@ function initFavoritesScreen() {
     const saveNoteBtn = document.getElementById('favorite-detail-save-note-btn');
     if (saveNoteBtn) saveNoteBtn.addEventListener('click', saveFavoriteNote);
 
+    // 收藏列表点击委托：多选时勾选/取消，否则进入详情
+    const listContainer = document.getElementById('favorites-list-container');
+    if (listContainer) listContainer.addEventListener('click', onFavoritesListClick);
+
+    // 右上角删除按钮：进入多选删除模式
+    const deleteBtn = document.getElementById('favorites-delete-btn');
+    if (deleteBtn) deleteBtn.addEventListener('click', enterFavoritesMultiSelectMode);
+
+    const cancelMultiBtn = document.getElementById('favorites-multi-select-cancel-btn');
+    if (cancelMultiBtn) cancelMultiBtn.addEventListener('click', exitFavoritesMultiSelectMode);
+
+    const batchDeleteBtn = document.getElementById('favorites-batch-delete-btn');
+    if (batchDeleteBtn) batchDeleteBtn.addEventListener('click', deleteSelectedFavorites);
+
     document.querySelectorAll('.favorites-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             const filter = tab.dataset.filter;
             if (!filter) return;
+            if (favoritesMultiSelectMode) exitFavoritesMultiSelectMode();
             currentFavoritesFilter = filter;
             document.querySelectorAll('.favorites-tab').forEach(t => t.classList.toggle('active', t.dataset.filter === filter));
             renderFavoritesList(filter);
@@ -418,6 +550,7 @@ function initFavoritesScreen() {
 // 供全局调用
 window.addMessageToFavorites = addMessageToFavorites;
 window.addFavoritesFromSelection = addFavoritesFromSelection;
+window.addFavoritesFromSelectionMerged = addFavoritesFromSelectionMerged;
 window.addCharacterFavorite = addCharacterFavorite;
 window.openFavoritesScreen = openFavoritesScreen;
 window.renderFavoritesList = renderFavoritesList;

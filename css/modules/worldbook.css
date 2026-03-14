@@ -178,6 +178,11 @@
     animation: slideUp 0.3s ease-out;
 }
 
+#world-book-multi-select-bar > div {
+    display: flex;
+    gap: 8px;
+}
+
 /* 世界书选择模态框 */
 #world-book-selection-modal,
 #global-pomodoro-world-book-selection-modal,
@@ -226,4 +231,39 @@
     align-items: center;
     gap: 10px;
     width: 100%;
+}
+
+/* 移动到分类模态框样式 */
+#world-book-move-category-modal {
+    z-index: 201;
+}
+
+#world-book-move-category-modal .modal-window {
+    width: 90%;
+    max-width: 320px;
+}
+
+#wb-move-category-list {
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.wb-move-category-option {
+    border-radius: 4px;
+    margin: 4px;
+}
+
+.wb-move-category-option:first-child {
+    margin-top: 0;
+}
+
+.wb-move-category-option:last-child {
+    margin-bottom: 0;
+}
+
+.wb-move-category-new {
+    border-top: 2px solid #e0e0e0 !important;
+    margin-top: 8px;
+    padding-top: 12px !important;
 }

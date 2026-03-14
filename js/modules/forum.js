@@ -570,6 +570,13 @@ function setupForumFeature() {
         postsContainer.addEventListener('click', (e) => {
             const card = e.target.closest('.forum-post-card[data-id]');
             if (card) {
+                if (forumPostDeleteMode) {
+                    var id = card.dataset.id;
+                    if (forumSelectedPostIds.has(id)) forumSelectedPostIds.delete(id);
+                    else forumSelectedPostIds.add(id);
+                    renderForumPosts(db.forumPosts, forumGetActiveFilter());
+                    return;
+                }
                 const postId = card.dataset.id;
                 const post = db.forumPosts.find(p => p.id === postId);
                 if (post) {
@@ -615,14 +622,18 @@ function setupShareModal() {
     const charList = document.getElementById('share-char-list');
 
     confirmBtn.addEventListener('click', async () => {
-        const selectedCharIds = Array.from(charList.querySelectorAll('input:checked')).map(input => input.value);
+        const checkedInputs = Array.from(charList.querySelectorAll('input:checked'));
 
-        if (selectedCharIds.length === 0) {
+        if (checkedInputs.length === 0) {
             showToast('请至少选择一个分享对象。');
             return;
         }
 
+        const selectedChars = checkedInputs.filter(input => input.dataset.shareTarget === 'character').map(input => input.value);
+        const selectedGroups = checkedInputs.filter(input => input.dataset.shareTarget === 'group').map(input => input.value);
+
         const shareType = modal.dataset.shareType || 'post';
+        let messageContent = '';
 
         if (shareType === 'comment') {
             const postId = modal.dataset.postId;
@@ -638,21 +649,7 @@ function setupShareModal() {
             }
             const comment = post.comments[commentIndex];
             const postContent = (post.content || post.summary || '').replace(/\n/g, ' ');
-            const messageContent = `[论坛分享-评论]\n帖子标题：${post.title || ''}\n帖子内容：${postContent}\n评论（来自 ${comment.username || '匿名'}）：${comment.content || ''}`;
-
-            selectedCharIds.forEach(charId => {
-                const character = db.characters.find(c => c.id === charId);
-                if (character) {
-                    const message = {
-                        id: `msg_${Date.now()}_${Math.random()}`,
-                        role: 'user',
-                        content: messageContent,
-                        parts: [{ type: 'text', text: messageContent }],
-                        timestamp: Date.now()
-                    };
-                    character.history.push(message);
-                }
-            });
+            messageContent = `[论坛分享-评论]\n帖子标题：${post.title || ''}\n帖子内容：${postContent}\n评论（来自 ${comment.username || '匿名'}）：${comment.content || ''}`;
         } else {
             const postTitle = modal.dataset.postTitle;
             const postSummary = modal.dataset.postSummary;
@@ -661,29 +658,44 @@ function setupShareModal() {
                 showToast('无法获取帖子信息，分享失败。');
                 return;
             }
-
-            selectedCharIds.forEach(charId => {
-                const character = db.characters.find(c => c.id === charId);
-                if (character) {
-                    const messageContent = `[论坛分享]标题：${postTitle}\n摘要：${postSummary}`;
-
-                    const message = {
-                        id: `msg_${Date.now()}_${Math.random()}`,
-                        role: 'user',
-                        content: messageContent,
-                        parts: [{ type: 'text', text: messageContent }],
-                        timestamp: Date.now()
-                    };
-
-                    character.history.push(message);
-                }
-            });
+            messageContent = `[论坛分享]标题：${postTitle}\n摘要：${postSummary}`;
         }
+
+        // 分享给单人角色
+        selectedChars.forEach(charId => {
+            const character = db.characters.find(c => c.id === charId);
+            if (character) {
+                const message = {
+                    id: `msg_${Date.now()}_${Math.random()}`,
+                    role: 'user',
+                    content: messageContent,
+                    parts: [{ type: 'text', text: messageContent }],
+                    timestamp: Date.now()
+                };
+                character.history.push(message);
+            }
+        });
+
+        // 分享给群聊
+        selectedGroups.forEach(groupId => {
+            const group = db.groups.find(g => g.id === groupId);
+            if (group) {
+                const message = {
+                    id: `msg_${Date.now()}_${Math.random()}`,
+                    role: 'user',
+                    content: messageContent,
+                    parts: [{ type: 'text', text: messageContent }],
+                    timestamp: Date.now()
+                };
+                group.history.push(message);
+            }
+        });
 
         await saveData();
         renderChatList();
         modal.classList.remove('visible');
-        showToast(`成功分享给 ${selectedCharIds.length} 位联系人！`);
+        const totalCount = selectedChars.length + selectedGroups.length;
+        showToast(`成功分享给 ${totalCount} 位联系人！`);
     });
 }
 
@@ -708,12 +720,13 @@ function openSharePostModal(postId) {
 
     charList.innerHTML = '';
 
+    // 渲染单人角色
     if (db.characters.length > 0) {
         db.characters.forEach(char => {
             const li = document.createElement('li');
             li.className = 'binding-list-item';
             li.innerHTML = `
-                <input type="checkbox" id="share-to-${char.id}" value="${char.id}">
+                <input type="checkbox" id="share-to-${char.id}" value="${char.id}" data-share-target="character">
                 <label for="share-to-${char.id}" style="display: flex; align-items: center; gap: 10px;">
                     <img src="${char.avatar}" alt="${char.remarkName}" style="width: 32px; height: 32px; border-radius: 50%;">
                     ${char.remarkName}
@@ -721,8 +734,27 @@ function openSharePostModal(postId) {
             `;
             charList.appendChild(li);
         });
-    } else {
-        charList.innerHTML = '<li style="color: #888;">暂无可以分享的角色。</li>';
+    }
+
+    // 渲染群聊
+    if (db.groups && db.groups.length > 0) {
+        db.groups.forEach(group => {
+            const li = document.createElement('li');
+            li.className = 'binding-list-item';
+            li.innerHTML = `
+                <input type="checkbox" id="share-to-${group.id}" value="${group.id}" data-share-target="group">
+                <label for="share-to-${group.id}" style="display: flex; align-items: center; gap: 10px;">
+                    <img src="${group.avatar}" alt="${group.name}" style="width: 32px; height: 32px; border-radius: 50%;">
+                    ${group.name}
+                    <span style="font-size: 12px; color: #999;">[群聊]</span>
+                </label>
+            `;
+            charList.appendChild(li);
+        });
+    }
+
+    if (db.characters.length === 0 && (!db.groups || db.groups.length === 0)) {
+        charList.innerHTML = '<li style="color: #888;">暂无可以分享的对象。</li>';
     }
 
     if (detailsElement) detailsElement.open = false;
@@ -751,12 +783,13 @@ function openShareCommentModal(postId, commentIndex) {
 
     charList.innerHTML = '';
 
+    // 渲染单人角色
     if (db.characters.length > 0) {
         db.characters.forEach(char => {
             const li = document.createElement('li');
             li.className = 'binding-list-item';
             li.innerHTML = `
-                <input type="checkbox" id="share-to-${char.id}" value="${char.id}">
+                <input type="checkbox" id="share-to-${char.id}" value="${char.id}" data-share-target="character">
                 <label for="share-to-${char.id}" style="display: flex; align-items: center; gap: 10px;">
                     <img src="${char.avatar}" alt="${char.remarkName}" style="width: 32px; height: 32px; border-radius: 50%;">
                     ${char.remarkName}
@@ -764,8 +797,27 @@ function openShareCommentModal(postId, commentIndex) {
             `;
             charList.appendChild(li);
         });
-    } else {
-        charList.innerHTML = '<li style="color: #888;">暂无可以分享的角色。</li>';
+    }
+
+    // 渲染群聊
+    if (db.groups && db.groups.length > 0) {
+        db.groups.forEach(group => {
+            const li = document.createElement('li');
+            li.className = 'binding-list-item';
+            li.innerHTML = `
+                <input type="checkbox" id="share-to-${group.id}" value="${group.id}" data-share-target="group">
+                <label for="share-to-${group.id}" style="display: flex; align-items: center; gap: 10px;">
+                    <img src="${group.avatar}" alt="${group.name}" style="width: 32px; height: 32px; border-radius: 50%;">
+                    ${group.name}
+                    <span style="font-size: 12px; color: #999;">[群聊]</span>
+                </label>
+            `;
+            charList.appendChild(li);
+        });
+    }
+
+    if (db.characters.length === 0 && (!db.groups || db.groups.length === 0)) {
+        charList.innerHTML = '<li style="color: #888;">暂无可以分享的对象。</li>';
     }
 
     if (detailsElement) detailsElement.open = false;
@@ -949,7 +1001,16 @@ function renderForumPosts(posts, filter = 'all') {
     filteredPosts.forEach(post => {
         const card = document.createElement('div');
         card.className = 'forum-post-card';
+        if (forumPostDeleteMode) {
+            card.classList.add('forum-post-delete-mode');
+            if (forumSelectedPostIds.has(post.id)) card.classList.add('forum-post-selected');
+        }
         card.dataset.id = post.id;
+
+        let checkboxHtml = '';
+        if (forumPostDeleteMode) {
+            checkboxHtml = '<div class="forum-post-select-checkbox"></div>';
+        }
 
         const titleEl = document.createElement('h3');
         titleEl.className = 'post-title';
@@ -959,8 +1020,22 @@ function renderForumPosts(posts, filter = 'all') {
         summaryEl.className = 'post-summary';
         summaryEl.textContent = post.summary || '无摘要';
 
-        card.appendChild(titleEl);
-        card.appendChild(summaryEl);
+        if (forumPostDeleteMode) {
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:12px;width:100%;';
+            const cbDiv = document.createElement('div');
+            cbDiv.className = 'forum-post-select-checkbox';
+            const textDiv = document.createElement('div');
+            textDiv.style.cssText = 'flex:1;min-width:0;';
+            textDiv.appendChild(titleEl);
+            textDiv.appendChild(summaryEl);
+            wrapper.appendChild(cbDiv);
+            wrapper.appendChild(textDiv);
+            card.appendChild(wrapper);
+        } else {
+            card.appendChild(titleEl);
+            card.appendChild(summaryEl);
+        }
 
         postsContainer.appendChild(card);
     });
@@ -980,6 +1055,15 @@ function forumInitUserProfile() {
 function forumAddHeaderButtonsAndFAB() {
     const actionBtnGroup = document.querySelector('#forum-screen .action-btn-group');
     if (!actionBtnGroup) return;
+
+    if (!document.getElementById('forum-post-delete-btn')) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'action-btn';
+        delBtn.id = 'forum-post-delete-btn';
+        delBtn.title = '删除帖子';
+        delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+        actionBtnGroup.appendChild(delBtn);
+    }
 
     if (!document.getElementById('forum-dm-btn')) {
         const dmBtn = document.createElement('button');
@@ -1197,6 +1281,54 @@ function forumDeletePost(postId) {
     switchScreen('forum-screen');
     renderForumPosts(db.forumPosts);
     showToast('帖子已删除');
+}
+
+function forumTogglePostDeleteMode() {
+    if (forumPostDeleteMode) return;
+    forumPostDeleteMode = true;
+    forumSelectedPostIds.clear();
+    var toolbar = document.getElementById('forum-post-delete-toolbar');
+    if (toolbar) toolbar.style.display = 'flex';
+    var deleteBtn = document.getElementById('forum-post-delete-btn');
+    if (deleteBtn) deleteBtn.style.display = 'none';
+    renderForumPosts(db.forumPosts, forumGetActiveFilter());
+}
+
+function forumPostSelectAll() {
+    var posts = db.forumPosts || [];
+    forumSelectedPostIds.clear();
+    posts.forEach(function(p) { forumSelectedPostIds.add(p.id); });
+    renderForumPosts(db.forumPosts, forumGetActiveFilter());
+}
+
+function forumPostDeleteSelected() {
+    if (forumSelectedPostIds.size === 0) { showToast('请先选择要删除的帖子'); return; }
+    if (!confirm('确定要删除选中的 ' + forumSelectedPostIds.size + ' 个帖子吗？')) return;
+    db.forumPosts = (db.forumPosts || []).filter(function(p) { return !forumSelectedPostIds.has(p.id); });
+    saveData();
+    forumSelectedPostIds.clear();
+    forumPostDeleteMode = false;
+    var toolbar = document.getElementById('forum-post-delete-toolbar');
+    if (toolbar) toolbar.style.display = 'none';
+    var deleteBtn = document.getElementById('forum-post-delete-btn');
+    if (deleteBtn) deleteBtn.style.display = '';
+    renderForumPosts(db.forumPosts, forumGetActiveFilter());
+    showToast('已删除选中帖子');
+}
+
+function forumPostCancelDeleteMode() {
+    forumPostDeleteMode = false;
+    forumSelectedPostIds.clear();
+    var toolbar = document.getElementById('forum-post-delete-toolbar');
+    if (toolbar) toolbar.style.display = 'none';
+    var deleteBtn = document.getElementById('forum-post-delete-btn');
+    if (deleteBtn) deleteBtn.style.display = '';
+    renderForumPosts(db.forumPosts, forumGetActiveFilter());
+}
+
+function forumGetActiveFilter() {
+    var activeTab = document.querySelector('.forum-filter-tab.active');
+    return activeTab ? (activeTab.dataset.filter || 'all') : 'all';
 }
 
 function forumLoadSettings() {
@@ -1503,6 +1635,11 @@ function forumBindNewEvents() {
 
     document.getElementById('forum-dm-btn') && document.getElementById('forum-dm-btn').addEventListener('click', () => { switchScreen('forum-dm-list-screen'); forumRenderDMList(); });
 
+    document.getElementById('forum-post-delete-btn') && document.getElementById('forum-post-delete-btn').addEventListener('click', forumTogglePostDeleteMode);
+    document.getElementById('forum-post-select-all-btn') && document.getElementById('forum-post-select-all-btn').addEventListener('click', forumPostSelectAll);
+    document.getElementById('forum-post-delete-selected-btn') && document.getElementById('forum-post-delete-selected-btn').addEventListener('click', forumPostDeleteSelected);
+    document.getElementById('forum-post-cancel-delete-btn') && document.getElementById('forum-post-cancel-delete-btn').addEventListener('click', forumPostCancelDeleteMode);
+
     document.getElementById('save-forum-profile-btn') && document.getElementById('save-forum-profile-btn').addEventListener('click', () => { forumSaveProfile(); switchScreen('forum-screen'); });
     document.getElementById('forum-profile-screen') && document.getElementById('forum-profile-screen').addEventListener('click', function(e) {
         if (e.target.id === 'forum-user-avatar-display' || e.target.closest('#forum-user-avatar-display')) document.getElementById('forum-avatar-upload').click();
@@ -1673,6 +1810,8 @@ var editingForumDMId = null;
 var forumDMListDeleteMode = false;
 var forumDMSelectedUserIds = new Set();
 var forumPendingFriendRequest = null;
+var forumPostDeleteMode = false;
+var forumSelectedPostIds = new Set();
 
 var FORUM_DEFAULT_AVATAR = 'https://i.postimg.cc/GtbTnxhP/o-o-1.jpg';
 
@@ -2417,7 +2556,7 @@ ${repliedNpcHint}
 }
 
 async function forumSupplementPersonaFromChat(chatId, character) {
-    if (!character || character.source !== 'forum' || !character.supplementPersonaAiEnabled) return;
+    if (!character || (character.source !== 'forum' && character.source !== 'peek') || !character.supplementPersonaAiEnabled) return;
     var apiSettings = (db.supplementPersonaApiSettings && db.supplementPersonaApiSettings.url && db.supplementPersonaApiSettings.key && db.supplementPersonaApiSettings.model)
         ? db.supplementPersonaApiSettings
         : db.apiSettings;

@@ -50,7 +50,19 @@ function toggleWorldBookSelection(bookId) {
 function updateWorldBookSelectCount() {
     const count = selectedWorldBookIds.size;
     document.getElementById('world-book-select-count').textContent = `已选择 ${count} 项`;
-    document.getElementById('delete-selected-world-books-btn').disabled = count === 0;
+    const deleteBtn = document.getElementById('delete-selected-world-books-btn');
+    const moveBtn = document.getElementById('move-selected-world-books-btn');
+    const toggleBtn = document.getElementById('toggle-selected-world-books-btn');
+    if (deleteBtn) deleteBtn.disabled = count === 0;
+    if (moveBtn) moveBtn.disabled = count === 0;
+    if (toggleBtn) toggleBtn.disabled = count === 0;
+
+    // 根据选中项的状态更新按钮文字
+    if (toggleBtn && count > 0) {
+        const selectedBooks = db.worldBooks.filter(book => selectedWorldBookIds.has(book.id));
+        const allDisabled = selectedBooks.length > 0 && selectedBooks.every(book => !!book.disabled);
+        toggleBtn.textContent = allDisabled ? '启用已选' : '停用已选';
+    }
 }
 
 /**
@@ -214,6 +226,167 @@ async function deleteSelectedWorldBooks() {
     }
 }
 
+function showMoveCategoryModal() {
+    const count = selectedWorldBookIds.size;
+    if (count === 0) {
+        showToast('请先选择要移动的世界书条目');
+        return;
+    }
+
+    const modal = document.getElementById('world-book-move-category-modal');
+    const desc = document.getElementById('wb-move-category-modal-desc');
+    const categoryList = document.getElementById('wb-move-category-list');
+    
+    if (!modal || !desc || !categoryList) return;
+
+    desc.textContent = `将 ${count} 个条目移动到分类：`;
+    categoryList.innerHTML = '';
+
+    // 获取所有分类
+    const categories = new Set();
+    db.worldBooks.forEach(book => {
+        const cat = (book.category && book.category.trim()) || '未分类';
+        categories.add(cat);
+    });
+
+    // 排序：未分类优先，其余按名称排序
+    const sortedCategories = Array.from(categories).sort((a, b) => {
+        if (a === '未分类') return -1;
+        if (b === '未分类') return 1;
+        return a.localeCompare(b);
+    });
+
+    // 创建分类选项
+    sortedCategories.forEach(category => {
+        const option = document.createElement('div');
+        option.className = 'wb-move-category-option';
+        option.style.cssText = 'padding: 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background-color 0.2s;';
+        option.dataset.category = category;
+        
+        option.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-weight: 500; color: #333;">${category}</span>
+                <span style="color: #999; font-size: 12px;">›</span>
+            </div>
+        `;
+
+        option.addEventListener('click', () => {
+            // 移除之前的选中状态
+            categoryList.querySelectorAll('.wb-move-category-option').forEach(opt => {
+                opt.style.backgroundColor = '';
+                delete opt.dataset.selected;
+            });
+            // 设置当前选中
+            option.style.backgroundColor = '#e8f5e9';
+            option.dataset.selected = 'true';
+        });
+
+        option.addEventListener('mouseenter', () => {
+            if (!option.dataset.selected) {
+                option.style.backgroundColor = '#f5f5f5';
+            }
+        });
+
+        option.addEventListener('mouseleave', () => {
+            if (!option.dataset.selected) {
+                option.style.backgroundColor = '';
+            }
+        });
+
+        categoryList.appendChild(option);
+    });
+
+    // 添加"新建分类"选项
+    const newCategoryOption = document.createElement('div');
+    newCategoryOption.className = 'wb-move-category-option wb-move-category-new';
+    newCategoryOption.style.cssText = 'padding: 12px; border-top: 2px solid #e0e0e0; cursor: pointer; transition: background-color 0.2s;';
+    newCategoryOption.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-weight: 500; color: var(--primary-color);">+ 新建分类</span>
+            <span style="color: #999; font-size: 12px;">›</span>
+        </div>
+    `;
+    newCategoryOption.addEventListener('click', () => {
+        const newCategoryName = prompt('输入新分类名称：', '');
+        if (newCategoryName === null) return;
+        const trimmed = newCategoryName.trim();
+        if (!trimmed) {
+            showToast('分类名不能为空');
+            return;
+        }
+        // 直接移动到新分类
+        moveSelectedWorldBooksToCategory(trimmed);
+        modal.classList.remove('visible');
+        // 清除选择状态
+        categoryList.querySelectorAll('.wb-move-category-option').forEach(opt => {
+            opt.style.backgroundColor = '';
+            delete opt.dataset.selected;
+        });
+    });
+    newCategoryOption.addEventListener('mouseenter', () => {
+        newCategoryOption.style.backgroundColor = '#f5f5f5';
+    });
+    newCategoryOption.addEventListener('mouseleave', () => {
+        newCategoryOption.style.backgroundColor = '';
+    });
+    categoryList.appendChild(newCategoryOption);
+
+    modal.classList.add('visible');
+}
+
+async function moveSelectedWorldBooksToCategory(targetCategory) {
+    const count = selectedWorldBookIds.size;
+    if (count === 0) return;
+
+    const idsToMove = Array.from(selectedWorldBookIds);
+    let movedCount = 0;
+
+    idsToMove.forEach(bookId => {
+        const book = db.worldBooks.find(wb => wb.id === bookId);
+        if (book) {
+            book.category = targetCategory || '';
+            movedCount++;
+        }
+    });
+
+    if (movedCount > 0) {
+        // 批量更新数据库
+        const booksToUpdate = db.worldBooks.filter(wb => idsToMove.includes(wb.id));
+        await dexieDB.worldBooks.bulkPut(booksToUpdate);
+        await saveData();
+        
+        showToast(`已成功将 ${movedCount} 个条目移动到「${targetCategory || '未分类'}」`);
+        renderWorldBookList();
+        exitWorldBookMultiSelectMode();
+    }
+}
+
+async function toggleSelectedWorldBooks() {
+    const count = selectedWorldBookIds.size;
+    if (count === 0) return;
+
+    const selectedBooks = db.worldBooks.filter(book => selectedWorldBookIds.has(book.id));
+    if (selectedBooks.length === 0) return;
+
+    // 判断是否全部已停用
+    const allDisabled = selectedBooks.every(book => !!book.disabled);
+    const newDisabledState = !allDisabled;
+
+    // 批量更新状态
+    selectedBooks.forEach(book => {
+        book.disabled = newDisabledState;
+    });
+
+    // 批量更新数据库
+    await dexieDB.worldBooks.bulkPut(selectedBooks);
+    await saveData();
+
+    const actionText = newDisabledState ? '停用' : '启用';
+    showToast(`已${actionText} ${selectedBooks.length} 个条目`);
+    renderWorldBookList();
+    updateWorldBookSelectCount();
+}
+
 function setupWorldBookApp() {
     const addWorldBookBtn = document.getElementById('add-world-book-btn');
     const editWorldBookForm = document.getElementById('edit-world-book-form');
@@ -353,7 +526,43 @@ function setupWorldBookApp() {
     worldBookListContainer.addEventListener('touchmove', () => clearTimeout(longPressTimer));
 
     document.getElementById('delete-selected-world-books-btn').addEventListener('click', deleteSelectedWorldBooks);
+    document.getElementById('move-selected-world-books-btn').addEventListener('click', showMoveCategoryModal);
+    document.getElementById('toggle-selected-world-books-btn').addEventListener('click', toggleSelectedWorldBooks);
     document.getElementById('cancel-wb-multi-select-btn').addEventListener('click', exitWorldBookMultiSelectMode);
+
+    // 移动到分类模态框的事件处理
+    const moveCategoryModal = document.getElementById('world-book-move-category-modal');
+    const moveCategoryConfirmBtn = document.getElementById('wb-move-category-confirm-btn');
+    const moveCategoryCancelBtn = document.getElementById('wb-move-category-cancel-btn');
+    if (moveCategoryModal && moveCategoryConfirmBtn && moveCategoryCancelBtn) {
+        moveCategoryConfirmBtn.addEventListener('click', () => {
+            const categoryList = document.getElementById('wb-move-category-list');
+            const selectedOption = categoryList.querySelector('.wb-move-category-option[data-selected="true"]:not(.wb-move-category-new)');
+            if (selectedOption) {
+                const targetCategory = selectedOption.dataset.category;
+                moveSelectedWorldBooksToCategory(targetCategory);
+                moveCategoryModal.classList.remove('visible');
+                // 清除选择状态
+                categoryList.querySelectorAll('.wb-move-category-option').forEach(opt => {
+                    opt.style.backgroundColor = '';
+                    delete opt.dataset.selected;
+                });
+            } else {
+                showToast('请先选择一个分类');
+            }
+        });
+        moveCategoryCancelBtn.addEventListener('click', () => {
+            moveCategoryModal.classList.remove('visible');
+            // 清除选择状态
+            const categoryList = document.getElementById('wb-move-category-list');
+            if (categoryList) {
+                categoryList.querySelectorAll('.wb-move-category-option').forEach(opt => {
+                    opt.style.backgroundColor = '';
+                    delete opt.dataset.selected;
+                });
+            }
+        });
+    }
 
     const deleteCategoryModal = document.getElementById('world-book-delete-category-modal');
     const deleteCategoryAndEntriesBtn = document.getElementById('wb-delete-category-and-entries-btn');

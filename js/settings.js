@@ -34,9 +34,9 @@ function setupChatSettings() {
         }
     });
 
-    document.getElementById('chat-settings-form').addEventListener('submit', e => {
+    document.getElementById('chat-settings-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        saveSettingsFromSidebar();
+        await saveSettingsFromSidebar();
     });
 
     document.getElementById('chat-scroll-to-top-current-btn').addEventListener('click', () => {
@@ -118,8 +118,30 @@ function setupChatSettings() {
                 const targetEl = document.getElementById(targetId);
                 if (targetEl) targetEl.classList.add('active');
             }
+            // 从功能 Tab 切走时关闭「头像识别系统」子页，避免再切回功能时还停在子页
+            const avatarPanel = document.getElementById('setting-avatar-system-panel');
+            const funcTab = document.getElementById('setting-tab-func');
+            if (avatarPanel) avatarPanel.style.display = 'none';
+            if (funcTab) funcTab.style.display = '';
         });
     });
+
+    // 头像识别系统：功能 Tab 内一行入口，点击进入子页面
+    const avatarSystemEntry = document.getElementById('setting-avatar-system-entry');
+    const avatarSystemPanel = document.getElementById('setting-avatar-system-panel');
+    const avatarSystemBack = document.getElementById('setting-avatar-system-back');
+    if (avatarSystemEntry && avatarSystemPanel) {
+        avatarSystemEntry.addEventListener('click', () => {
+            if (document.getElementById('setting-tab-func')) document.getElementById('setting-tab-func').style.display = 'none';
+            avatarSystemPanel.style.display = 'block';
+        });
+    }
+    if (avatarSystemBack && avatarSystemPanel) {
+        avatarSystemBack.addEventListener('click', () => {
+            avatarSystemPanel.style.display = 'none';
+            if (document.getElementById('setting-tab-func')) document.getElementById('setting-tab-func').style.display = '';
+        });
+    }
     
     const useCustomCssCheckbox = document.getElementById('setting-use-custom-css'),
         customCssTextarea = document.getElementById('setting-custom-bubble-css'),
@@ -173,16 +195,107 @@ function setupChatSettings() {
     
     document.getElementById('setting-my-avatar-upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) {
-            try {
-                const compressedUrl = await compressImage(file, {quality: 0.8, maxWidth: 400, maxHeight: 400});
-                document.getElementById('setting-my-avatar-preview').src = compressedUrl;
-            } catch (error) {
-                showToast('头像压缩失败，请重试');
+        if (!file) return;
+        const char = db.characters.find(c => c.id === currentChatId);
+        if (!char) return;
+        try {
+            const compressedUrl = await compressImage(file, {quality: 0.8, maxWidth: 400, maxHeight: 400});
+            const oldMyAvatar = char.myAvatar;
+            if (oldMyAvatar && compressedUrl !== oldMyAvatar && window.AvatarSystem && char.charSenseAvatarChangeEnabled) {
+                showToast('正在识别头像变化…');
+                await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(currentChatId, oldMyAvatar, compressedUrl);
             }
+            char.myAvatar = compressedUrl;
+            await saveData();
+            document.getElementById('setting-my-avatar-preview').src = compressedUrl;
+            showToast('我的头像已更新');
+            if (typeof renderMessages === 'function') renderMessages(false, true);
+        } catch (error) {
+            showToast('头像压缩失败，请重试');
         }
+        e.target.value = '';
     });
-    
+
+    const avatarLibraryBtn = document.getElementById('setting-avatar-library-btn');
+    if (avatarLibraryBtn && window.AvatarSystem) {
+        avatarLibraryBtn.addEventListener('click', () => window.AvatarSystem.openAvatarLibraryModal(currentChatId));
+    }
+    const charAvatarLibraryBtn = document.getElementById('setting-char-avatar-library-btn');
+    if (charAvatarLibraryBtn && window.AvatarSystem) {
+        charAvatarLibraryBtn.addEventListener('click', () => window.AvatarSystem.openCharAvatarLibraryModal(currentChatId));
+    }
+    const coupleAvatarLibraryBtn = document.getElementById('setting-couple-avatar-library-btn');
+    if (coupleAvatarLibraryBtn && window.AvatarSystem) {
+        coupleAvatarLibraryBtn.addEventListener('click', () => window.AvatarSystem.openCoupleAvatarLibraryModal(currentChatId));
+    }
+
+    (function initAvatarRecognitionDetailModal() {
+        const row = document.getElementById('setting-avatar-recognition-detail-row');
+        const displaySpan = document.getElementById('avatar-recognition-detail-display');
+        const modal = document.getElementById('avatar-recognition-detail-modal');
+        const radios = document.querySelectorAll('input[name="ar-detail-level"]');
+        const customContainer = document.getElementById('ar-custom-words-container');
+        const customInput = document.getElementById('ar-custom-words-input');
+        const cancelBtn = document.getElementById('ar-detail-cancel-btn');
+        const confirmBtn = document.getElementById('ar-detail-confirm-btn');
+
+        function getDisplayText() {
+            const val = db.avatarRecognitionDetailLevel;
+            if (val === 'brief') return '简洁（10-20字）';
+            if (val === 'standard') return '标准（30-50字）';
+            if (val === 'detailed' || !val) return '详细（不限）';
+            const n = typeof val === 'number' ? val : parseInt(val, 10);
+            return (!isNaN(n) && n > 0) ? '自定义（' + n + '字）' : '详细（不限）';
+        }
+
+        function updateDisplay() {
+            if (displaySpan) displaySpan.textContent = getDisplayText();
+        }
+
+        if (row && modal) {
+            row.addEventListener('click', function () {
+                const val = db.avatarRecognitionDetailLevel;
+                const isNum = typeof val === 'number' || (typeof val === 'string' && /^\d+$/.test(val));
+                if (isNum) {
+                    const n = typeof val === 'number' ? val : parseInt(val, 10);
+                    customInput.value = isNaN(n) ? '' : n;
+                    customContainer.style.display = '';
+                    const customRadio = document.querySelector('input[name="ar-detail-level"][value="custom"]');
+                    if (customRadio) customRadio.checked = true;
+                    radios.forEach(function (r) { if (r.value !== 'custom') r.checked = false; });
+                } else {
+                    const v = (val === 'brief' || val === 'standard' || val === 'detailed') ? val : 'detailed';
+                    radios.forEach(function (r) { r.checked = (r.value === v); });
+                    customContainer.style.display = 'none';
+                }
+                modal.classList.add('visible');
+            });
+        }
+
+        radios.forEach(function (r) {
+            r.addEventListener('change', function () {
+                customContainer.style.display = this.value === 'custom' ? '' : 'none';
+            });
+        });
+
+        if (cancelBtn) cancelBtn.addEventListener('click', function () { modal.classList.remove('visible'); });
+        if (confirmBtn) confirmBtn.addEventListener('click', function () {
+            const checked = document.querySelector('input[name="ar-detail-level"]:checked');
+            if (checked && checked.value === 'custom' && customInput) {
+                const n = parseInt(customInput.value, 10);
+                db.avatarRecognitionDetailLevel = (!isNaN(n) && n > 0) ? Math.min(500, Math.max(5, n)) : 50;
+            } else if (checked) {
+                db.avatarRecognitionDetailLevel = checked.value;
+            }
+            if (typeof saveData === 'function') saveData();
+            updateDisplay();
+            modal.classList.remove('visible');
+        });
+        modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('visible'); });
+
+        updateDisplay();
+    })();
+
     document.getElementById('setting-chat-bg-upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -229,7 +342,179 @@ function setupChatSettings() {
             showToast('聊天记录已清空');
         }
     });
-    
+
+    const blockCharacterBtn = document.getElementById('block-character-btn');
+    const blockSettingsPanel = document.getElementById('block-settings-panel');
+    const blockConfirmModal = document.getElementById('block-confirm-modal');
+    const blockReapplyModeEl = document.getElementById('block-reapply-mode');
+    const blockFixedIntervalRow = document.getElementById('block-fixed-interval-row');
+    if (blockCharacterBtn) {
+        blockCharacterBtn.addEventListener('click', () => {
+            if (!blockConfirmModal) return;
+            const modeFixed = document.querySelector('input[name="block-mode"][value="fixed"]');
+            const initIntervalEl = document.getElementById('block-init-interval');
+            if (modeFixed) modeFixed.checked = true;
+            if (initIntervalEl) initIntervalEl.value = '30';
+            blockConfirmModal.classList.add('visible');
+        });
+    }
+    document.getElementById('block-confirm-cancel') && document.getElementById('block-confirm-cancel').addEventListener('click', () => {
+        if (blockConfirmModal) blockConfirmModal.classList.remove('visible');
+    });
+    if (blockConfirmModal) blockConfirmModal.addEventListener('click', function (ev) {
+        if (ev.target === blockConfirmModal) blockConfirmModal.classList.remove('visible');
+    });
+    document.getElementById('block-confirm-ok') && document.getElementById('block-confirm-ok').addEventListener('click', () => {
+        const character = db.characters.find(c => c.id === currentChatId);
+        if (!character) return;
+        const modeEl = document.querySelector('input[name="block-mode"]:checked');
+        const initIntervalEl = document.getElementById('block-init-interval');
+        const mode = (modeEl && modeEl.value) || 'fixed';
+        const fixedInterval = initIntervalEl ? Math.max(1, parseInt(initIntervalEl.value, 10) || 30) : 30;
+        if (blockConfirmModal) blockConfirmModal.classList.remove('visible');
+        if (typeof blockCharacter === 'function') blockCharacter(character.id, mode, fixedInterval);
+        if (blockSettingsPanel) blockSettingsPanel.style.display = 'block';
+        if (blockCharacterBtn) blockCharacterBtn.style.display = 'none';
+    });
+    if (blockReapplyModeEl) {
+        blockReapplyModeEl.addEventListener('change', () => {
+            if (blockFixedIntervalRow) blockFixedIntervalRow.style.display = (blockReapplyModeEl.value === 'fixed') ? '' : 'none';
+        });
+    }
+    document.getElementById('trigger-friend-request-btn') && document.getElementById('trigger-friend-request-btn').addEventListener('click', async () => {
+        const character = db.characters.find(c => c.id === currentChatId);
+        if (!character || !character.isBlocked) return;
+        if (character.blockReapply && character.blockReapply.pendingRequestId) {
+            showToast('还有待处理的好友申请');
+            return;
+        }
+        if (typeof generateAndShowFriendRequest === 'function') await generateAndShowFriendRequest(character);
+    });
+    document.getElementById('unblock-character-btn') && document.getElementById('unblock-character-btn').addEventListener('click', () => {
+        const character = db.characters.find(c => c.id === currentChatId);
+        if (!character) return;
+        if (confirm('确定解除拉黑吗？角色将重新出现在聊天列表中。')) {
+            if (typeof unblockCharacter === 'function') unblockCharacter(character.id);
+            if (blockSettingsPanel) blockSettingsPanel.style.display = 'none';
+            if (blockCharacterBtn) blockCharacterBtn.style.display = '';
+        }
+    });
+
+    // 角色掌控模式：开关、警告弹窗、强制关闭、查看条数、日志、回收站
+    (function () {
+        const phoneControlEnabledEl = document.getElementById('setting-phone-control-enabled');
+        const phoneControlOptionsEl = document.getElementById('setting-phone-control-options');
+        const phoneControlActionsEl = document.getElementById('setting-phone-control-actions');
+        const phoneControlViewLimitEl = document.getElementById('setting-phone-control-view-limit');
+        const phoneControlViewLimitValueEl = document.getElementById('setting-phone-control-view-limit-value');
+        const warningModal = document.getElementById('phone-control-warning-modal');
+        const forceCloseModal = document.getElementById('phone-control-force-close-modal');
+        if (!phoneControlEnabledEl) return;
+        phoneControlEnabledEl.addEventListener('change', function () {
+            if (this.checked) {
+                if (warningModal) warningModal.style.display = 'flex';
+                else {
+                    if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'block';
+                    if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'flex';
+                }
+            } else {
+                this.checked = true;
+                if (typeof getAiReply === 'function' && currentChatType === 'private' && currentChatId) {
+                    getAiReply(currentChatId, 'private', true, false, false, true);
+                    if (typeof showToast === 'function') showToast('TA 可能不会轻易同意…');
+                }
+            }
+        });
+        if (phoneControlViewLimitEl && phoneControlViewLimitValueEl) {
+            phoneControlViewLimitEl.addEventListener('input', function () {
+                phoneControlViewLimitValueEl.textContent = this.value;
+            });
+        }
+        document.getElementById('phone-control-warning-cancel') && document.getElementById('phone-control-warning-cancel').addEventListener('click', () => {
+            if (warningModal) warningModal.style.display = 'none';
+            if (phoneControlEnabledEl) phoneControlEnabledEl.checked = false;
+            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'none';
+            if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'none';
+        });
+        document.getElementById('phone-control-warning-confirm') && document.getElementById('phone-control-warning-confirm').addEventListener('click', () => {
+            if (warningModal) warningModal.style.display = 'none';
+            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'block';
+            if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'flex';
+        });
+        document.getElementById('setting-phone-control-force-close-btn') && document.getElementById('setting-phone-control-force-close-btn').addEventListener('click', () => {
+            if (forceCloseModal) forceCloseModal.style.display = 'flex';
+        });
+        document.getElementById('phone-control-force-cancel') && document.getElementById('phone-control-force-cancel').addEventListener('click', () => {
+            if (forceCloseModal) forceCloseModal.style.display = 'none';
+        });
+        document.getElementById('phone-control-force-confirm') && document.getElementById('phone-control-force-confirm').addEventListener('click', async () => {
+            const character = db.characters.find(c => c.id === currentChatId);
+            if (character) {
+                character.phoneControlEnabled = false;
+                await saveData();
+                if (phoneControlEnabledEl) phoneControlEnabledEl.checked = false;
+                if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'none';
+                if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'none';
+                if (typeof showToast === 'function') showToast('已强制关闭');
+            }
+            if (forceCloseModal) forceCloseModal.style.display = 'none';
+        });
+        document.getElementById('setting-phone-control-log-btn') && document.getElementById('setting-phone-control-log-btn').addEventListener('click', () => {
+            const character = db.characters.find(c => c.id === currentChatId);
+            if (!character) return;
+            const history = character.phoneControlHistory || [];
+            const lines = history.length ? history.slice().reverse().map(h => {
+                const t = h.timestamp ? new Date(h.timestamp) : null;
+                const timeStr = t ? t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0') + ' ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') : '';
+                return timeStr + ' ' + (h.type === 'view' ? '查看' : '操作') + ' ' + (h.action || '') + (h.target ? ' (' + h.target + ')' : '') + (h.detail ? ' — ' + String(h.detail).slice(0, 60) : '');
+            }).join('\n') : '暂无记录';
+            alert('【操控日志】\n\n' + lines);
+        });
+        function renderPhoneControlRecycleList() {
+            const listEl = document.getElementById('phone-control-recycle-list');
+            if (!listEl) return;
+            const bin = db.phoneControlRecycleBin || [];
+            if (bin.length === 0) {
+                listEl.innerHTML = '<p style="color:#999;padding:12px;">回收站为空</p>';
+            } else {
+                listEl.innerHTML = bin.map((item, i) => {
+                    const name = item.remarkName || item.realName || '未知';
+                    return '<div class="kkt-item" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;">' +
+                        '<span>' + name + '</span>' +
+                        '<button type="button" class="btn btn-small btn-primary phone-control-restore-btn" data-index="' + i + '">恢复</button>' +
+                        '</div>';
+                }).join('');
+            }
+        }
+        document.getElementById('setting-phone-control-recycle-btn') && document.getElementById('setting-phone-control-recycle-btn').addEventListener('click', () => {
+            const modal = document.getElementById('phone-control-recycle-modal');
+            const listEl = document.getElementById('phone-control-recycle-list');
+            if (!modal || !listEl) return;
+            renderPhoneControlRecycleList();
+            modal.style.display = 'flex';
+        });
+        document.getElementById('phone-control-recycle-list') && document.getElementById('phone-control-recycle-list').addEventListener('click', async (e) => {
+            const btn = e.target.closest('.phone-control-restore-btn');
+            if (!btn) return;
+            const idx = parseInt(btn.getAttribute('data-index'), 10);
+            const bin2 = db.phoneControlRecycleBin || [];
+            if (isNaN(idx) || idx < 0 || idx >= bin2.length) return;
+            const character = bin2[idx];
+            delete character.recycledAt;
+            delete character.recycledByCharId;
+            db.phoneControlRecycleBin = bin2.filter((_, i) => i !== idx);
+            db.characters.push(character);
+            await saveData();
+            if (typeof renderChatList === 'function') renderChatList();
+            if (typeof showToast === 'function') showToast('已恢复');
+            renderPhoneControlRecycleList();
+        });
+        document.getElementById('phone-control-recycle-close') && document.getElementById('phone-control-recycle-close').addEventListener('click', () => {
+            const modal = document.getElementById('phone-control-recycle-modal');
+            if (modal) modal.style.display = 'none';
+        });
+    })();
+
     document.getElementById('link-world-book-btn').addEventListener('click', () => {
         const globalIds = (db.worldBooks || []).filter(wb => wb.isGlobal && !wb.disabled).map(wb => wb.id);
         let displayIds = [];
@@ -523,7 +808,7 @@ function loadSettingsToSidebar() {
         
         const forumSupplementContainer = document.getElementById('setting-forum-supplement-container');
         if (forumSupplementContainer) {
-            if (e.source === 'forum') {
+            if (e.source === 'forum' || e.source === 'peek') {
                 forumSupplementContainer.style.display = 'block';
                 const supplementCb = document.getElementById('setting-forum-supplement-persona-enabled');
                 const supplementAiCb = document.getElementById('setting-forum-supplement-persona-ai-enabled');
@@ -795,6 +1080,7 @@ function loadSettingsToSidebar() {
                     ...(db.summaryApiPresets || []).map(p => ({ name: p.name + '（总结API）', data: p.data })),
                     ...(db.backgroundApiPresets || []).map(p => ({ name: p.name + '（后台API）', data: p.data })),
                     ...(db.supplementPersonaApiPresets || []).map(p => ({ name: p.name + '（补齐人设API）', data: p.data })),
+                    ...(db.peekApiPresets || []).map(p => ({ name: p.name + '（偷看手机API）', data: p.data })),
                 ];
                 allPresets.forEach(p => {
                     const opt = document.createElement('option');
@@ -850,6 +1136,30 @@ function loadSettingsToSidebar() {
         document.getElementById('setting-timestamp-format').value = e.timestampFormat || 'hm';
         document.getElementById('setting-show-status').checked = e.showStatus !== false;
         document.getElementById('setting-show-status-update-msg').checked = e.showStatusUpdateMsg || false;
+        document.getElementById('setting-show-reminder-msg').checked = e.showReminderMsg !== false;
+        document.getElementById('setting-avatar-system-enabled').checked = e.avatarSystemEnabled || false;
+        document.getElementById('setting-char-sense-avatar-change').checked = e.charSenseAvatarChangeEnabled === true;
+        const arDisplaySpan = document.getElementById('avatar-recognition-detail-display');
+        if (arDisplaySpan) {
+            const val = db.avatarRecognitionDetailLevel;
+            if (val === 'brief') arDisplaySpan.textContent = '简洁（10-20字）';
+            else if (val === 'standard') arDisplaySpan.textContent = '标准（30-50字）';
+            else if (val === 'detailed' || !val) arDisplaySpan.textContent = '详细（不限）';
+            else {
+                const n = typeof val === 'number' ? val : parseInt(val, 10);
+                arDisplaySpan.textContent = (!isNaN(n) && n > 0) ? '自定义（' + n + '字）' : '详细（不限）';
+            }
+        }
+        document.getElementById('setting-show-avatar-action-msg').checked = e.showAvatarActionMsg || false;
+        const charCanSwitchEl = document.getElementById('setting-char-can-switch-avatar');
+        if (charCanSwitchEl) charCanSwitchEl.checked = e.charCanSwitchAvatarEnabled === true;
+        const charCollectEl = document.getElementById('setting-char-collect-image-as-avatar');
+        if (charCollectEl) charCollectEl.checked = e.charCollectImageAsAvatarEnabled === true;
+        const charCollectCoupleEl = document.getElementById('setting-char-collect-couple-avatar');
+        if (charCollectCoupleEl) charCollectCoupleEl.checked = e.charCollectCoupleAvatarEnabled === true;
+        const charSenseCoupleEl = document.getElementById('setting-char-sense-couple-avatar');
+        if (charSenseCoupleEl) charSenseCoupleEl.checked = e.charSenseCoupleAvatarEnabled === true;
+        document.getElementById('setting-char-reminder-enabled').checked = e.charReminderEnabled || false;
 
         const sp = e.statusPanel || {};
         document.getElementById('setting-status-panel-enabled').checked = sp.enabled || false;
@@ -888,6 +1198,9 @@ function loadSettingsToSidebar() {
 
         document.getElementById('setting-shop-interaction-enabled').checked = e.shopInteractionEnabled !== false;
 
+        const familyCardEnabledEl = document.getElementById('setting-family-card-enabled');
+        if (familyCardEnabledEl) familyCardEnabledEl.checked = e.familyCardEnabled === true;
+
         document.getElementById('setting-video-call-enabled').checked = e.videoCallEnabled || false;
         document.getElementById('setting-real-camera-enabled').checked = e.realCameraEnabled || false;
         document.getElementById('setting-vc-novelai-enabled').checked = e.vcNovelAiEnabled || false;
@@ -907,11 +1220,65 @@ function loadSettingsToSidebar() {
         document.getElementById('setting-auto-reply-enabled').checked = ar.enabled || false;
         document.getElementById('setting-auto-reply-interval').value = ar.interval || 60;
 
+        // === 加载免打扰时段设置 ===
+        const qh = ar.quietHours || {};
+        const qhEnabledEl = document.getElementById('setting-quiet-hours-enabled');
+        const qhRangeEl = document.getElementById('quiet-hours-range');
+        qhEnabledEl.checked = qh.enabled || false;
+        document.getElementById('setting-quiet-hours-start').value = qh.start || '23:00';
+        document.getElementById('setting-quiet-hours-end').value = qh.end || '07:00';
+        qhRangeEl.style.display = qhEnabledEl.checked ? 'block' : 'none';
+        qhEnabledEl.addEventListener('change', () => {
+            qhRangeEl.style.display = qhEnabledEl.checked ? 'block' : 'none';
+        });
+
         document.getElementById('setting-use-real-gallery').checked = e.useRealGallery || false;
 
         // === 加载 TTS 配置 ===
         if (typeof TTSSettings !== 'undefined' && TTSSettings.loadChatTTSConfig) {
             TTSSettings.loadChatTTSConfig(currentChatId);
+        }
+
+        // === 拉黑与好友申请面板 ===
+        const blockCharacterBtnEl = document.getElementById('block-character-btn');
+        const blockSettingsPanelEl = document.getElementById('block-settings-panel');
+        const blockReapplyModeEl = document.getElementById('block-reapply-mode');
+        const blockFixedIntervalEl = document.getElementById('block-fixed-interval');
+        const blockFixedIntervalRowEl = document.getElementById('block-fixed-interval-row');
+        const blockRequestCountEl = document.getElementById('block-request-count');
+        const canBlockUserEl = document.getElementById('setting-can-block-user');
+        if (canBlockUserEl) canBlockUserEl.checked = e.canBlockUser !== false;
+
+        // 角色掌控模式
+        const phoneControlEnabledEl = document.getElementById('setting-phone-control-enabled');
+        const phoneControlOptionsEl = document.getElementById('setting-phone-control-options');
+        const phoneControlActionsEl = document.getElementById('setting-phone-control-actions');
+        const phoneControlViewLimitEl = document.getElementById('setting-phone-control-view-limit');
+        const phoneControlViewLimitValueEl = document.getElementById('setting-phone-control-view-limit-value');
+        if (phoneControlEnabledEl) {
+            phoneControlEnabledEl.checked = e.phoneControlEnabled || false;
+            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = phoneControlEnabledEl.checked ? 'block' : 'none';
+            if (phoneControlActionsEl) phoneControlActionsEl.style.display = phoneControlEnabledEl.checked ? 'flex' : 'none';
+        }
+        if (phoneControlViewLimitEl) {
+            const limit = Math.min(50, Math.max(5, parseInt(e.phoneControlViewLimit, 10) || 10));
+            phoneControlViewLimitEl.value = limit;
+            if (phoneControlViewLimitValueEl) phoneControlViewLimitValueEl.textContent = limit;
+        }
+
+        if (blockCharacterBtnEl && blockSettingsPanelEl) {
+            if (e.isBlocked) {
+                blockCharacterBtnEl.style.display = 'none';
+                blockSettingsPanelEl.style.display = 'block';
+                const br = e.blockReapply || {};
+                if (blockReapplyModeEl) blockReapplyModeEl.value = br.mode || 'fixed';
+                if (blockFixedIntervalEl) blockFixedIntervalEl.value = Math.max(1, br.fixedInterval || 30);
+                if (blockRequestCountEl) blockRequestCountEl.textContent = (e.friendRequests && e.friendRequests.length) ? e.friendRequests.length : 0;
+                if (blockFixedIntervalRowEl) blockFixedIntervalRowEl.style.display = (br.mode === 'auto') ? 'none' : '';
+            } else {
+                blockCharacterBtnEl.style.display = '';
+                blockSettingsPanelEl.style.display = 'none';
+            }
         }
 
         const useCustomCssCheckbox = document.getElementById('setting-use-custom-css'),
@@ -944,7 +1311,7 @@ async function saveSettingsFromSidebar() {
         e.remarkName = document.getElementById('setting-char-remark').value;
         e.persona = document.getElementById('setting-char-persona').value;
         
-        if (e.source === 'forum') {
+        if (e.source === 'forum' || e.source === 'peek') {
             const supplementEnabledEl = document.getElementById('setting-forum-supplement-persona-enabled');
             const supplementAiEl = document.getElementById('setting-forum-supplement-persona-ai-enabled');
             const supplementTextEl = document.getElementById('setting-forum-supplement-persona-text');
@@ -958,7 +1325,12 @@ async function saveSettingsFromSidebar() {
             .join(',');
         e.stickerGroups = selectedGroups;
 
-        e.myAvatar = document.getElementById('setting-my-avatar-preview').src;
+        // 头像系统：有头像变动则识别（含缓存）并系统通知
+        const _newMyAvatar = document.getElementById('setting-my-avatar-preview').src;
+        if (window.AvatarSystem && e.charSenseAvatarChangeEnabled && e.myAvatar && _newMyAvatar !== e.myAvatar) {
+            await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(currentChatId, e.myAvatar, _newMyAvatar);
+        }
+        e.myAvatar = _newMyAvatar;
         e.myName = document.getElementById('setting-my-name').value;
         e.myPersona = document.getElementById('setting-my-persona').value;
         e.theme = document.getElementById('setting-theme-color').value;
@@ -1075,6 +1447,19 @@ async function saveSettingsFromSidebar() {
         }
 
         e.showStatusUpdateMsg = document.getElementById('setting-show-status-update-msg').checked;
+        e.showReminderMsg = document.getElementById('setting-show-reminder-msg').checked;
+        e.avatarSystemEnabled = document.getElementById('setting-avatar-system-enabled').checked;
+        e.charSenseAvatarChangeEnabled = document.getElementById('setting-char-sense-avatar-change').checked;
+        const charCanSwitchInput = document.getElementById('setting-char-can-switch-avatar');
+        e.charCanSwitchAvatarEnabled = charCanSwitchInput ? charCanSwitchInput.checked : false;
+        const charCollectInput = document.getElementById('setting-char-collect-image-as-avatar');
+        e.charCollectImageAsAvatarEnabled = charCollectInput ? charCollectInput.checked : false;
+        const charCollectCoupleInput = document.getElementById('setting-char-collect-couple-avatar');
+        e.charCollectCoupleAvatarEnabled = charCollectCoupleInput ? charCollectCoupleInput.checked : false;
+        const charSenseCoupleInput = document.getElementById('setting-char-sense-couple-avatar');
+        e.charSenseCoupleAvatarEnabled = charSenseCoupleInput ? charSenseCoupleInput.checked : false;
+        e.showAvatarActionMsg = document.getElementById('setting-show-avatar-action-msg').checked;
+        e.charReminderEnabled = document.getElementById('setting-char-reminder-enabled').checked;
 
         if (!e.statusPanel) e.statusPanel = {};
         e.statusPanel.enabled = document.getElementById('setting-status-panel-enabled').checked;
@@ -1091,6 +1476,8 @@ async function saveSettingsFromSidebar() {
         e.regexFilter.rules = (typeof parseRegexFilterRulesText === 'function') ? parseRegexFilterRulesText(rfRulesText) : [];
 
         e.shopInteractionEnabled = document.getElementById('setting-shop-interaction-enabled').checked;
+        const familyCardEnabledEl = document.getElementById('setting-family-card-enabled');
+        if (familyCardEnabledEl) e.familyCardEnabled = familyCardEnabledEl.checked;
 
         e.videoCallEnabled = document.getElementById('setting-video-call-enabled').checked;
         e.realCameraEnabled = document.getElementById('setting-real-camera-enabled').checked;
@@ -1112,7 +1499,28 @@ async function saveSettingsFromSidebar() {
         const autoReplyIntervalInput = parseInt(document.getElementById('setting-auto-reply-interval').value, 10);
         e.autoReply.interval = isNaN(autoReplyIntervalInput) ? 60 : autoReplyIntervalInput;
 
+        // === 保存免打扰时段设置 ===
+        if (!e.autoReply.quietHours) e.autoReply.quietHours = {};
+        e.autoReply.quietHours.enabled = document.getElementById('setting-quiet-hours-enabled').checked;
+        e.autoReply.quietHours.start = document.getElementById('setting-quiet-hours-start').value || '23:00';
+        e.autoReply.quietHours.end = document.getElementById('setting-quiet-hours-end').value || '07:00';
+
         e.useRealGallery = document.getElementById('setting-use-real-gallery').checked;
+
+        if (e.isBlocked) {
+            if (!e.blockReapply) e.blockReapply = {};
+            const blockModeEl = document.getElementById('block-reapply-mode');
+            const blockIntervalEl = document.getElementById('block-fixed-interval');
+            e.blockReapply.mode = (blockModeEl && blockModeEl.value) || 'fixed';
+            e.blockReapply.fixedInterval = blockIntervalEl ? Math.max(1, parseInt(blockIntervalEl.value, 10) || 30) : 30;
+        }
+        const canBlockUserCheckbox = document.getElementById('setting-can-block-user');
+        if (canBlockUserCheckbox) e.canBlockUser = canBlockUserCheckbox.checked;
+
+        const phoneControlEnabledCheckbox = document.getElementById('setting-phone-control-enabled');
+        if (phoneControlEnabledCheckbox) e.phoneControlEnabled = phoneControlEnabledCheckbox.checked;
+        const phoneControlViewLimitInput = document.getElementById('setting-phone-control-view-limit');
+        if (phoneControlViewLimitInput) e.phoneControlViewLimit = Math.min(50, Math.max(5, parseInt(phoneControlViewLimitInput.value, 10) || 10));
 
         await saveData();
         showToast('设置已保存！');
@@ -1268,6 +1676,9 @@ function setupApiSettingsApp() {
     
     // === 副API设置：补齐人设API ===
     setupSubApiSettings('supplementPersona', 'supplementPersonaApiSettings', 'supplementPersonaApiPresets');
+    
+    // === 副API设置：偷看手机API ===
+    setupSubApiSettings('peek', 'peekApiSettings', 'peekApiPresets');
 
     // === NovelAI 生图 API 设置 ===
     setupNovelAiSettings();
@@ -1423,7 +1834,7 @@ function importApiPresets() {
 }
 
 // === 副API通用设置函数 ===
-var subApiDisplayNames = { summary: '总结', background: '后台活动', supplementPersona: '补齐人设' };
+var subApiDisplayNames = { summary: '总结', background: '后台活动', supplementPersona: '补齐人设', peek: '偷看手机' };
 function setupSubApiSettings(prefix, dbKey, presetsKey) {
     const displayName = subApiDisplayNames[prefix] || prefix;
     const providerEl = document.getElementById(`${prefix}-api-provider`);
@@ -2133,12 +2544,16 @@ async function applyMyPersonaPresetToCurrentChat(presetName) {
         if (currentChatType === 'private') {
             const e = db.characters.find(c => c.id === currentChatId);
             if (e) {
+                if (p.avatar && p.avatar !== e.myAvatar && window.AvatarSystem && e.charSenseAvatarChangeEnabled) {
+                    await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(currentChatId, e.myAvatar, p.avatar);
+                }
                 e.myPersona = p.persona || '';
                 e.myAvatar = p.avatar || '';
                 await saveData();
                 showToast('预设已应用并保存到当前聊天');
                 if (typeof loadSettingsToSidebar === 'function') try{ loadSettingsToSidebar(); }catch(e){}
                 if (typeof renderChatList === 'function') try{ renderChatList(); }catch(e){}
+                if (typeof renderMessages === 'function') renderMessages(false, true);
             }
         } else {
             showToast('预设已应用到界面（未检测到当前聊天保存入口）');
@@ -2744,16 +3159,17 @@ function populateSoundPresetSelect() {
 function saveCurrentSoundAsPreset() {
     const sendUrl = document.getElementById('global-send-sound-url').value.trim();
     const receiveUrl = document.getElementById('global-receive-sound-url').value.trim();
+    const messageSentUrl = (document.getElementById('global-message-sent-sound-url')?.value || '').trim();
     const incomingCallUrl = (document.getElementById('global-incoming-call-sound-url')?.value || '').trim();
     
-    if (!sendUrl && !receiveUrl && !incomingCallUrl) return showToast('提示音配置为空，无法保存');
+    if (!sendUrl && !receiveUrl && !messageSentUrl && !incomingCallUrl) return showToast('提示音配置为空，无法保存');
     
     let name = prompt('请输入预设名称（将覆盖同名预设）：');
     if (!name) return;
     
     const presets = _getSoundPresets();
     const idx = presets.findIndex(p => p.name === name);
-    const preset = { name, sendSound: sendUrl, receiveSound: receiveUrl, incomingCallSound: incomingCallUrl };
+    const preset = { name, sendSound: sendUrl, receiveSound: receiveUrl, messageSentSound: messageSentUrl, incomingCallSound: incomingCallUrl };
     
     if (idx >= 0) presets[idx] = preset; 
     else presets.push(preset);
@@ -3889,6 +4305,31 @@ function setupCustomizeApp() {
             saveData();
             showToast('已重置');
         }
+        if (target.matches('#test-message-sent-sound-btn')) {
+            const formGroup = target.closest('.form-group');
+            const urlInput = formGroup && formGroup.querySelector('input[type="url"]');
+            const url = (urlInput && urlInput.value && urlInput.value.trim()) || '';
+            if (url) {
+                db.globalMessageSentSound = url;
+                saveData();
+                try {
+                    const audio = new Audio(url);
+                    audio.play().catch(e => showToast('播放失败: ' + e.message));
+                } catch (e) {
+                    showToast('无效的音频地址');
+                }
+            } else {
+                showToast('未设置提示音');
+            }
+        }
+        if (target.matches('#reset-message-sent-sound-btn')) {
+            const formGroup = target.closest('.form-group');
+            const urlInput = formGroup && formGroup.querySelector('input[type="url"]');
+            if (urlInput) urlInput.value = '';
+            db.globalMessageSentSound = '';
+            saveData();
+            showToast('已重置');
+        }
         if (target.matches('#test-incoming-call-sound-btn')) {
             const url = document.getElementById('global-incoming-call-sound-url').value;
             if (url) {
@@ -3961,6 +4402,22 @@ function setupCustomizeApp() {
             }
             await saveData();
             setupHomeScreen();
+        }
+        else if (target.id === 'global-send-sound-url') {
+            db.globalSendSound = target.value.trim();
+            await saveData();
+        }
+        else if (target.id === 'global-receive-sound-url') {
+            db.globalReceiveSound = target.value.trim();
+            await saveData();
+        }
+        else if (target.id === 'global-message-sent-sound-url') {
+            db.globalMessageSentSound = target.value.trim();
+            await saveData();
+        }
+        else if (target.id === 'global-incoming-call-sound-url') {
+            db.globalIncomingCallSound = target.value.trim();
+            await saveData();
         }
         else if (target.dataset.widgetPart) {
             const part = target.dataset.widgetPart;
@@ -4131,7 +4588,7 @@ function setupCustomizeApp() {
             db.multiMsgSoundEnabled = e.target.checked;
             saveData();
         }
-        if (e.target.id === 'global-send-sound-upload' || e.target.id === 'global-receive-sound-upload' || e.target.id === 'global-incoming-call-sound-upload') {
+        if (e.target.id === 'global-send-sound-upload' || e.target.id === 'global-receive-sound-upload' || e.target.id === 'global-message-sent-sound-upload' || e.target.id === 'global-incoming-call-sound-upload') {
             const file = e.target.files[0];
             if (!file) return;
             if (file.size > 2 * 1024 * 1024) {
@@ -4148,6 +4605,9 @@ function setupCustomizeApp() {
                 } else if (e.target.id === 'global-receive-sound-upload') {
                     db.globalReceiveSound = base64;
                     document.getElementById('global-receive-sound-url').value = base64;
+                } else if (e.target.id === 'global-message-sent-sound-upload') {
+                    db.globalMessageSentSound = base64;
+                    document.getElementById('global-message-sent-sound-url').value = base64;
                 } else {
                     db.globalIncomingCallSound = base64;
                     document.getElementById('global-incoming-call-sound-url').value = base64;
@@ -4427,6 +4887,118 @@ margin-left: auto !important;
 }</code></pre>
                         </div>
 
+                        <div class="css-template-card" style="background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div>
+                                    <h6 style="margin: 0; font-size: 1em; color: #333;">iOS 灵动岛/刘海屏防遮挡适配补丁</h6>
+                                    <span style="font-size: 12px; color: #999;">作者：1900</span>
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-small copy-css-btn">复制</button>
+                            </div>
+                            <pre style="background: #f5f5f5; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word; font-size: 12px; max-height: 150px; overflow-y: auto;"><code>/* --- iOS 灵动岛/刘海屏防遮挡适配补丁 --- */
+
+/* 1. 修复所有页面通用顶栏 (如聊天、列表、功能页) */
+.app-header {
+    padding-top: calc(15px + env(safe-area-inset-top)) !important;
+    height: auto !important;
+}
+
+/* 2. 修复主屏幕 (锁屏/桌面) 小组件遮挡 */
+#home-screen {
+    padding-top: calc(45px + env(safe-area-inset-top)) !important;
+}
+
+/* 3. 修复右侧滑出的设置菜单顶栏遮挡 */
+.settings-sidebar .header {
+    padding-top: calc(15px + env(safe-area-inset-top)) !important;
+}
+
+/* 4. (可选) 底部小横条防遮挡输入框 */
+.message-input-area,
+#multi-select-bar,
+#world-book-multi-select-bar {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+}</code></pre>
+                        </div>
+
+                        <div class="css-template-card" style="background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div>
+                                    <h6 style="margin: 0; font-size: 1em; color: #333;">核心容器尺寸调整：全宽幅矮窗</h6>
+                                    <span style="font-size: 12px; color: #999;">作者：萤火</span>
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-small copy-css-btn">复制</button>
+                            </div>
+                            <pre style="background: #f5f5f5; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word; font-size: 12px; max-height: 150px; overflow-y: auto;"><code>/* =========================================================
+   核心容器尺寸调整：全宽幅矮窗 (左右贴边·垂直居中)
+   ========================================================= */
+
+/* 1. 主容器：全宽 + 垂直百分比缩放 */
+#chat-room-screen {
+    position: fixed !important;
+    top: 50% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(-50%) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 70vh !important;
+    max-height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    z-index: 59 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+/* 2. 底部输入栏：跟随容器宽度 */
+.bottom-input-area,
+.chat-input-wrapper {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    transform: none !important;
+    z-index: 100 !important;
+}
+
+/* 3. 顶部栏：跟随容器宽度 */
+.app-header,
+#chat-room-header-default {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    z-index: 100 !important;
+    border-radius: 0 !important;
+}
+
+/* 4. 内容区域：保留原有背景 */
+.content {
+    position: relative !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 100% !important;
+    padding-top: 60px !important;
+    padding-bottom: 35px !important;
+    box-sizing: border-box !important;
+    overflow-y: auto !important;
+    background: none !important;
+    background-color: transparent !important;
+}
+
+/* 5. 消息区域 */
+.message-area {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: 100% !important;
+}</code></pre>
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -4512,6 +5084,17 @@ margin-left: auto !important;
                         <button type="button" id="test-receive-sound-btn" class="btn btn-primary btn-small" style="margin: 0;">▶</button>
                         <button type="button" id="reset-receive-sound-btn" class="btn btn-danger btn-small" style="margin: 0;">×</button>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label style="font-weight: bold; font-size: 14px; color: var(--primary-color);">发消息提示音</label>
+                    <div style="display: flex; gap: 8px; margin-top: 5px;">
+                        <input type="url" id="global-message-sent-sound-url" placeholder="音频URL" value="${db.globalMessageSentSound || ''}" style="flex: 1; border: 1px solid #eee; border-radius: 8px; padding: 8px;">
+                        <input type="file" id="global-message-sent-sound-upload" accept="audio/*" style="display: none;">
+                        <label for="global-message-sent-sound-upload" class="btn btn-secondary btn-small" style="margin: 0; display: flex; align-items: center; cursor: pointer;">📂</label>
+                        <button type="button" id="test-message-sent-sound-btn" class="btn btn-primary btn-small" style="margin: 0;">▶</button>
+                        <button type="button" id="reset-message-sent-sound-btn" class="btn btn-danger btn-small" style="margin: 0;">×</button>
+                    </div>
+                    <p style="font-size: 12px; color: #999; margin-top: 5px;">在输入框发送一条消息时播放。不设置则发送时不播放。</p>
                 </div>
                 <div class="form-group">
                     <label style="font-weight: bold; font-size: 14px; color: var(--primary-color);">来电提示音</label>

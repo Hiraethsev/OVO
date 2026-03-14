@@ -693,6 +693,71 @@
     margin-bottom: 4px;
 }
 
+.browser-history-item.has-detail {
+    cursor: pointer;
+}
+
+.browser-history-item.has-detail::after {
+    content: '›';
+    float: right;
+    color: #ccc;
+    font-size: 20px;
+    margin-top: -20px;
+}
+
+/* Peek Browser Detail Screen */
+#peek-browser-detail-screen {
+    background-color: #ffffff;
+}
+
+#peek-browser-detail-screen .app-header .title,
+#peek-browser-detail-screen .app-header .back-btn {
+    color: #212529;
+}
+
+#peek-browser-detail-screen .app-header .title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#peek-browser-detail-screen .content {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.browser-detail-url {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 16px;
+    word-break: break-all;
+}
+
+.browser-detail-body {
+    font-size: 15px;
+    line-height: 1.8;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.browser-detail-annotation {
+    font-size: 14px;
+    color: #444;
+    background-color: #f5f5f5;
+    padding: 8px 12px;
+    border-radius: 8px;
+    line-height: 1.5;
+}
+
+.browser-detail-annotation::before {
+    content: '批注：';
+    font-weight: 600;
+    color: #888;
+    font-size: 12px;
+    display: block;
+    margin-bottom: 4px;
+}
+
 /* Peek Drafts Screen */
 #peek-drafts-screen {
     background-color: #fff;
@@ -1430,4 +1495,54 @@
     color: #999;
     font-size: 13px;
     padding: 40px 20px;
+}
+
+/* 代发消息（冒充）输入栏 */
+#peek-conversation-screen .peek-impersonate-bar {
+    padding: 10px 12px;
+    background: var(--panel-bg, #f8f8f8);
+    border-top: 1px solid #eee;
+    flex-shrink: 0;
+}
+.peek-impersonate-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.peek-impersonate-input-row input {
+    flex: 1 1 70%;
+    min-width: 0;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    font-size: 14px;
+    outline: none;
+}
+.peek-impersonate-input-row input:focus {
+    border-color: var(--primary-color, #5b8ef4);
+}
+.peek-impersonate-input-row .btn {
+    flex: 0 0 30%;
+    padding: 8px 12px;
+    white-space: nowrap;
+}
+.peek-impersonate-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.peek-impersonate-actions .btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+#peek-conversation-screen .content {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+#peek-conversation-screen .message-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px 8px;
 }

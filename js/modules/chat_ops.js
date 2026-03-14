@@ -23,9 +23,9 @@ function handleMessageLongPress(messageWrapper, x, y) {
     
     let invisibleRegex;
     if (chat.showStatusUpdateMsg) {
-        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]/;
+        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[avatar-action:.*?\]/;
     } else {
-        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]/;
+        invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[avatar-action:.*?\]/;
     }
     const isInvisibleMessage = invisibleRegex.test(message.content);
     const isWithdrawn = message.isWithdrawn; 
@@ -416,8 +416,10 @@ function enterMultiSelectMode(initialMessageId, mode = 'delete') {
         document.getElementById('multi-select-title').textContent = '选择要收藏的消息';
         const delBtn = document.getElementById('delete-selected-btn');
         const favBtn = document.getElementById('favorite-selected-btn');
+        const mergeBtn = document.getElementById('favorite-merge-btn');
         if (delBtn) delBtn.style.display = 'none';
-        if (favBtn) favBtn.style.display = '';
+        if (favBtn) { favBtn.style.display = ''; favBtn.disabled = selectedMessageIds.size === 0; }
+        if (mergeBtn) { mergeBtn.style.display = ''; mergeBtn.disabled = selectedMessageIds.size === 0; }
     }
     
     chatRoomScreen.classList.add('multi-select-active');
@@ -468,7 +470,9 @@ function toggleMessageSelection(messageId) {
     } else if (currentMultiSelectMode === 'favorite') {
         selectCount.textContent = `已选择 ${selectedMessageIds.size} 项`;
         const favBtn = document.getElementById('favorite-selected-btn');
+        const mergeBtn = document.getElementById('favorite-merge-btn');
         if (favBtn) favBtn.disabled = selectedMessageIds.size === 0;
+        if (mergeBtn) mergeBtn.disabled = selectedMessageIds.size === 0;
     }
 }
 
@@ -987,4 +991,87 @@ function recalculateChatStatus(chat) {
             statusTextEl.textContent = foundStatus;
         }
     }
+}
+
+// 在当前编辑的消息下方插入新消息
+function insertMessageBelow() {
+    if (!editingMessageId) {
+        showToast('无法获取当前编辑的消息');
+        return;
+    }
+
+    // 显示自定义插入消息弹窗
+    const insertModal = document.getElementById('insert-message-modal');
+    const insertTextarea = document.getElementById('insert-message-textarea');
+    
+    if (!insertModal || !insertTextarea) {
+        showToast('弹窗元素不存在，请刷新页面');
+        return;
+    }
+    
+    insertTextarea.value = '';
+    insertModal.classList.add('visible');
+    insertTextarea.focus();
+}
+
+// 确认插入新消息
+async function confirmInsertMessage() {
+    const newContent = document.getElementById('insert-message-textarea').value.trim();
+    if (!newContent) {
+        showToast('请输入消息内容');
+        return;
+    }
+
+    const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+    if (!chat) {
+        showToast('无法获取聊天数据');
+        return;
+    }
+
+    const currentMessageIndex = chat.history.findIndex(m => m.id === editingMessageId);
+    if (currentMessageIndex === -1) {
+        showToast('找不到当前消息');
+        return;
+    }
+
+    const currentMessage = chat.history[currentMessageIndex];
+    
+    // 计算新消息的时间戳
+    let newTimestamp;
+    if (currentMessageIndex < chat.history.length - 1) {
+        const nextMessage = chat.history[currentMessageIndex + 1];
+        // 在当前消息和下一条消息之间插入（取中间时间）
+        newTimestamp = Math.floor((currentMessage.timestamp + nextMessage.timestamp) / 2);
+    } else {
+        // 如果当前消息是最后一条，则在其后1分钟
+        newTimestamp = currentMessage.timestamp + 60000;
+    }
+
+    // 创建新消息
+    const newMessage = {
+        id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        content: `[${chat.myName || '我'}的消息：${newContent}]`,
+        timestamp: newTimestamp,
+        role: 'user',
+        senderId: 'user_me'
+    };
+
+    // 插入新消息到数组
+    chat.history.splice(currentMessageIndex + 1, 0, newMessage);
+
+    // 保存数据
+    if (currentChatType === 'private') {
+        recalculateChatStatus(chat);
+    }
+
+    await saveData();
+    currentPage = 1;
+    renderMessages(false, true);
+    renderChatList();
+
+    // 关闭插入弹窗和编辑弹窗
+    document.getElementById('insert-message-modal').classList.remove('visible');
+    cancelMessageEdit();
+    
+    showToast('新消息已插入');
 }

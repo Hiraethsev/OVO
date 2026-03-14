@@ -358,9 +358,9 @@ function renderChatList() {
         if (chat.history && chat.history.length > 0) {
             let invisibleRegex;
             if (chat.showStatusUpdateMsg) {
-                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]/;
+                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[avatar-action:.*?\]/;
             } else {
-                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]/;
+                invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[avatar-action:.*?\]/;
             }
             const visibleHistory = chat.history.filter(msg => !invisibleRegex.test(msg.content));
             if (visibleHistory.length > 0) {
@@ -426,11 +426,15 @@ function renderChatList() {
         const li = document.createElement('li');
         li.className = 'list-item chat-item';
         if (chat.isPinned) li.classList.add('pinned');
+        if (chat.type === 'private' && chat.isBlocked) li.classList.add('chat-item-blocked');
+        if (chat.type === 'private' && chat.isBlockedByChar) li.classList.add('chat-item-blocked-by-char');
         li.dataset.id = chat.id;
         li.dataset.type = chat.type;
         const avatarClass = chat.type === 'group' ? 'group-avatar' : '';
         const itemName = chat.type === 'private' ? chat.remarkName : chat.name;
         const pinBadgeHTML = chat.isPinned ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="color: #999; margin-left: 4px; flex-shrink: 0;"><path d="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z" /></svg>' : '';
+        const blockedBadgeHTML = (chat.type === 'private' && chat.isBlocked) ? '<span class="chat-item-blocked-badge">已拉黑</span>' : '';
+        const blockedByCharBadgeHTML = (chat.type === 'private' && chat.isBlockedByChar) ? '<span class="chat-item-blocked-by-char-badge">被对方拉黑</span>' : '';
 
         let timeString = '';
         const lastMessage = chat.history && chat.history.length > 0 ? chat.history[chat.history.length - 1] : null;
@@ -459,6 +463,8 @@ function renderChatList() {
                 <div class="item-details-row" style="justify-content: flex-start; align-items: center;">
                     <div class="item-name">${itemName}</div>
                     ${pinBadgeHTML}
+                    ${blockedBadgeHTML}
+                    ${blockedByCharBadgeHTML}
                 </div>
                 <div class="item-preview-wrapper">
                     <div class="item-preview">${lastMessageText}</div>

@@ -2,7 +2,107 @@
  * 存钱罐（用户钱包）模块
  * - 默认余额 520 元，可存入、修改余额
  * - 转账支出从余额扣减，收款/退回记入收入
+ * - 亲属卡：用户/角色互赠，额度上限，消费从存钱罐扣
  */
+
+const FAMILY_CARD_COLORS = ['#1a1a2e', '#16213e', '#0f3460', '#2d132c', '#1b262c', '#2c3e50'];
+
+function getPeriodMs(period, customDays) {
+    const day = 24 * 60 * 60 * 1000;
+    if (period === 'daily') return day;
+    if (period === 'weekly') return 7 * day;
+    if (period === 'monthly') return 30 * day;
+    if (period === 'custom' && customDays > 0) return customDays * day;
+    return 30 * day;
+}
+
+function refreshFamilyCardLimits() {
+    if (!db.piggyBank) return;
+    const now = Date.now();
+    (db.piggyBank.familyCards || []).forEach(card => {
+        if (card.status !== 'active') return;
+        const periodMs = getPeriodMs(card.refreshPeriod, card.refreshDays || 30);
+        if (card.nextRefreshTime && now >= card.nextRefreshTime) {
+            card.usedAmount = 0;
+            card.lastRefreshTime = now;
+            card.nextRefreshTime = now + periodMs;
+        }
+    });
+    (db.piggyBank.receivedFamilyCards || []).forEach(card => {
+        if (card.status !== 'active') return;
+        const periodMs = getPeriodMs(card.refreshPeriod, card.refreshDays || 30);
+        if (card.nextRefreshTime && now >= card.nextRefreshTime) {
+            card.usedAmount = 0;
+            card.lastRefreshTime = now;
+            card.nextRefreshTime = now + periodMs;
+        }
+    });
+}
+
+function getFamilyCardById(cardId, isReceived) {
+    if (!db.piggyBank) return null;
+    if (isReceived) return (db.piggyBank.receivedFamilyCards || []).find(c => c.id === cardId);
+    return (db.piggyBank.familyCards || []).find(c => c.id === cardId);
+}
+
+function createFamilyCard(opts) {
+    if (!db.piggyBank) db.piggyBank = { balance: 520, transactions: [], familyCards: [], receivedFamilyCards: [] };
+    if (!Array.isArray(db.piggyBank.familyCards)) db.piggyBank.familyCards = [];
+    const id = 'fc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const periodMs = getPeriodMs(opts.refreshPeriod || 'monthly', opts.refreshDays || 30);
+    const now = Date.now();
+    const card = {
+        id,
+        bankName: String(opts.bankName || '').trim() || '亲属卡',
+        cardNumber: String(Math.floor(1000 + Math.random() * 9000)),
+        cardHolder: opts.cardHolder || '',
+        cardColor: opts.cardColor || FAMILY_CARD_COLORS[Math.floor(Math.random() * FAMILY_CARD_COLORS.length)],
+        targetCharId: opts.targetCharId || '',
+        targetCharName: opts.targetCharName || '',
+        limit: Math.max(1, Number(opts.limit) || 5000),
+        usedAmount: 0,
+        refreshPeriod: opts.refreshPeriod || 'monthly',
+        refreshDays: opts.refreshDays || 30,
+        lastRefreshTime: now,
+        nextRefreshTime: now + periodMs,
+        status: 'active',
+        statusChangedBy: '',
+        notifyOnCharge: false,
+        createdTime: now,
+        transactions: []
+    };
+    db.piggyBank.familyCards.push(card);
+    return card;
+}
+
+function createReceivedFamilyCard(opts) {
+    if (!db.piggyBank) db.piggyBank = { balance: 520, transactions: [], familyCards: [], receivedFamilyCards: [] };
+    if (!Array.isArray(db.piggyBank.receivedFamilyCards)) db.piggyBank.receivedFamilyCards = [];
+    const id = 'rfc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const periodMs = getPeriodMs(opts.refreshPeriod || 'monthly', opts.refreshDays || 30);
+    const now = Date.now();
+    const card = {
+        id,
+        bankName: String(opts.bankName || '').trim() || '亲属卡',
+        cardNumber: String(Math.floor(1000 + Math.random() * 9000)),
+        cardHolder: opts.fromCharName || '',
+        cardColor: opts.cardColor || FAMILY_CARD_COLORS[Math.floor(Math.random() * FAMILY_CARD_COLORS.length)],
+        fromCharId: opts.fromCharId || '',
+        fromCharName: opts.fromCharName || '',
+        limit: Math.max(1, Number(opts.limit) || 5000),
+        usedAmount: 0,
+        refreshPeriod: opts.refreshPeriod || 'monthly',
+        refreshDays: opts.refreshDays || 30,
+        lastRefreshTime: now,
+        nextRefreshTime: now + periodMs,
+        status: 'active',
+        statusChangedBy: '',
+        receivedTime: now,
+        transactions: []
+    };
+    db.piggyBank.receivedFamilyCards.push(card);
+    return card;
+}
 
 function getPiggyBalance() {
     if (!db.piggyBank || typeof db.piggyBank.balance !== 'number') return 520;
@@ -57,6 +157,7 @@ function addPiggyTransaction(opts) {
 }
 
 function renderPiggyBankScreen() {
+    refreshFamilyCardLimits();
     const balanceEl = document.getElementById('piggy-bank-balance-display');
     const listEl = document.getElementById('piggy-bank-transaction-list');
     const emptyEl = document.getElementById('piggy-bank-empty-hint');
@@ -97,6 +198,135 @@ function renderPiggyBankScreen() {
         `;
         listEl.appendChild(li);
     });
+    renderFamilyCardList();
+}
+
+function renderFamilyCardList() {
+    const container = document.getElementById('family-card-scroll-list');
+    if (!container) return;
+    const sent = (db.piggyBank && db.piggyBank.familyCards) ? db.piggyBank.familyCards : [];
+    const received = (db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards : [];
+    const all = sent.map(c => ({ ...c, isReceived: false })).concat(received.map(c => ({ ...c, isReceived: true })));
+    container.innerHTML = '';
+    all.forEach(card => {
+        const remaining = Math.max(0, card.limit - (card.usedAmount || 0));
+        const statusClass = card.status === 'frozen' ? 'frozen' : card.status === 'revoked' ? 'revoked' : '';
+        const statusText = card.status === 'frozen' ? '已冻结' : card.status === 'revoked' ? '已收回' : '';
+        const typeText = card.isReceived ? ('来自 ' + (card.fromCharName || '')) : ('赠予 ' + (card.targetCharName || ''));
+        const mini = document.createElement('div');
+        mini.className = 'family-card-mini' + (statusClass ? ' ' + statusClass : '');
+        mini.dataset.cardId = card.id;
+        mini.dataset.received = card.isReceived ? '1' : '0';
+        mini.innerHTML = `
+            <div class="mini-card-face" style="background-color:${escapeHtml(card.cardColor)}">
+                <div class="mini-card-bank">${escapeHtml(card.bankName || '亲属卡')}</div>
+                <div class="mini-card-type">${escapeHtml(typeText)}</div>
+                <div class="mini-card-number">**** ${escapeHtml(card.cardNumber)}</div>
+                <div class="mini-card-balance">剩余 ${formatMoney(remaining)}</div>
+                ${statusText ? '<div class="mini-card-status-badge ' + statusClass + '">' + escapeHtml(statusText) + '</div>' : ''}
+            </div>`;
+        mini.addEventListener('click', () => openFamilyCardDetail(card.id, !!card.isReceived));
+        container.appendChild(mini);
+    });
+}
+
+function openFamilyCardDetail(cardId, isReceived) {
+    const card = getFamilyCardById(cardId, isReceived);
+    if (!card) return;
+    const remaining = Math.max(0, card.limit - (card.usedAmount || 0));
+    const periodText = card.refreshPeriod === 'daily' ? '每天' : card.refreshPeriod === 'weekly' ? '每周' : card.refreshPeriod === 'monthly' ? '每月' : (card.refreshDays || 30) + '天';
+    const nextRefresh = card.nextRefreshTime ? new Date(card.nextRefreshTime).toLocaleDateString('zh-CN') : '-';
+    const statusText = card.status === 'active' ? '正常' : card.status === 'frozen' ? '已冻结' : '已收回';
+    const content = document.getElementById('family-card-detail-content');
+    if (!content) return;
+    content.innerHTML = `
+        <div class="family-card-detail-face" style="background-color:${escapeHtml(card.cardColor)}">
+            <div class="family-card-detail-bank">${escapeHtml(card.bankName || '亲属卡')}</div>
+            <div class="family-card-detail-limit">${formatMoney(remaining)} / ${formatMoney(card.limit)}</div>
+            <div class="family-card-detail-number">**** **** **** ${escapeHtml(card.cardNumber)}</div>
+            <div class="family-card-detail-holder">持卡人：${escapeHtml(isReceived ? (card.fromCharName || '') : (card.targetCharName || ''))}</div>
+        </div>
+        <div class="family-card-detail-info">
+            <p>刷新周期：${escapeHtml(periodText)}</p>
+            <p>下次刷新：${escapeHtml(nextRefresh)}</p>
+            <p>状态：${escapeHtml(statusText)}</p>
+        </div>
+        ${!isReceived && card.status === 'active' ? `
+        <div class="family-card-detail-actions">
+            <button type="button" class="btn btn-neutral btn-small" id="fc-detail-adjust-btn">调整额度</button>
+            <button type="button" class="btn btn-neutral btn-small" id="fc-detail-freeze-btn">冻结</button>
+            <button type="button" class="btn btn-danger btn-small" id="fc-detail-revoke-btn">收回</button>
+        </div>
+        <div class="form-group" style="margin-top:12px;">
+            <label class="kkt-switch"><input type="checkbox" id="fc-detail-notify"> <span class="kkt-slider"></span></label>
+            <span>扣费通知</span>
+        </div>
+        ` : ''}
+        ${isReceived && card.status === 'active' ? `
+        <div class="form-group" style="margin-top:12px;">
+            <label class="kkt-switch"><input type="checkbox" id="fc-detail-notify" disabled> <span class="kkt-slider"></span></label>
+            <span>扣费通知（由发卡方设置）</span>
+        </div>
+        ` : ''}
+        <div class="family-card-detail-transactions">
+            <h4>消费记录</h4>
+            <ul class="piggy-bank-list" id="fc-detail-transaction-list"></ul>
+            <p class="piggy-bank-empty" id="fc-detail-empty" style="display:none;">暂无记录</p>
+        </div>`;
+    const txList = content.querySelector('#fc-detail-transaction-list');
+    const emptyEl = content.querySelector('#fc-detail-empty');
+    const txs = (card.transactions || []).slice(0, 50);
+    if (txList) {
+        txList.innerHTML = '';
+        if (txs.length === 0) {
+            if (emptyEl) emptyEl.style.display = 'block';
+        } else {
+            if (emptyEl) emptyEl.style.display = 'none';
+            txs.forEach(t => {
+                const li = document.createElement('li');
+                li.className = 'piggy-bank-list-item';
+                const timeStr = t.time ? new Date(t.time).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+                li.innerHTML = `
+                    <div class="piggy-item-left">
+                        <div class="piggy-item-remark">${escapeHtml(t.scene || '')} ${escapeHtml(t.detail || '')}</div>
+                        <div class="piggy-item-meta">${escapeHtml(timeStr)}</div>
+                    </div>
+                    <span class="piggy-item-amount expense">-${formatMoney(t.amount)}</span>`;
+                txList.appendChild(li);
+            });
+        }
+    }
+    const notifyCb = content.querySelector('#fc-detail-notify');
+    if (notifyCb && !card.isReceived) notifyCb.checked = !!card.notifyOnCharge;
+    content.querySelector('#fc-detail-adjust-btn') && content.querySelector('#fc-detail-adjust-btn').addEventListener('click', () => {
+        const val = prompt('输入新额度（元）', String(card.limit));
+        if (val === null) return;
+        const n = parseInt(val, 10);
+        if (isNaN(n) || n < 0) { showToast('请输入有效金额'); return; }
+        card.limit = n;
+        card.statusChangedBy = 'user';
+        if (typeof saveData === 'function') saveData();
+        showToast('额度已调整');
+        openFamilyCardDetail(cardId, isReceived);
+    });
+    content.querySelector('#fc-detail-freeze-btn') && content.querySelector('#fc-detail-freeze-btn').addEventListener('click', () => {
+        card.status = 'frozen';
+        card.statusChangedBy = 'user';
+        if (typeof saveData === 'function') saveData();
+        showToast('已冻结');
+        openFamilyCardDetail(cardId, isReceived);
+    });
+    content.querySelector('#fc-detail-revoke-btn') && content.querySelector('#fc-detail-revoke-btn').addEventListener('click', () => {
+        if (!confirm('确定收回这张亲属卡？')) return;
+        card.status = 'revoked';
+        card.statusChangedBy = 'user';
+        if (typeof saveData === 'function') saveData();
+        showToast('已收回');
+        switchScreen('piggy-bank-screen');
+        if (typeof renderPiggyBankScreen === 'function') renderPiggyBankScreen();
+    });
+    if (notifyCb && !card.isReceived) notifyCb.addEventListener('change', () => { card.notifyOnCharge = notifyCb.checked; if (typeof saveData === 'function') saveData(); });
+    switchScreen('family-card-detail-screen');
 }
 
 function formatMoney(n) {
@@ -235,6 +465,109 @@ function setupPiggyBankApp() {
         });
         observer.observe(screen, { attributes: true });
     }
+
+    const familyCardCreateBtn = document.getElementById('family-card-create-btn');
+    const familyCardCreateModal = document.getElementById('family-card-create-modal');
+    const familyCardCreateForm = document.getElementById('family-card-create-form');
+    const familyCardRefreshSelect = document.getElementById('family-card-refresh');
+    const familyCardRefreshDaysWrap = document.getElementById('family-card-refresh-days-wrap');
+    const familyCardCreateCancel = document.getElementById('family-card-create-cancel');
+    const familyCardSendCharModal = document.getElementById('family-card-send-char-modal');
+    const familyCardSendCharList = document.getElementById('family-card-send-char-list');
+    const familyCardSendSkipBtn = document.getElementById('family-card-send-skip-btn');
+    const familyCardDetailBack = document.getElementById('family-card-detail-back');
+
+    familyCardRefreshSelect && familyCardRefreshSelect.addEventListener('change', () => {
+        if (familyCardRefreshDaysWrap) familyCardRefreshDaysWrap.style.display = familyCardRefreshSelect.value === 'custom' ? 'block' : 'none';
+    });
+
+    familyCardCreateCancel && familyCardCreateCancel.addEventListener('click', () => { if (familyCardCreateModal) familyCardCreateModal.classList.remove('visible'); });
+
+    familyCardCreateForm && familyCardCreateForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const bankName = document.getElementById('family-card-bank-name').value.trim();
+        const limitInput = document.getElementById('family-card-limit').value;
+        const limit = parseInt(limitInput, 10);
+        const refresh = document.getElementById('family-card-refresh').value;
+        const refreshDays = parseInt(document.getElementById('family-card-refresh-days').value, 10) || 30;
+        if (!bankName) { showToast('请输入银行名称'); return; }
+        if (isNaN(limit) || limit < 1) { showToast('请输入有效额度'); return; }
+        const myName = (db.characters && db.characters.length && db.characters[0].myName) ? db.characters[0].myName : '用户';
+        const card = createFamilyCard({
+            bankName,
+            limit,
+            refreshPeriod: refresh,
+            refreshDays: refresh === 'custom' ? refreshDays : 30,
+            cardHolder: myName
+        });
+        if (familyCardCreateModal) familyCardCreateModal.classList.remove('visible');
+        if (typeof saveData === 'function') saveData();
+        renderFamilyCardList();
+        let pendingCardForSend = card;
+        familyCardSendCharList.innerHTML = '';
+        (db.characters || []).forEach(char => {
+            const alreadyHas = (db.piggyBank.familyCards || []).some(c => c.targetCharId === char.id && c.status === 'active');
+            if (alreadyHas) return;
+            const li = document.createElement('li');
+            li.className = 'family-card-char-item';
+            li.innerHTML = '<span class="family-card-char-name">' + escapeHtml(char.remarkName || char.realName || '') + '</span>';
+            li.addEventListener('click', () => {
+                if (!pendingCardForSend) return;
+                const targetChar = db.characters.find(c => c.id === char.id);
+                if (!targetChar) return;
+                pendingCardForSend.targetCharId = targetChar.id;
+                pendingCardForSend.targetCharName = targetChar.realName || targetChar.remarkName || '';
+                if (typeof saveData === 'function') saveData();
+                const periodText = pendingCardForSend.refreshPeriod === 'daily' ? '每天' : pendingCardForSend.refreshPeriod === 'weekly' ? '每周' : pendingCardForSend.refreshPeriod === 'monthly' ? '每月' : (pendingCardForSend.refreshDays || 30) + '天';
+                const content = `[${targetChar.myName || myName}赠送${pendingCardForSend.targetCharName}亲属卡：额度${pendingCardForSend.limit}元；刷新周期：${periodText}]`;
+                const message = {
+                    id: 'msg_' + Date.now(),
+                    role: 'user',
+                    content: content,
+                    parts: [{ type: 'text', text: content }],
+                    timestamp: Date.now(),
+                    familyCardId: pendingCardForSend.id,
+                    familyCardStatus: 'pending'
+                };
+                targetChar.history.push(message);
+                if (typeof addMessageBubble === 'function') addMessageBubble(message, targetChar.id, 'private');
+                if (typeof renderChatList === 'function') renderChatList();
+                if (familyCardSendCharModal) familyCardSendCharModal.classList.remove('visible');
+                switchScreen('chat-room-screen');
+                currentChatId = targetChar.id;
+                currentChatType = 'private';
+                if (typeof switchScreen === 'function') switchScreen('chat-room-screen');
+                if (typeof renderChatRoom === 'function') renderChatRoom();
+                pendingCardForSend = null;
+                showToast('已发送到对话');
+            });
+            familyCardSendCharList.appendChild(li);
+        });
+        if (familyCardSendCharList.children.length === 0) {
+            familyCardSendCharList.innerHTML = '<li class="family-card-char-item disabled">暂无可发送的角色（或该角色已有亲属卡）</li>';
+        }
+        if (familyCardSendCharModal) familyCardSendCharModal.classList.add('visible');
+    });
+
+    familyCardSendSkipBtn && familyCardSendSkipBtn.addEventListener('click', () => {
+        if (familyCardSendCharModal) familyCardSendCharModal.classList.remove('visible');
+        renderFamilyCardList();
+    });
+
+    // 亲属卡列表/详情返回与聊天设置一致：使用 data-target + 全局 back-btn 委托，不再在此绑定
+
+    const familyCardEntryRow = document.getElementById('family-card-entry-row');
+    familyCardEntryRow && familyCardEntryRow.addEventListener('click', () => {
+        switchScreen('family-card-list-screen');
+        renderFamilyCardList();
+    });
+
+    const familyCardCreateBtnInList = document.getElementById('family-card-create-btn-in-list');
+    familyCardCreateBtnInList && familyCardCreateBtnInList.addEventListener('click', () => {
+        if (familyCardCreateForm) familyCardCreateForm.reset();
+        if (familyCardRefreshDaysWrap) familyCardRefreshDaysWrap.style.display = 'none';
+        if (familyCardCreateModal) familyCardCreateModal.classList.add('visible');
+    });
 }
 
 if (typeof window !== 'undefined') {
@@ -242,4 +575,8 @@ if (typeof window !== 'undefined') {
     window.addPiggyTransaction = addPiggyTransaction;
     window.deletePiggyTransactions = deletePiggyTransactions;
     window.renderPiggyBankScreen = renderPiggyBankScreen;
+    window.renderFamilyCardList = renderFamilyCardList;
+    window.createReceivedFamilyCard = createReceivedFamilyCard;
+    window.refreshFamilyCardLimits = refreshFamilyCardLimits;
+    window.getFamilyCardById = getFamilyCardById;
 }

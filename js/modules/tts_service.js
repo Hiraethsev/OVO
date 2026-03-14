@@ -57,6 +57,10 @@ const MinimaxTTSService = {
     playQueue: [],
     isPlaying: false,
 
+    // 音频上下文激活状态
+    audioContextActivated: false,
+    hasShownAutoplayTip: false,
+
     // 派发 TTS 状态变化，供聊天页更新语音条 UI
     _dispatchState: function() {
         try {
@@ -68,6 +72,29 @@ const MinimaxTTSService = {
                 }
             }));
         } catch (e) {}
+    },
+
+    /**
+     * 激活音频上下文 - 必须在用户交互时调用
+     * 绕过浏览器的自动播放限制，确保后续TTS能自动播放
+     */
+    activateAudioContext: async function() {
+        if (this.audioContextActivated) return true;
+        
+        try {
+            // 播放一个极短的静音音频来激活音频播放权限
+            const silentAudio = new Audio();
+            // 使用一个极短的空白MP3（大约0.1秒）
+            silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhAC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7v////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////AAAA8UxhdmM1OC4xMzQAAAAAAAAAAAAAAAAkAAAAAAAAAAOEaGMGmgAAAAAAAAAAAAAAAAAAAAD/+xDEAAPAAAGkAAAAIAAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==';
+            silentAudio.volume = 0.01;
+            await silentAudio.play();
+            this.audioContextActivated = true;
+            console.log('[TTS] 音频上下文已激活');
+            return true;
+        } catch (err) {
+            console.warn('[TTS] 音频上下文激活失败（浏览器可能阻止自动播放）:', err);
+            return false;
+        }
     },
 
     // 初始化 - 从 localStorage 加载配置

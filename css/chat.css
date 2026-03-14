@@ -34,6 +34,23 @@
     background-color: #ffffff;
 }
 
+.chat-item-blocked {
+    opacity: 0.75;
+    background-color: #f8f8f8;
+}
+
+.chat-item-blocked .item-name,
+.chat-item-blocked .item-preview {
+    color: #999;
+}
+
+.chat-item-blocked-badge {
+    font-size: 11px;
+    color: #ff3b30;
+    margin-left: 6px;
+    flex-shrink: 0;
+}
+
 .chat-avatar {
     width: 50px;
     height: 50px;
@@ -1038,6 +1055,46 @@
     color: #999;
 }
 
+/* 亲属卡气泡 */
+.family-card-bubble {
+    width: 220px;
+    background-color: #FFFFFF;
+    border: 1px solid #E5E5E5;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    overflow: hidden;
+    margin: 0 8px;
+    color: #333;
+}
+.message-wrapper.sent .family-card-bubble { border-bottom-right-radius: 5px; }
+.message-wrapper.received .family-card-bubble { border-bottom-left-radius: 5px; }
+.family-card-bubble .family-card-face {
+    padding: 14px 16px;
+    color: #fff;
+    border-radius: 0;
+}
+.family-card-bubble .family-card-bank-row { margin-bottom: 8px; }
+.family-card-bubble .family-card-bank-name { font-size: 12px; opacity: 0.9; }
+.family-card-bubble .family-card-limit { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.family-card-bubble .family-card-number { font-size: 10px; opacity: 0.7; letter-spacing: 2px; font-family: "Courier New", monospace; }
+.family-card-bubble .family-card-holder { font-size: 10px; opacity: 0.8; margin-top: 4px; }
+.family-card-bubble .family-card-info { padding: 8px 12px; }
+.family-card-bubble .family-card-title { font-size: 11px; color: #999; margin: 0 0 2px 0; }
+.family-card-bubble .family-card-desc { font-size: 12px; color: #555; margin: 0 0 6px 0; }
+.family-card-bubble .family-card-status {
+    font-size: 10px; color: #FEE500; background-color: #333; padding: 4px 0; text-align: center; border-radius: 4px; font-weight: 500;
+}
+.family-card-bubble.accepted .family-card-status,
+.family-card-bubble.received .family-card-status { background-color: #F2F2F2; color: #34c759; }
+.family-card-bubble.returned .family-card-status,
+.family-card-bubble.revoked .family-card-status { background-color: #F2F2F2; color: #999; }
+
+.payment-method-list { display: flex; flex-direction: column; gap: 8px; }
+.payment-method-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e5e5e5; border-radius: 10px; cursor: pointer; }
+.payment-method-item:has(input:checked) { border-color: var(--primary-color, #007aff); background: rgba(0,122,255,0.06); }
+.payment-method-item .pm-name { flex: 1; font-size: 14px; }
+.payment-method-item .pm-balance { font-size: 13px; color: #666; }
+
 /* 发送定位弹窗：距你约 一行 — 数字 60%，单位 40% */
 .location-distance-row {
     display: flex;
@@ -1319,6 +1376,7 @@
 
 /* 无头像模式边距调整 */
 .message-wrapper.no-avatar-layout .voice-transcript,
+.message-wrapper.no-avatar-layout .voice-translation,
 .message-wrapper.no-avatar-layout .translation-text,
 .message-wrapper.no-avatar-layout .gift-card-description,
 .message-wrapper.no-avatar-layout .withdrawn-content {
@@ -1446,6 +1504,14 @@
 /* 图标大小自定义 */
 #sticker-toggle-btn img { width: 24px; height: 24px; }
 #get-reply-btn svg { width: 32px; height: 32px; stroke: none; }
+
+#ai-mode-toggle-btn {
+    min-width: 56px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--func-icon-color, #333);
+    white-space: nowrap;
+}
 
 #toggle-expansion-btn {
     transition: transform 0.3s ease, background-color 0.2s;
@@ -2179,7 +2245,7 @@
     opacity: 1;
 }
 
-/* --- 状态栏管理/多选删除 --- */
+/* --- 状态栏管理/多选删除（可拖动，位置可自定义）--- */
 .status-manage-btn {
     position: absolute;
     top: 28px;
@@ -2190,7 +2256,7 @@
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    cursor: pointer;
+    cursor: grab;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2198,8 +2264,17 @@
     z-index: 1004;
     opacity: 0;
     transform: scale(0.8);
-    transition: all 0.3s ease 0.1s;
+    transition: opacity 0.3s ease 0.1s, box-shadow 0.2s;
     pointer-events: none;
+    touch-action: none;
+}
+.status-manage-btn:active {
+    cursor: grabbing;
+}
+.status-manage-btn.status-manage-btn-dragging {
+    cursor: grabbing;
+    transition: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }
 
 .status-panel-overlay.visible .status-manage-btn {
@@ -2208,7 +2283,7 @@
     pointer-events: auto;
 }
 
-.status-manage-btn:active {
+.status-manage-btn:active:not(.status-manage-btn-dragging) {
     transform: scale(0.92);
     background: rgba(255, 255, 255, 1);
 }

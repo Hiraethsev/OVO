@@ -1,6 +1,29 @@
 // --- 核心聊天逻辑 (js/chat.js) ---
 // 此文件保留核心入口和胶水代码，具体功能已拆分至 js/modules/chat_*.js
 
+const AI_CHAT_MODE_KEY = 'aiChatMode';
+const AI_MODE_ASSISTANT = 'assistant';
+const AI_MODE_COMPANION = 'companion';
+
+function getAiChatMode() {
+    const v = (typeof localStorage !== 'undefined' && localStorage.getItem(AI_CHAT_MODE_KEY)) || AI_MODE_ASSISTANT;
+    return v === AI_MODE_COMPANION ? AI_MODE_COMPANION : AI_MODE_ASSISTANT;
+}
+
+function setAiChatMode(mode) {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(AI_CHAT_MODE_KEY, mode);
+}
+
+function getAiChatModeTitle() {
+    return getAiChatMode() === AI_MODE_COMPANION ? 'AI 伙伴' : 'AI 助手';
+}
+
+function updateChatTitleByAiMode() {
+    if (typeof chatRoomTitle !== 'undefined' && chatRoomTitle) {
+        chatRoomTitle.textContent = getAiChatModeTitle();
+    }
+}
+
 function setupChatRoom() {
     const memoryJournalBtn = document.getElementById('memory-journal-btn');
     const deleteHistoryBtn = document.getElementById('delete-history-btn');
@@ -31,6 +54,7 @@ function setupChatRoom() {
             if (slidesData.length === 0) {
                 statusContent.innerHTML = '<p style="text-align:center; color:#999;">暂无状态信息</p>';
                 statusOverlay.classList.add('visible');
+                if (window.applyStatusManageBtnPosition) window.applyStatusManageBtnPosition();
                 return;
             }
 
@@ -109,6 +133,7 @@ function setupChatRoom() {
             });
 
             statusOverlay.classList.add('visible');
+            if (window.applyStatusManageBtnPosition) window.applyStatusManageBtnPosition();
         });
     }
 
@@ -134,12 +159,10 @@ function setupChatRoom() {
         });
     }
 
-    // 状态栏管理按钮 - 进入多选模式
+    // 状态栏管理按钮 - 可拖动定位，点击进入多选模式
     const statusManageBtn = document.getElementById('status-manage-btn');
-    if (statusManageBtn) {
-        statusManageBtn.addEventListener('click', () => {
-            enterStatusMultiSelect();
-        });
+    if (statusManageBtn && statusOverlay) {
+        initStatusManageBtnDrag(statusManageBtn, statusOverlay);
     }
 
     // 状态栏多选 - 全选
@@ -285,8 +308,35 @@ function setupChatRoom() {
         }
     });
 
-    getReplyBtn.addEventListener('click', () => getAiReply(currentChatId, currentChatType));
-    regenerateBtn.addEventListener('click', handleRegenerate);
+    const aiModeToggleBtn = document.getElementById('ai-mode-toggle-btn');
+    if (aiModeToggleBtn) {
+        function syncAiModeButtonLabel() {
+            aiModeToggleBtn.textContent = getAiChatModeTitle();
+            aiModeToggleBtn.title = '当前：' + getAiChatModeTitle() + '，点击切换';
+        }
+        syncAiModeButtonLabel();
+        aiModeToggleBtn.addEventListener('click', () => {
+            const next = getAiChatMode() === AI_MODE_ASSISTANT ? AI_MODE_COMPANION : AI_MODE_ASSISTANT;
+            setAiChatMode(next);
+            updateChatTitleByAiMode();
+            syncAiModeButtonLabel();
+        });
+    }
+
+    getReplyBtn.addEventListener('click', async () => {
+        // 点击获取回复时激活音频上下文
+        if (typeof MinimaxTTSService !== 'undefined') {
+            await MinimaxTTSService.activateAudioContext();
+        }
+        getAiReply(currentChatId, currentChatType);
+    });
+    regenerateBtn.addEventListener('click', async () => {
+        // 点击重新生成时激活音频上下文
+        if (typeof MinimaxTTSService !== 'undefined') {
+            await MinimaxTTSService.activateAudioContext();
+        }
+        handleRegenerate();
+    });
 
     const abortReplyBtn = document.getElementById('abort-reply-btn');
     if (abortReplyBtn) {
@@ -297,7 +347,7 @@ function setupChatRoom() {
         });
     }
     
-    messageArea.addEventListener('click', (e) => {
+    messageArea.addEventListener('click', async (e) => {
         if (isDebugMode) {
             const messageWrapper = e.target.closest('.message-wrapper');
             if (messageWrapper) {
@@ -325,10 +375,17 @@ function setupChatRoom() {
             if (voiceBubble) {
                 const wrapper = voiceBubble.closest('.message-wrapper');
                 const transcript = wrapper ? wrapper.querySelector('.voice-transcript') : null;
+                const voiceTranslation = wrapper ? wrapper.querySelector('.voice-translation') : null;
                 if (transcript) {
                     transcript.classList.toggle('active');
+                    if (voiceTranslation) voiceTranslation.classList.toggle('active');
                     const voiceText = transcript.textContent.trim();
                     if (!voiceText) return;
+
+                    // 点击语音气泡时激活音频上下文
+                    if (typeof MinimaxTTSService !== 'undefined') {
+                        await MinimaxTTSService.activateAudioContext();
+                    }
 
                     const playKey = wrapper ? wrapper.dataset.id : null;
                     const svc = typeof MinimaxTTSService !== 'undefined' ? MinimaxTTSService : null;
@@ -439,6 +496,16 @@ function setupChatRoom() {
                     }
                 }
             }
+
+            const familyCardAcceptBtn = e.target.closest('.family-card-accept');
+            const familyCardReturnBtn = e.target.closest('.family-card-return');
+            if (familyCardAcceptBtn || familyCardReturnBtn) {
+                const btn = familyCardAcceptBtn || familyCardReturnBtn;
+                const msgId = btn.getAttribute('data-msg-id');
+                if (msgId && typeof sendFamilyCardResponse === 'function') {
+                    sendFamilyCardResponse(msgId, familyCardAcceptBtn ? 'accept' : 'return');
+                }
+            }
         }
     });
 
@@ -494,6 +561,26 @@ function setupChatRoom() {
         cancelEditModalBtn.addEventListener('click', cancelMessageEdit);
     }
 
+    const insertMessageBelowBtn = document.getElementById('insert-message-below-btn');
+    if(insertMessageBelowBtn) {
+        insertMessageBelowBtn.addEventListener('click', insertMessageBelow);
+    }
+
+    const insertMessageForm = document.getElementById('insert-message-form');
+    if(insertMessageForm) {
+        insertMessageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await confirmInsertMessage();
+        });
+    }
+
+    const cancelInsertModalBtn = document.getElementById('cancel-insert-modal-btn');
+    if(cancelInsertModalBtn) {
+        cancelInsertModalBtn.addEventListener('click', () => {
+            document.getElementById('insert-message-modal').classList.remove('visible');
+        });
+    }
+
     const hideTimestampBtn = document.getElementById('hide-timestamp-btn');
     if (hideTimestampBtn) {
         hideTimestampBtn.addEventListener('click', () => {
@@ -528,6 +615,8 @@ function setupChatRoom() {
     document.getElementById('delete-selected-btn').addEventListener('click', deleteSelectedMessages);
     const favoriteSelectedBtn = document.getElementById('favorite-selected-btn');
     if (favoriteSelectedBtn) favoriteSelectedBtn.addEventListener('click', () => { if (typeof addFavoritesFromSelection === 'function') addFavoritesFromSelection(); });
+    const favoriteMergeBtn = document.getElementById('favorite-merge-btn');
+    if (favoriteMergeBtn) favoriteMergeBtn.addEventListener('click', () => { if (typeof addFavoritesFromSelectionMerged === 'function') addFavoritesFromSelectionMerged(); });
     document.getElementById('generate-capture-btn').addEventListener('click', generateCapture);
     document.getElementById('close-capture-modal-btn').addEventListener('click', () => {
         document.getElementById('capture-result-modal').classList.remove('visible');
@@ -557,7 +646,7 @@ function openChatRoom(chatId, type) {
     }
     exitMultiSelectMode();
     cancelMessageEdit();
-    chatRoomTitle.textContent = (type === 'private') ? chat.remarkName : chat.name;
+    updateChatTitleByAiMode();
     const subtitle = document.getElementById('chat-room-subtitle');
     if (type === 'private') {
         subtitle.style.display = (chat.showStatus !== false) ? 'flex' : 'none';
@@ -645,6 +734,12 @@ function openChatRoom(chatId, type) {
     renderMessages(false, true);
     switchScreen('chat-room-screen');
 
+    // 角色拉黑用户时的输入区覆盖层：仅根据当前角色状态显示，不修改输入框，避免跨角色污染
+    var charBlockedOverlay = document.getElementById('char-blocked-overlay');
+    if (charBlockedOverlay) {
+        charBlockedOverlay.style.display = (type === 'private' && chat.isBlockedByChar) ? 'flex' : 'none';
+    }
+
     if (window._searchScrollToMessageId) {
         const messageId = window._searchScrollToMessageId;
         window._searchScrollToMessageId = null;
@@ -672,6 +767,12 @@ function openChatRoom(chatId, type) {
 async function sendMessage() {
     const text = messageInput.value.trim();
     if (!text || isGenerating) return;
+    
+    // 发送消息时激活音频上下文（因为AI可能会自动回复并播放TTS）
+    if (typeof MinimaxTTSService !== 'undefined') {
+        MinimaxTTSService.activateAudioContext().catch(() => {}); // 不阻塞发送流程
+    }
+    
     messageInput.value = '';
     const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
 
@@ -744,8 +845,14 @@ async function sendMessage() {
     if (currentChatType === 'group') {
         message.senderId = 'user_me';
     }
+    if (currentChatType === 'private' && chat.isBlocked) {
+        message.sentWhileBlocked = true;
+    }
     chat.history.push(message);
     addMessageBubble(message, currentChatId, currentChatType);
+    if (db.globalMessageSentSound && typeof playSound === 'function') {
+        playSound(db.globalMessageSentSound);
+    }
     triggerHapticFeedback('success');
 
     if (chat.history.length > 0 && chat.history.length % 300 === 0) {
@@ -765,6 +872,125 @@ function promptForBackupIfNeeded(triggerType) {
     if (triggerType === 'history_milestone') {
         showToast('uwu提醒您：记得备份噢');
     }
+}
+
+// --- 状态栏管理按钮可拖动（移动端/电脑端通用，位置持久化）---
+
+function initStatusManageBtnDrag(btn, overlay) {
+    const STORAGE_KEY = 'statusManageBtnPosition';
+    const BTN_SIZE = 38;
+    const DRAG_THRESHOLD = 5;
+
+    function getOverlayRect() { return overlay.getBoundingClientRect(); }
+
+    function applyPosition(pct) {
+        btn.style.left = pct.leftPct + '%';
+        btn.style.top = pct.topPct + '%';
+        btn.style.right = '';
+    }
+
+    function clampToOverlay(leftPct, topPct) {
+        const r = getOverlayRect();
+        if (r.width <= 0 || r.height <= 0) return { leftPct, topPct };
+        const leftPx = (leftPct / 100) * r.width;
+        const topPx = (topPct / 100) * r.height;
+        const clampedLeftPx = Math.max(0, Math.min(r.width - BTN_SIZE, leftPx));
+        const clampedTopPx = Math.max(0, Math.min(r.height - BTN_SIZE, topPx));
+        return {
+            leftPct: (clampedLeftPx / r.width) * 100,
+            topPct: (clampedTopPx / r.height) * 100
+        };
+    }
+
+    function getCurrentPosition() {
+        const r = getOverlayRect();
+        if (r.width <= 0 || r.height <= 0) return null;
+        const leftVal = btn.style.left;
+        const topVal = btn.style.top;
+        if (leftVal && topVal) {
+            return { leftPct: parseFloat(leftVal), topPct: parseFloat(topVal) };
+        }
+        const br = btn.getBoundingClientRect();
+        return {
+            leftPct: ((br.left - r.left) / r.width) * 100,
+            topPct: ((br.top - r.top) / r.height) * 100
+        };
+    }
+
+    function loadSavedPosition() {
+        const r = getOverlayRect();
+        if (r.width <= 0 || r.height <= 0) return;
+        try {
+            const s = localStorage.getItem(STORAGE_KEY);
+            if (s) {
+                const p = JSON.parse(s);
+                const clamped = clampToOverlay(p.leftPct, p.topPct);
+                applyPosition(clamped);
+                return;
+            }
+        } catch (_) {}
+        // 无保存位置时不写 inline，保留 CSS 默认 right/top
+    }
+
+    window.applyStatusManageBtnPosition = loadSavedPosition;
+
+    let startX = 0, startY = 0, startLeftPct = 0, startTopPct = 0, isDrag = false;
+
+    function onMove(e) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (!isDrag && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+            isDrag = true;
+            btn.classList.add('status-manage-btn-dragging');
+        }
+        if (!isDrag) return;
+        e.preventDefault();
+        const r = getOverlayRect();
+        if (r.width <= 0 || r.height <= 0) return;
+        const curLeftPx = (startLeftPct / 100) * r.width + dx;
+        const curTopPx = (startTopPct / 100) * r.height + dy;
+        const leftPct = (curLeftPx / r.width) * 100;
+        const topPct = (curTopPx / r.height) * 100;
+        const clamped = clampToOverlay(leftPct, topPct);
+        applyPosition(clamped);
+    }
+
+    function onUp(e) {
+        btn.releasePointerCapture(e.pointerId);
+        btn.removeEventListener('pointermove', onMove);
+        btn.removeEventListener('pointerup', onUp);
+        btn.removeEventListener('pointercancel', onUp);
+        btn.removeEventListener('pointerleave', onUp);
+        btn.classList.remove('status-manage-btn-dragging');
+        if (isDrag) {
+            try {
+                const leftPct = parseFloat(btn.style.left);
+                const topPct = parseFloat(btn.style.top);
+                if (!isNaN(leftPct) && !isNaN(topPct)) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ leftPct, topPct }));
+                }
+            } catch (_) {}
+        } else {
+            enterStatusMultiSelect();
+        }
+    }
+
+    btn.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        e.preventDefault();
+        const cur = getCurrentPosition();
+        if (!cur) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeftPct = cur.leftPct;
+        startTopPct = cur.topPct;
+        isDrag = false;
+        btn.setPointerCapture(e.pointerId);
+        btn.addEventListener('pointermove', onMove);
+        btn.addEventListener('pointerup', onUp);
+        btn.addEventListener('pointercancel', onUp);
+        btn.addEventListener('pointerleave', onUp);
+    });
 }
 
 // --- 状态栏多选删除功能 ---

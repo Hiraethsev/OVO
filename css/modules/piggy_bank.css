@@ -237,3 +237,183 @@
     outline: none;
     border-color: var(--primary-color, #007aff);
 }
+
+/* 亲属卡入口 */
+.family-card-entry {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.family-card-entry:hover {
+    background-color: #f9f9f9;
+}
+.family-card-entry-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+.family-card-entry-arrow {
+    font-size: 18px;
+    color: #999;
+}
+.family-card-entry-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.family-card-entry-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+.family-card-scroll-list {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
+}
+.family-card-scroll-list::-webkit-scrollbar {
+    height: 4px;
+}
+.family-card-mini {
+    flex-shrink: 0;
+    width: 160px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    cursor: pointer;
+    border: 1px solid rgba(0,0,0,0.06);
+    position: relative;
+}
+.family-card-mini .mini-card-face {
+    padding: 14px 12px;
+    color: #fff;
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.family-card-mini .mini-card-bank {
+    font-size: 12px;
+    opacity: 0.9;
+}
+.family-card-mini .mini-card-type {
+    font-size: 11px;
+    opacity: 0.8;
+}
+.family-card-mini .mini-card-number {
+    font-size: 11px;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    font-family: "Courier New", monospace;
+}
+.family-card-mini .mini-card-balance {
+    font-size: 15px;
+    font-weight: 600;
+}
+.family-card-mini .mini-card-status-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.3);
+}
+.family-card-mini.frozen .mini-card-status-badge,
+.family-card-mini.revoked .mini-card-status-badge {
+    background: rgba(0,0,0,0.5);
+}
+
+/* 创建后选择角色 */
+.family-card-send-hint {
+    font-size: 13px;
+    color: #666;
+    margin: 0 0 12px 0;
+}
+.family-card-char-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+.family-card-char-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    font-size: 15px;
+    color: #333;
+}
+.family-card-char-item:hover {
+    background: #f5f5f5;
+}
+.family-card-char-item.disabled {
+    color: #999;
+    cursor: default;
+}
+
+/* 亲属卡详情 */
+.family-card-detail-content {
+    padding: 16px;
+    overflow-y: auto;
+}
+.family-card-detail-face {
+    padding: 20px;
+    border-radius: 12px;
+    color: #fff;
+    margin-bottom: 16px;
+}
+.family-card-detail-bank {
+    font-size: 14px;
+    opacity: 0.9;
+    margin-bottom: 8px;
+}
+.family-card-detail-limit {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+.family-card-detail-number {
+    font-size: 12px;
+    opacity: 0.7;
+    letter-spacing: 2px;
+    font-family: "Courier New", monospace;
+}
+.family-card-detail-holder {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 8px;
+}
+.family-card-detail-info {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #555;
+}
+.family-card-detail-info p {
+    margin: 6px 0;
+}
+.family-card-detail-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.family-card-detail-transactions h4 {
+    font-size: 14px;
+    color: #333;
+    margin: 0 0 10px 0;
+}

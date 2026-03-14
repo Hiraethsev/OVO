@@ -872,8 +872,18 @@ function openCartDeliveryModal() {
     
     // 重置选择
     document.querySelectorAll('.delivery-option-card').forEach(el => el.classList.remove('active'));
-    document.querySelector('.delivery-option-card[data-type="timed"]').classList.add('active'); 
-    
+    document.querySelector('.delivery-option-card[data-type="timed"]').classList.add('active');
+    const shopPayList = document.getElementById('shop-payment-methods');
+    if (shopPayList) {
+        const balance = typeof getPiggyBalance === 'function' ? getPiggyBalance() : 520;
+        let html = '<label class="payment-method-item"><input type="radio" name="shop-pay-method" value="balance" checked><span class="pm-name">余额</span><span class="pm-balance">' + balance + '</span></label>';
+        const received = (db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards.filter(c => c.status === 'active') : [];
+        received.forEach(c => {
+            const remaining = Math.max(0, c.limit - (c.usedAmount || 0));
+            html += '<label class="payment-method-item"><input type="radio" name="shop-pay-method" value="' + c.id + '"><span class="pm-name">' + (c.fromCharName || '') + '的亲属卡</span><span class="pm-balance">剩余 ' + remaining + '</span></label>';
+        });
+        shopPayList.innerHTML = html;
+    }
     modal.classList.add('visible');
 }
 
@@ -910,8 +920,19 @@ function confirmPurchase() {
     // 生成商品列表字符串: 商品名x数量
     const itemsStr = shopState.cart.map(entry => `${entry.item.name} x${entry.quantity}`).join(', ');
 
-    // 非代付时从用户存钱罐扣款并记账
+    const shopPayRadio = document.querySelector('input[name="shop-pay-method"]:checked');
+    const shopPayMethod = shopPayRadio ? shopPayRadio.value : 'balance';
     if (deliveryType !== 'pay-for-me') {
+        if (shopPayMethod !== 'balance' && db.piggyBank && db.piggyBank.receivedFamilyCards) {
+            const card = db.piggyBank.receivedFamilyCards.find(c => c.id === shopPayMethod);
+            if (card && card.status === 'active') {
+                const remaining = card.limit - (card.usedAmount || 0);
+                if (remaining < totalPrice) {
+                    if (typeof showToast === 'function') showToast('亲属卡额度不足');
+                    return;
+                }
+            }
+        }
         if (typeof getPiggyBalance === 'function' && getPiggyBalance() < totalPrice) {
             if (typeof showToast === 'function') showToast('存钱罐余额不足，无法下单');
             return;
@@ -924,6 +945,14 @@ function confirmPurchase() {
                 source: '商城',
                 charName: realName || ''
             });
+        }
+        if (shopPayMethod !== 'balance' && db.piggyBank && db.piggyBank.receivedFamilyCards) {
+            const card = db.piggyBank.receivedFamilyCards.find(c => c.id === shopPayMethod);
+            if (card) {
+                card.usedAmount = (card.usedAmount || 0) + totalPrice;
+                if (!card.transactions) card.transactions = [];
+                card.transactions.unshift({ id: 'rfct_' + Date.now(), amount: totalPrice, scene: '商城', detail: itemsStr, targetName: realName || '', time: Date.now() });
+            }
         }
     }
 

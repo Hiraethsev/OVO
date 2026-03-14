@@ -219,7 +219,12 @@ const VideoCallModule = {
         // 绑定说话按钮 -> 显示输入框
         const actionVoiceBtn = document.getElementById('vc-action-voice-btn');
         if (actionVoiceBtn) {
-            actionVoiceBtn.addEventListener('click', () => {
+            actionVoiceBtn.addEventListener('click', async () => {
+                // 点击说话按钮时激活音频上下文
+                if (typeof MinimaxTTSService !== 'undefined') {
+                    await MinimaxTTSService.activateAudioContext();
+                }
+                
                 const overlay = document.getElementById('vc-input-overlay');
                 const input = document.getElementById('vc-input-text');
                 const chatArea = document.getElementById('vc-chat-container');
@@ -584,8 +589,14 @@ const VideoCallModule = {
         }
     },
 
-    acceptCall: function() {
+    acceptCall: async function() {
         this.stopRingSound();
+        
+        // 接听来电时激活音频上下文
+        if (typeof MinimaxTTSService !== 'undefined') {
+            await MinimaxTTSService.activateAudioContext();
+        }
+        
         const modal = document.getElementById('vc-incoming-modal');
         modal.classList.remove('visible');
         setTimeout(() => {
@@ -638,6 +649,12 @@ const VideoCallModule = {
 
     startCall: async function(type, isIncoming = false, chatObject = null) {
         this.hideCallTypeModal();
+        
+        // 在用户交互时立即激活音频上下文，确保后续TTS能自动播放
+        if (typeof MinimaxTTSService !== 'undefined') {
+            await MinimaxTTSService.activateAudioContext();
+        }
+        
         this.state.callType = type;
         this.state.isCallActive = true;
         this.state.hasEnteredCallScene = false;
@@ -1061,6 +1078,10 @@ const VideoCallModule = {
                     // 添加点击事件
                     voiceElement.addEventListener('click', async (e) => {
                         e.stopPropagation();
+                        // 手动点击时也激活音频上下文
+                        if (typeof MinimaxTTSService !== 'undefined') {
+                            await MinimaxTTSService.activateAudioContext();
+                        }
                         await this.handleTTSClick(content);
                     });
                     
@@ -1215,6 +1236,11 @@ const VideoCallModule = {
             return;
         }
 
+        // 点击头像时激活音频上下文
+        if (typeof MinimaxTTSService !== 'undefined') {
+            await MinimaxTTSService.activateAudioContext();
+        }
+
         // 真实摄像头：点击头像触发时也截取一帧
         if (this.state.realCameraActive) {
             const frame = this.captureFrame();
@@ -1262,6 +1288,11 @@ const VideoCallModule = {
 
     sendUserAction: async function(text) {
         if (!text) return;
+
+        // 发送消息时激活音频上下文（因为AI可能会自动回复）
+        if (typeof MinimaxTTSService !== 'undefined') {
+            await MinimaxTTSService.activateAudioContext();
+        }
 
         // 真实摄像头：发送时截取一帧
         if (this.state.realCameraActive) {
@@ -1862,15 +1893,27 @@ const VideoCallModule = {
         } catch (err) {
             console.error('[VideoCall] TTS 播放失败:', err);
             
-            // 根据错误类型显示不同提示
-            if (err.message.includes('TTS 未配置')) {
-                showToast('请先在 API 设置中配置 TTS');
-            } else if (err.message.includes('API 请求失败')) {
-                showToast('TTS 服务请求失败，请检查配置');
-            } else if (err.message.includes('文本为空')) {
-                showToast('无可播放的内容');
-            } else {
-                showToast('播放失败，请重试');
+            // 如果是自动播放被浏览器拦截
+            if (fromAutoPlay && (err.name === 'NotAllowedError' || err.message.includes('play() request was interrupted'))) {
+                // 首次失败时给出提示
+                if (typeof MinimaxTTSService !== 'undefined' && !MinimaxTTSService.hasShownAutoplayTip) {
+                    MinimaxTTSService.hasShownAutoplayTip = true;
+                    showToast('浏览器阻止了自动播放，请点击消息手动播放，或在浏览器设置中允许本网站自动播放声音', 5000);
+                }
+                return; // 静默失败，不打断通话
+            }
+            
+            // 手动点击时才显示详细错误提示
+            if (!fromAutoPlay) {
+                if (err.message.includes('TTS 未配置')) {
+                    showToast('请先在 API 设置中配置 TTS');
+                } else if (err.message.includes('API 请求失败')) {
+                    showToast('TTS 服务请求失败，请检查配置');
+                } else if (err.message.includes('文本为空')) {
+                    showToast('无可播放的内容');
+                } else {
+                    showToast('播放失败，请重试');
+                }
             }
         }
     }

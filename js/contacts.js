@@ -887,30 +887,36 @@ async function saveCurrentPersona() {
 
     let syncCount = 0;
     if (p.bindings) {
-        Object.keys(p.bindings).forEach(charId => {
+        for (const charId of Object.keys(p.bindings)) {
             const char = db.characters.find(c => c.id === charId);
-            if (char) {
-                const binding = p.bindings[charId];
-                
-                char.myName = p.name;
-                char.myAvatar = p.avatar;
-                
-                let finalPersona = '';
-                if (binding.override) {
-                    finalPersona = binding.extraPersona || '';
-                } else {
-                    const base = p.persona || '';
-                    const extra = binding.extraPersona || '';
-                    finalPersona = base + (base && extra ? '\n' : '') + extra;
+            if (!char) continue;
+            const binding = p.bindings[charId];
+            char.myName = p.name;
+            if (p.avatar && p.avatar !== char.myAvatar && window.AvatarSystem && char.charSenseAvatarChangeEnabled) {
+                try {
+                    await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(char.id, char.myAvatar, p.avatar);
+                } catch (err) {
+                    console.warn('Avatar recognize/notify failed for char', charId, err);
                 }
-                char.myPersona = finalPersona;
-                
-                syncCount++;
             }
-        });
+            char.myAvatar = p.avatar;
+            let finalPersona = '';
+            if (binding.override) {
+                finalPersona = binding.extraPersona || '';
+            } else {
+                const base = p.persona || '';
+                const extra = binding.extraPersona || '';
+                finalPersona = base + (base && extra ? '\n' : '') + extra;
+            }
+            char.myPersona = finalPersona;
+            syncCount++;
+        }
     }
 
     await saveData();
-    renderMyProfile(); 
+    renderMyProfile();
+    if (typeof currentChatId !== 'undefined' && currentChatType === 'private' && p.bindings && p.bindings[currentChatId] && typeof renderMessages === 'function') {
+        renderMessages(false, true);
+    }
     showToast(`已保存并同步到 ${syncCount} 个角色`);
 }

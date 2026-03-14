@@ -502,6 +502,16 @@ function filterHistoryForAI(chat, historySlice, ignoreContextDisabled = false) {
         filteredHistory = filteredHistory.filter(m => !m.isContextDisabled);
     }
 
+    // 头像操作消息：转换为 system 格式供 AI 理解
+    filteredHistory.forEach(msg => {
+        if (msg.isAvatarAction && msg.content) {
+            const actionMatch = msg.content.match(/^\[avatar-action:([\s\S]+?)\]$/);
+            if (actionMatch) {
+                msg.content = `[system: 头像操作记录 - ${actionMatch[1]}]`;
+            }
+        }
+    });
+
     // 【三重保险】强制清洗所有消息内容中的 <thinking> 标签块
     // 防止思维链内容意外混入普通消息中
     filteredHistory.forEach(msg => {

@@ -131,6 +131,9 @@ const TTSSettings = {
                 return;
             }
 
+            // 测试按钮点击时激活音频上下文
+            await MinimaxTTSService.activateAudioContext();
+
             showToast('🔊 正在测试 TTS...');
 
             const testText = '你好，这是一个语音合成测试。Hello, this is a text-to-speech test.';

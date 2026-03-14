@@ -433,9 +433,29 @@ function showTheaterScenarioDetail(scenario) {
         }
     }
 
+    // 获取字号设置，默认15px
+    const fontSize = (db.theaterFontSize !== undefined) ? db.theaterFontSize : 15;
+    // 获取字体预设设置
+    const fontPresetName = db.theaterFontPreset || null;
+    
     const contentDisplay = isEditing 
-        ? `<textarea id="theater-edit-content" class="theater-edit-textarea">${DOMPurify.sanitize(scenario.content)}</textarea>`
-        : `<div class="theater-detail-body">${renderTheaterMarkdown(displayContent)}</div>`;
+        ? `<textarea id="theater-edit-content" class="theater-edit-textarea">${DOMPurify.sanitize(scenario.content)}</textarea>
+           <div class="theater-edit-controls" style="margin-top: 15px; padding: 15px; background: rgba(255, 255, 255, 0.9); border-radius: 12px; border: 0.5px solid rgba(0, 0, 0, 0.06);">
+               <div class="theater-action-row-font-size">
+                   <label class="theater-font-size-label">字号：</label>
+                   <input type="range" id="theater-edit-font-size-slider" class="theater-font-size-slider" min="10" max="24" value="${fontSize}" step="1">
+                   <span id="theater-edit-font-size-value" class="theater-font-size-value">${fontSize}px</span>
+                   <button id="theater-edit-save-font-size-btn" class="theater-action-btn theater-save-font-size-btn">保存字号</button>
+               </div>
+               <div class="theater-action-row-font-preset" style="margin-top: 12px;">
+                   <label class="theater-font-size-label">字体预设：</label>
+                   <select id="theater-edit-font-preset-select" class="theater-font-preset-select">
+                       <option value="">— 选择字体预设 —</option>
+                   </select>
+                   <button id="theater-edit-apply-font-preset-btn" class="theater-action-btn theater-save-font-size-btn">应用字体</button>
+               </div>
+           </div>`
+        : `<div class="theater-detail-body" style="font-size: ${fontSize}px;" id="theater-detail-body-content">${renderTheaterMarkdown(displayContent)}</div>`;
     
     // 构建元信息显示
     let metaInfo = `<span class="theater-detail-badge">${DOMPurify.sanitize(category)}</span>`;
@@ -493,6 +513,117 @@ function showTheaterScenarioDetail(scenario) {
     
     // 保存编辑状态到scenario对象
     scenario.isEditing = isEditing;
+    
+    // 应用字体预设到详情页内容（非编辑状态）
+    if (!isEditing && fontPresetName) {
+        const presets = (typeof _getFontPresets === 'function') ? _getFontPresets() : (db.fontPresets || []);
+        const preset = presets.find(p => p.name === fontPresetName);
+        if (preset) {
+            setTimeout(() => {
+                const detailBody = document.getElementById('theater-detail-body-content');
+                if (detailBody) {
+                    applyTheaterFontPresetToElement(detailBody, preset);
+                }
+            }, 100);
+        }
+    }
+    
+    // 如果是编辑状态，初始化编辑区域的字号和字体预设控件
+    if (isEditing) {
+        // 初始化字号滑块（编辑模式）
+        const editFontSizeSlider = document.getElementById('theater-edit-font-size-slider');
+        const editFontSizeValue = document.getElementById('theater-edit-font-size-value');
+        if (editFontSizeSlider && editFontSizeValue) {
+            editFontSizeSlider.value = fontSize;
+            editFontSizeValue.textContent = fontSize + 'px';
+            
+            // 监听滑块变化
+            editFontSizeSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value, 10);
+                editFontSizeValue.textContent = value + 'px';
+                // 实时应用到编辑框
+                const textarea = document.getElementById('theater-edit-content');
+                if (textarea) {
+                    textarea.style.fontSize = value + 'px';
+                }
+            });
+        }
+        
+        // 初始化字体预设选择器（编辑模式）
+        const editFontPresetSelect = document.getElementById('theater-edit-font-preset-select');
+        if (editFontPresetSelect) {
+            const presets = (typeof _getFontPresets === 'function') ? _getFontPresets() : (db.fontPresets || []);
+            editFontPresetSelect.innerHTML = '<option value="">— 选择字体预设 —</option>';
+            presets.forEach(preset => {
+                const option = document.createElement('option');
+                option.value = preset.name;
+                option.textContent = preset.name;
+                if (fontPresetName && preset.name === fontPresetName) {
+                    option.selected = true;
+                }
+                editFontPresetSelect.appendChild(option);
+            });
+            
+            // 如果已有保存的字体预设，应用到编辑框
+            if (fontPresetName) {
+                const preset = presets.find(p => p.name === fontPresetName);
+                if (preset) {
+                    const textarea = document.getElementById('theater-edit-content');
+                    if (textarea) {
+                        applyTheaterFontPresetToElement(textarea, preset);
+                    }
+                }
+            }
+        }
+        
+        // 绑定应用字体预设按钮（编辑模式）
+        const editApplyFontPresetBtn = document.getElementById('theater-edit-apply-font-preset-btn');
+        if (editApplyFontPresetBtn) {
+            editApplyFontPresetBtn.addEventListener('click', async () => {
+                const select = document.getElementById('theater-edit-font-preset-select');
+                if (!select || !select.value) {
+                    showToast('请选择一个字体预设');
+                    return;
+                }
+                const presetName = select.value;
+                const presets = (typeof _getFontPresets === 'function') ? _getFontPresets() : (db.fontPresets || []);
+                const preset = presets.find(p => p.name === presetName);
+                if (!preset) {
+                    showToast('未找到该字体预设');
+                    return;
+                }
+                
+                // 保存字体预设到数据库
+                db.theaterFontPreset = presetName;
+                await saveData();
+                
+                // 应用到当前编辑框
+                const textarea = document.getElementById('theater-edit-content');
+                if (textarea) {
+                    applyTheaterFontPresetToElement(textarea, preset);
+                }
+                
+                showToast(`字体预设「${presetName}」已保存并应用到全部纯文字小剧场`);
+            });
+        }
+        
+        // 绑定保存字号按钮（编辑模式）
+        const editSaveFontSizeBtn = document.getElementById('theater-edit-save-font-size-btn');
+        if (editSaveFontSizeBtn) {
+            editSaveFontSizeBtn.addEventListener('click', async () => {
+                const slider = document.getElementById('theater-edit-font-size-slider');
+                if (!slider) return;
+                const fontSize = parseInt(slider.value, 10);
+                if (isNaN(fontSize) || fontSize < 10 || fontSize > 24) {
+                    showToast('字号必须在10-24之间');
+                    return;
+                }
+                db.theaterFontSize = fontSize;
+                await saveData();
+                showToast('字号已保存并应用到全部小剧场');
+            });
+        }
+    }
     
     // 绑定编辑标题按钮
     const editTitleBtn = document.getElementById('theater-edit-title-btn');
@@ -789,7 +920,8 @@ function populateTheaterForm() {
             const subKeys = [
                 { key: 'summaryApiPresets', label: '总结API' },
                 { key: 'backgroundApiPresets', label: '后台API' },
-                { key: 'supplementPersonaApiPresets', label: '补齐人设API' }
+                { key: 'supplementPersonaApiPresets', label: '补齐人设API' },
+                { key: 'peekApiPresets', label: '偷看手机API' }
             ];
             subKeys.forEach(({ key, label }) => {
                 const presets = db[key] || [];
@@ -1656,6 +1788,44 @@ async function editScenarioCategory() {
     renderTheaterScenarios();
 }
 
+// 应用字体预设到指定元素
+function applyTheaterFontPresetToElement(element, preset) {
+    if (!element || !preset) return;
+    
+    // 创建或更新字体样式
+    const styleId = 'theater-font-preset-style';
+    let styleElement = document.getElementById(styleId);
+    if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = styleId;
+        document.head.appendChild(styleElement);
+    }
+    
+    if (preset.url) {
+        const fontName = 'TheaterCustomFont_' + preset.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+        const elementId = element.id || 'theater-content-element';
+        styleElement.innerHTML = `
+            @font-face {
+                font-family: '${fontName}';
+                src: url('${preset.url}');
+            }
+            #${elementId},
+            .theater-detail-body {
+                font-family: '${fontName}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+            }
+        `;
+    } else {
+        // 如果没有字体URL，恢复默认字体
+        const elementId = element.id || 'theater-content-element';
+        styleElement.innerHTML = `
+            #${elementId},
+            .theater-detail-body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+            }
+        `;
+    }
+}
+
 // 保存提示词为预设（模式隔离）
 async function saveTheaterPromptPreset() {
     const promptInput = document.getElementById('theater-custom-prompt');
@@ -2088,6 +2258,7 @@ function showTheaterHtmlScenarioDetail(scenario) {
 
             // 检查内容中是否已包含 <body> 标签；如果已有则直接用，否则包一层
             const hasBodyTag = /<body[\s>]/i.test(htmlForIframe);
+            const bodyStyle = `margin:0;padding:12px;box-sizing:border-box;`;
             const wrapped = hasBodyTag
                 ? `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>${htmlForIframe}${autoHeightScript}</html>`
                 : `<!DOCTYPE html>
@@ -2096,7 +2267,7 @@ function showTheaterHtmlScenarioDetail(scenario) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 </head>
-<body style="margin:0;padding:12px;box-sizing:border-box;">
+<body style="${bodyStyle}">
 ${htmlForIframe || ''}
 ${autoHeightScript}
 </body>
@@ -2636,6 +2807,7 @@ function setupTheaterSystem() {
         exportBtn.addEventListener('click', exportTheaterScenario);
     }
 
+    // 字号调节功能
     // 列表页：多选删除
     const batchDeleteBtn = document.getElementById('theater-batch-delete-btn');
     if (batchDeleteBtn) {
@@ -2787,7 +2959,8 @@ function setupTheaterSystem() {
         const subKeys = [
             { key: 'summaryApiPresets', label: '总结API' },
             { key: 'backgroundApiPresets', label: '后台API' },
-            { key: 'supplementPersonaApiPresets', label: '补齐人设API' }
+            { key: 'supplementPersonaApiPresets', label: '补齐人设API' },
+            { key: 'peekApiPresets', label: '偷看手机API' }
         ];
         subKeys.forEach(({ key, label }) => {
             const presets = db[key] || [];

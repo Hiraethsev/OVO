@@ -40,6 +40,7 @@
     <link rel="stylesheet" href="css/modules/theater.css">
     <link rel="stylesheet" href="css/modules/worldbook.css">
     <link rel="stylesheet" href="css/modules/journal.css">
+    <link rel="stylesheet" href="css/modules/reminder.css">
     <link rel="stylesheet" href="css/modules/piggy_bank.css">
     <link rel="stylesheet" href="css/modules/steps.css">
     <link rel="stylesheet" href="css/modules/more.css">
@@ -53,6 +54,7 @@
     <link rel="stylesheet" href="css/modules/favorites.css">
     <link rel="stylesheet" href="css/modules/music_player.css">
     <link rel="stylesheet" href="css/modules/appearance_settings.css">
+    <link rel="stylesheet" href="css/modules/avatar_recognition.css">
 
     <!-- Other Styles -->
     <link rel="stylesheet" href="contacts.css">
@@ -61,6 +63,41 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
+        /* 角色拉黑用户时输入区覆盖层（不修改输入框，避免跨角色污染） */
+        #chat-room-screen { position: relative; }
+        .char-blocked-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            min-height: 56px;
+            z-index: 8;
+            background: var(--bg-color, #f5f5f5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-top: 1px solid rgba(0,0,0,0.06);
+        }
+        .char-blocked-overlay-hint {
+            margin: 0;
+            font-size: 13px;
+            color: #666;
+        }
+        .char-blocked-overlay-btns {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .chat-item-blocked-by-char-badge {
+            font-size: 11px;
+            color: #8e6bbf;
+            margin-left: 4px;
+        }
+
         /* 仅「导入文档」进入创建时：弹窗限高 + 滚动条 */
         #add-char-modal.import-mode .modal-window {
             max-height: 70vh;
@@ -491,6 +528,7 @@
                             <img src="https://i.postimg.cc/prRC31Gk/retouch-2025110902080890.png" alt="表情">
                         </button>
                     </div>
+                    <button id="ai-mode-toggle-btn" class="icon-btn circle-bg" type="button" title="切换 AI 助手 / AI 伙伴">AI 助手</button>
                     <button id="get-reply-btn" class="icon-btn">
                         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <circle cx="12" cy="12" r="12" fill="#F0F0F0" />
@@ -510,6 +548,14 @@
                             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                         </svg>
                     </button>
+                </div>
+            </div>
+            <!-- 角色拉黑用户时的输入区覆盖层（不修改输入框本身，避免跨角色污染） -->
+            <div id="char-blocked-overlay" class="char-blocked-overlay" style="display: none;">
+                <p class="char-blocked-overlay-hint">对方已将你拉黑</p>
+                <div class="char-blocked-overlay-btns">
+                    <button type="button" class="btn btn-neutral btn-small" id="char-blocked-say-btn">让TA说说</button>
+                    <button type="button" class="btn btn-primary btn-small" id="char-blocked-friend-request-btn">发送好友申请</button>
                 </div>
             </div>
 
@@ -660,6 +706,14 @@
                             </div>
                             <span class="expansion-item-name">直接拍照</span>
                         </div>
+                        <div class="expansion-item" id="reminder-btn">
+                            <div class="expansion-item-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+                                </svg>
+                            </div>
+                            <span class="expansion-item-name">提醒</span>
+                        </div>
                     </div>
                 </div>
 
@@ -700,6 +754,7 @@
             <div id="multi-select-bar"><span id="select-count">已选择 0 项</span>
                 <button class="btn btn-danger" id="delete-selected-btn" style="width: auto; padding: 8px 16px;">删除已选</button>
                 <button class="btn btn-primary" id="favorite-selected-btn" style="display: none; width: auto; padding: 8px 16px;">收藏选中</button>
+                <button class="btn btn-primary" id="favorite-merge-btn" style="display: none; width: auto; padding: 8px 16px;" title="将选中的多条消息合并为一条收藏">合并为一条</button>
             </div>
             <div id="capture-mode-bar">
                 <span id="capture-select-count">已选择 0 项</span>
@@ -707,6 +762,336 @@
                     style="width: auto; padding: 8px 16px;">生成截图</button>
             </div>
         </div> <!-- 这里是 chat-room-screen 的结束标签 -->
+
+        <!-- 提醒事项屏幕 -->
+        <div id="reminder-screen" class="screen">
+            <header class="app-header">
+                <button class="back-btn" data-target="chat-room-screen">‹</button>
+                <div class="title-container">
+                    <h1 class="title">提醒事项</h1>
+                </div>
+                <div class="placeholder"></div>
+            </header>
+            <main class="content reminder-content-wrapper">
+                <!-- 1. 紧凑型滑动日历 -->
+                <div class="compact-calendar">
+                    <div class="calendar-header-mini">
+                        <button class="cal-nav-btn" id="reminder-cal-prev">
+                            <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                        </button>
+                        <div class="month-title-wrapper" style="position: relative; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                            <span class="month-title" id="reminder-month-title"></span>
+                            <input type="month" id="reminder-month-picker" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; padding: 0; margin: 0; border: none;">
+                        </div>
+                        <button class="cal-nav-btn" id="reminder-cal-next">
+                            <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                        </button>
+                    </div>
+                    <div class="calendar-strip" id="reminder-calendar-days"></div>
+                </div>
+
+                <!-- 2. 角色/用户 分类切换 -->
+                <div class="reminder-tabs" id="reminder-tabs">
+                    <div class="reminder-tab-indicator" id="reminder-tab-indicator"></div>
+                    <div class="reminder-tab active" data-tab="char">角色提醒</div>
+                    <div class="reminder-tab" data-tab="user">我的提醒</div>
+                </div>
+
+                <!-- 3. 卡片瀑布流列表 -->
+                <div class="reminder-list-area" id="reminder-list-area">
+                    <div class="reminder-empty">今天暂无提醒事项</div>
+                </div>
+
+                <!-- 4. 渐变悬浮新建按钮 -->
+                <button class="reminder-fab" id="reminder-add-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                </button>
+            </main>
+        </div>
+
+        <!-- 新建提醒模态框 -->
+        <div id="reminder-form-modal" class="modal-overlay">
+            <div class="reminder-form-sheet">
+                <h3 id="reminder-form-title">新建提醒</h3>
+                <div class="reminder-form-group">
+                    <label>内容</label>
+                    <input type="text" id="reminder-input-title" placeholder="提醒内容..." maxlength="100">
+                </div>
+                <div class="reminder-form-group">
+                    <label>日期</label>
+                    <input type="date" id="reminder-input-date">
+                </div>
+                <div class="reminder-form-group">
+                    <label>时间</label>
+                    <input type="time" id="reminder-input-time">
+                </div>
+                <div class="reminder-form-group">
+                    <label>类型</label>
+                    <div class="reminder-type-selector">
+                        <div class="reminder-type-option active" data-type="toUser">提醒我</div>
+                        <div class="reminder-type-option" data-type="toSelf">TA的待办</div>
+                        <div class="reminder-type-option" data-type="remindChar">提醒TA</div>
+                    </div>
+                </div>
+                <div class="reminder-form-group">
+                    <label>重复</label>
+                    <select id="reminder-input-repeat">
+                        <option value="none">不重复</option>
+                        <option value="daily">每天</option>
+                        <option value="weekly">每周</option>
+                        <option value="monthly">每月</option>
+                    </select>
+                </div>
+                <div class="reminder-form-actions">
+                    <button class="reminder-btn-cancel" id="reminder-form-cancel">取消</button>
+                    <button class="reminder-btn-save" id="reminder-form-save">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头像识别结果弹窗（用户头像库） -->
+        <div id="avatar-recognition-modal" class="ar-modal-overlay">
+            <div class="ar-modal">
+                <div class="ar-modal-title">头像识别</div>
+                <div class="ar-modal-body">
+                    <div class="ar-preview-wrap">
+                        <img id="ar-preview-img" src="" alt="">
+                    </div>
+                    <label class="ar-desc-label">名称（必填，如：开心、生气）</label>
+                    <input type="text" id="ar-name-input" class="ar-name-input" placeholder="自己起的昵称" maxlength="30">
+                    <label class="ar-desc-label">描述（选填，可为 AI 识别结果）</label>
+                    <textarea id="ar-description-input" class="ar-desc-input" placeholder="图片内容描述" rows="4"></textarea>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-cancel-btn" class="btn btn-small btn-neutral">取消</button>
+                        <button type="button" id="ar-confirm-btn" class="btn btn-small btn-primary">使用并保存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头像库管理弹窗 -->
+        <div id="avatar-library-modal" class="ar-modal-overlay ar-library-modal">
+            <div class="ar-modal">
+                <div class="ar-modal-title">头像库管理</div>
+                <div class="ar-modal-body">
+                    <div class="ar-upload-row">
+                        <input type="file" id="ar-user-library-file-input" accept="image/*" style="display:none;">
+                        <button type="button" id="ar-user-library-upload-local" class="btn btn-small btn-neutral ar-btn-upload">本地上传</button>
+                        <div class="ar-url-row">
+                            <input type="text" id="ar-user-library-url-input" class="ar-url-input" placeholder="图片链接">
+                            <button type="button" id="ar-user-library-upload-url" class="btn btn-small btn-primary">URL 上传</button>
+                        </div>
+                    </div>
+                    <div id="ar-library-list" class="ar-library-list"></div>
+                </div>
+                <div class="ar-library-toolbar">
+                    <button type="button" class="btn btn-small btn-neutral ar-library-close ar-library-close-btn">关闭</button>
+                    <div class="ar-toolbar-actions">
+                        <button type="button" id="ar-library-batch-delete" class="btn btn-small btn-neutral ar-library-batch-delete">批量删除</button>
+                        <button type="button" id="ar-library-clear-all" class="btn btn-small btn-danger ar-library-clear-all">清除全部缓存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 用户头像库·添加弹窗 -->
+        <div id="user-avatar-add-modal" class="ar-modal-overlay">
+            <div class="ar-modal">
+                <div class="ar-modal-title">添加到用户头像库</div>
+                <div class="ar-modal-body">
+                    <div class="ar-preview-wrap">
+                        <img id="ar-user-add-preview-img" src="" alt="">
+                    </div>
+                    <label class="ar-option-row">
+                        <input type="checkbox" id="ar-user-add-use-ai">
+                        <span>上传时调用 API 自动识别并填入描述（可选）</span>
+                    </label>
+                    <button type="button" id="ar-user-add-recognize-btn" class="btn btn-small btn-neutral" style="margin-bottom:8px;">识别图像填入描述</button>
+                    <label class="ar-desc-label">名称（必填，如：开心、生气）</label>
+                    <input type="text" id="ar-user-add-name-input" class="ar-name-input" placeholder="自己起的昵称" maxlength="30">
+                    <label class="ar-desc-label">描述（选填，可为 AI 识别结果）</label>
+                    <textarea id="ar-user-add-description-input" class="ar-desc-input" placeholder="图片内容描述" rows="3"></textarea>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-user-add-cancel-btn" class="btn btn-small btn-neutral">取消</button>
+                        <button type="button" id="ar-user-add-confirm-btn" class="btn btn-small btn-primary">添加</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头像库单项编辑弹窗（用户头像库） -->
+        <div id="avatar-library-edit-modal" class="ar-modal-overlay">
+            <div class="ar-modal ar-edit-modal">
+                <div class="ar-modal-title">编辑头像</div>
+                <div class="ar-modal-body">
+                    <div class="ar-preview-wrap">
+                        <img id="ar-edit-preview-img" src="" alt="">
+                    </div>
+                    <label class="ar-desc-label">名称</label>
+                    <input type="text" id="ar-edit-name-input" class="ar-name-input" placeholder="简短名称" maxlength="30">
+                    <label class="ar-desc-label">描述（选填）</label>
+                    <textarea id="ar-edit-description-input" class="ar-desc-input" placeholder="描述" rows="4"></textarea>
+                    <div class="ar-edit-meta" id="ar-edit-meta"></div>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-edit-apply-btn" class="btn btn-small btn-primary">应用为当前头像</button>
+                        <button type="button" id="ar-edit-save-btn" class="btn btn-small btn-neutral">保存</button>
+                        <button type="button" id="ar-edit-delete-btn" class="btn btn-small btn-danger">删除此项</button>
+                        <button type="button" id="ar-edit-close-btn" class="btn btn-small btn-neutral">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 角色头像库管理弹窗 -->
+        <div id="char-avatar-library-modal" class="ar-modal-overlay ar-library-modal ar-char-library-modal">
+            <div class="ar-modal">
+                <div class="ar-modal-title">角色头像库</div>
+                <div class="ar-modal-body">
+                    <div class="ar-upload-row">
+                        <input type="file" id="ar-char-library-file-input" accept="image/*" style="display:none;">
+                        <button type="button" id="ar-char-library-upload-local" class="btn btn-small btn-neutral ar-btn-upload">本地上传</button>
+                        <div class="ar-url-row">
+                            <input type="text" id="ar-char-library-url-input" class="ar-url-input" placeholder="图片链接">
+                            <button type="button" id="ar-char-library-upload-url" class="btn btn-small btn-primary">URL 上传</button>
+                        </div>
+                    </div>
+                    <div id="ar-char-library-list" class="ar-library-list"></div>
+                </div>
+                <div class="ar-library-toolbar">
+                    <button type="button" class="btn btn-small btn-neutral ar-library-close ar-char-library-close-btn">关闭</button>
+                    <div class="ar-toolbar-actions">
+                        <button type="button" id="ar-char-library-batch-delete" class="btn btn-small btn-neutral ar-library-batch-delete">批量删除</button>
+                        <button type="button" id="ar-char-library-clear-all" class="btn btn-small btn-danger ar-library-clear-all">清除全部</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 角色头像库·添加/上传弹窗 -->
+        <div id="char-avatar-add-modal" class="ar-modal-overlay">
+            <div class="ar-modal">
+                <div class="ar-modal-title">添加到角色头像库</div>
+                <div class="ar-modal-body">
+                    <div class="ar-preview-wrap">
+                        <img id="ar-char-add-preview-img" src="" alt="">
+                    </div>
+                    <label class="ar-option-row">
+                        <input type="checkbox" id="ar-char-add-use-ai">
+                        <span>上传时调用 API 自动识别图片（默认关闭）</span>
+                    </label>
+                    <label class="ar-desc-label">名称（必填）</label>
+                    <input type="text" id="ar-char-add-name-input" class="ar-name-input" placeholder="如：生气、开心" maxlength="30">
+                    <label class="ar-desc-label">描述（选填）</label>
+                    <textarea id="ar-char-add-description-input" class="ar-desc-input" placeholder="描述" rows="3"></textarea>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-char-add-cancel-btn" class="btn btn-small btn-neutral">取消</button>
+                        <button type="button" id="ar-char-add-confirm-btn" class="btn btn-small btn-primary">添加</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 角色头像库·单项编辑弹窗 -->
+        <div id="char-avatar-library-edit-modal" class="ar-modal-overlay">
+            <div class="ar-modal ar-edit-modal">
+                <div class="ar-modal-title">编辑角色头像</div>
+                <div class="ar-modal-body">
+                    <div class="ar-preview-wrap">
+                        <img id="ar-char-edit-preview-img" src="" alt="">
+                    </div>
+                    <label class="ar-desc-label">名称</label>
+                    <input type="text" id="ar-char-edit-name-input" class="ar-name-input" placeholder="名称" maxlength="30">
+                    <label class="ar-desc-label">描述（选填）</label>
+                    <textarea id="ar-char-edit-description-input" class="ar-desc-input" placeholder="描述" rows="4"></textarea>
+                    <div class="ar-edit-meta" id="ar-char-edit-meta"></div>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-char-edit-apply-btn" class="btn btn-small btn-primary">应用为当前角色头像</button>
+                        <button type="button" id="ar-char-edit-save-btn" class="btn btn-small btn-neutral">保存</button>
+                        <button type="button" id="ar-char-edit-delete-btn" class="btn btn-small btn-danger">删除此项</button>
+                        <button type="button" id="ar-char-edit-close-btn" class="btn btn-small btn-neutral">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 情头库管理弹窗 -->
+        <div id="couple-avatar-library-modal" class="ar-modal-overlay ar-library-modal ar-couple-library-modal">
+            <div class="ar-modal">
+                <div class="ar-modal-title">情头库</div>
+                <div class="ar-modal-body">
+                    <div id="couple-avatar-library-list" class="ar-library-list ar-couple-library-list"></div>
+                </div>
+                <div class="ar-library-toolbar">
+                    <button type="button" class="ar-library-close couple-avatar-library-close-btn btn btn-small btn-neutral">关闭</button>
+                    <div class="ar-toolbar-actions">
+                        <button type="button" id="couple-avatar-library-batch-delete" class="btn btn-small btn-neutral ar-library-batch-delete">批量删除</button>
+                        <button type="button" id="couple-avatar-library-clear-all" class="btn btn-small btn-danger ar-library-clear-all">清除全部</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 情头库·单项编辑弹窗 -->
+        <div id="couple-avatar-edit-modal" class="ar-modal-overlay">
+            <div class="ar-modal ar-edit-modal ar-couple-edit-modal">
+                <div class="ar-modal-title">编辑情头</div>
+                <div class="ar-modal-body">
+                    <div class="ar-couple-edit-preview">
+                        <div class="ar-couple-edit-pair">
+                            <span class="ar-couple-edit-label">用户</span>
+                            <img id="couple-edit-user-img" src="" alt="">
+                        </div>
+                        <div class="ar-couple-edit-pair">
+                            <span class="ar-couple-edit-label">角色</span>
+                            <img id="couple-edit-char-img" src="" alt="">
+                        </div>
+                    </div>
+                    <label class="ar-desc-label">名称</label>
+                    <input type="text" id="couple-edit-name-input" class="ar-name-input" placeholder="情头名称" maxlength="30">
+                    <label class="ar-desc-label">描述（选填）</label>
+                    <textarea id="couple-edit-description-input" class="ar-desc-input" placeholder="描述" rows="3"></textarea>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="couple-edit-apply-btn" class="btn btn-small btn-primary">应用为当前情头</button>
+                        <button type="button" id="couple-edit-save-btn" class="btn btn-small btn-neutral">保存</button>
+                        <button type="button" id="couple-edit-delete-btn" class="btn btn-small btn-danger">删除此项</button>
+                        <button type="button" id="couple-edit-close-btn" class="btn btn-small btn-neutral">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头像识别字数选择弹窗 -->
+        <div id="avatar-recognition-detail-modal" class="ar-modal-overlay">
+            <div class="ar-modal">
+                <div class="ar-modal-title">头像识别字数</div>
+                <div class="ar-modal-body">
+                    <label class="ar-detail-option">
+                        <input type="radio" name="ar-detail-level" value="brief">
+                        <span>简洁（10-20字）</span>
+                    </label>
+                    <label class="ar-detail-option">
+                        <input type="radio" name="ar-detail-level" value="standard">
+                        <span>标准（30-50字）</span>
+                    </label>
+                    <label class="ar-detail-option">
+                        <input type="radio" name="ar-detail-level" value="detailed" checked>
+                        <span>详细（不限）</span>
+                    </label>
+                    <label class="ar-detail-option">
+                        <input type="radio" name="ar-detail-level" value="custom">
+                        <span>自定义</span>
+                    </label>
+                    <div id="ar-custom-words-container" style="display:none; margin-top:10px; padding:10px; background:#f9f9f9; border-radius:8px;">
+                        <label style="font-size:13px; color:#666; display:block; margin-bottom:6px;">自定义字数（5-500）</label>
+                        <input type="number" id="ar-custom-words-input" min="5" max="500" placeholder="请输入字数" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; text-align:center; box-sizing:border-box;">
+                    </div>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-detail-cancel-btn" class="btn btn-small btn-neutral">取消</button>
+                        <button type="button" id="ar-detail-confirm-btn" class="btn btn-small btn-primary">确定</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- 后台保活 · 音乐播放器（黑胶深色主题） -->
         <div id="music-screen" class="screen music-screen-theme">
@@ -1060,8 +1445,14 @@
             </main>
             <div id="world-book-multi-select-bar" style="display: none;">
                 <span id="world-book-select-count">已选择 0 项</span>
-                <button class="btn btn-danger" id="delete-selected-world-books-btn"
-                    style="width: auto; padding: 8px 16px;">删除已选</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary" id="move-selected-world-books-btn"
+                        style="width: auto; padding: 8px 16px;">移动到分类</button>
+                    <button class="btn btn-secondary" id="toggle-selected-world-books-btn"
+                        style="width: auto; padding: 8px 16px;">停用已选</button>
+                    <button class="btn btn-danger" id="delete-selected-world-books-btn"
+                        style="width: auto; padding: 8px 16px;">删除已选</button>
+                </div>
             </div>
             <!-- 删除分类时的选择弹窗 -->
             <div id="world-book-delete-category-modal" class="modal-overlay">
@@ -1072,6 +1463,20 @@
                         <button type="button" id="wb-delete-category-and-entries-btn" class="btn btn-danger" style="width: 100%;">同时删除该分类下所有条目</button>
                         <button type="button" id="wb-delete-category-move-entries-btn" class="btn btn-primary" style="width: 100%;">仅删除分类，条目移至未分类</button>
                         <button type="button" id="wb-delete-category-cancel-btn" class="btn btn-neutral" style="width: 100%;">取消</button>
+                    </div>
+                </div>
+            </div>
+            <!-- 移动到分类的选择弹窗 -->
+            <div id="world-book-move-category-modal" class="modal-overlay">
+                <div class="modal-window" style="max-width: 320px;">
+                    <h3>移动到分类</h3>
+                    <p id="wb-move-category-modal-desc" style="color: #666; font-size: 14px; margin: 10px 0 16px;">选择目标分类：</p>
+                    <div id="wb-move-category-list" style="max-height: 300px; overflow-y: auto; margin-bottom: 16px;">
+                        <!-- 分类列表将在这里动态生成 -->
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <button type="button" id="wb-move-category-confirm-btn" class="btn btn-primary" style="width: 100%;">确认移动</button>
+                        <button type="button" id="wb-move-category-cancel-btn" class="btn btn-neutral" style="width: 100%;">取消</button>
                     </div>
                 </div>
             </div>
@@ -1585,6 +1990,112 @@
                                     </div>
                                     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
                                         <button id="supplementPersona-api-close-modal" class="btn btn-primary">关闭</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 副API 4: 偷看手机专用 -->
+                    <div class="kkt-group" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
+                        <div style="margin-bottom: 15px;">
+                            <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">偷看手机专用 API（可选）</h3>
+                            <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后偷看手机功能优先使用此配置</p>
+                        </div>
+                        
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">服务商</div>
+                            <div class="kkt-item-control">
+                                <select id="peek-api-provider"
+                                    style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                    <option value="newapi">NewAPI (自定义)</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="claude">Claude</option>
+                                    <option value="gemini">Gemini</option>
+                                </select>
+                                <span class="kkt-arrow">›</span>
+                            </div>
+                        </div>
+                        
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">API 地址</div>
+                            <div class="kkt-item-control">
+                                <input type="text" id="peek-api-url" autocomplete="off"
+                                    placeholder="https://..."
+                                    style="text-align:right; border:none; background:transparent; width: 100%;">
+                            </div>
+                        </div>
+                        
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">密钥 (Key)</div>
+                            <div class="kkt-item-control">
+                                <input type="password" id="peek-api-key" autocomplete="new-password"
+                                    placeholder="sk-..."
+                                    style="text-align:right; border:none; background:transparent; width: 100%;">
+                            </div>
+                        </div>
+                        
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">模型列表</div>
+                            <div class="kkt-item-control">
+                                <button type="button" class="btn btn-small btn-secondary" id="peek-fetch-models-btn"
+                                    style="margin:0; padding: 4px 8px;">
+                                    <span class="btn-text">拉取</span>
+                                    <div class="spinner"></div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">选择模型</div>
+                            <div class="kkt-item-control">
+                                <select id="peek-api-model"
+                                    style="border:none; background:transparent; text-align:right; direction: rtl; max-width: 180px; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                    <option value="">请先拉取</option>
+                                </select>
+                                <span class="kkt-arrow">›</span>
+                            </div>
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary" id="peek-api-save-btn"
+                            style="margin-top: 15px; width: 100%;">
+                            <span class="btn-text">保存偷看手机API设置</span>
+                            <div class="spinner"></div>
+                        </button>
+                        
+                        <div class="api-presets-embedded" style="margin-top:20px;">
+                            <div style="margin-bottom: 10px;">
+                                <h3 style="margin: 0; font-size: 14px; color: var(--primary-color);">偷看手机API预设管理</h3>
+                                <p style="font-size: 11px; color: #999; margin: 3px 0 0;">管理偷看手机API配置预设</p>
+                            </div>
+                            <div id="peek-api-presets-control"
+                                style="padding:12px; border-radius:8px; background: #f5f5f5; border: 1px solid #eee;">
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                    <label style="min-width:40px; color:#666; font-size: 14px;">预设</label>
+                                    <select id="peek-api-preset-select"
+                                        style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                        <option value="">— 选择 —</option>
+                                    </select>
+                                    <button id="peek-api-apply-preset" class="btn btn-primary btn-small"
+                                        style="padding: 6px 12px;">应用</button>
+                                </div>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+                                    <button id="peek-api-save-preset" class="btn btn-small" style="flex: 1;">另存为</button>
+                                    <button id="peek-api-manage-presets" class="btn btn-small" style="flex: 1;">管理</button>
+                                    <button id="peek-api-import-presets" class="btn btn-small" style="flex: 1;">导入</button>
+                                    <button id="peek-api-export-presets" class="btn btn-small" style="flex: 1;">导出</button>
+                                </div>
+                            </div>
+                            <div id="peek-api-presets-modal"
+                                style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9999;align-items:center;justify-content:center;">
+                                <div
+                                    style="width:640px;max-width:94%;background:var(--panel-bg,#fff);padding:16px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);">
+                                    <h3 style="margin:0 0 12px 0;">偷看手机API预设管理</h3>
+                                    <div id="peek-api-presets-list"
+                                        style="max-height:360px;overflow:auto;border:1px solid #f0f0f0;padding:8px;border-radius:6px;">
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+                                        <button id="peek-api-close-modal" class="btn btn-primary">关闭</button>
                                     </div>
                                 </div>
                             </div>
@@ -2464,7 +2975,7 @@
                 <div class="toast-message"></div>
             </div>
         </div>
-        <input type="file" id="image-upload-input" accept="image/*" style="display:none;">
+        <input type="file" id="image-upload-input" accept="image/*" multiple style="display:none;">
         <input type="file" id="camera-upload-input" accept="image/*" capture="environment" style="display:none;">
 
         <!-- Profile Card Modal -->
@@ -2598,11 +3109,28 @@
                         <!-- 新增的删除按钮，默认隐藏 -->
                         <button type="button" id="debug-delete-msg-btn" class="btn btn-danger"
                             style="flex: 1; display: none;">删除</button>
+                        <button type="button" id="insert-message-below-btn" class="btn btn-secondary" style="flex: 1;">新增消息</button>
                         <button type="submit" class="btn btn-primary" style="flex: 1;">保存</button>
                         <button type="button" id="cancel-edit-modal-btn" class="btn btn-neutral"
                             style="flex: 1;">取消</button>
                     </div>
 
+                </form>
+            </div>
+        </div>
+
+        <!-- Insert Message Modal -->
+        <div id="insert-message-modal" class="modal-overlay">
+            <div class="modal-window">
+                <h3>新增消息</h3>
+                <form id="insert-message-form">
+                    <div class="form-group">
+                        <textarea id="insert-message-textarea" rows="6" placeholder="请输入新消息内容..." required></textarea>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">确定插入</button>
+                        <button type="button" id="cancel-insert-modal-btn" class="btn btn-neutral" style="flex: 1;">取消</button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -2838,6 +3366,10 @@
             <div class="modal-window">
                 <h3>转账</h3>
                 <form id="send-transfer-form">
+                    <div class="form-group" id="transfer-payment-method-group">
+                        <label>支付方式</label>
+                        <div class="payment-method-list" id="transfer-payment-methods"></div>
+                    </div>
                     <div class="form-group">
                         <label for="transfer-amount-input">金额 (元)</label>
                         <input type="number" id="transfer-amount-input" placeholder="0.00" required step="0.01"
@@ -3168,6 +3700,12 @@
                                         </label>
                                     </div>
                                 </div>
+                                <div class="kkt-item" id="setting-avatar-system-entry" style="cursor:pointer;">
+                                    <div class="kkt-item-label">头像识别系统</div>
+                                    <div class="kkt-item-control">
+                                        <span class="kkt-arrow">›</span>
+                                    </div>
+                                </div>
 
                                 <div class="kkt-item" id="setting-reply-count-container" style="display: none;">
                                     <div class="kkt-item-label">回复条数范围</div>
@@ -3232,6 +3770,32 @@
                                     <div class="kkt-item-control">
                                         <label class="kkt-switch">
                                             <input type="checkbox" id="setting-shop-interaction-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 允许角色赠送亲属卡 -->
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">允许角色赠送亲属卡</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-family-card-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 提醒事项设置 -->
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">允许角色管理提醒事项</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-reminder-enabled">
                                             <span class="kkt-slider"></span>
                                         </label>
                                     </div>
@@ -3555,9 +4119,219 @@
                                             style="width:50px; text-align:right; border:none;">
                                     </div>
                                 </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">免打扰时段</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-quiet-hours-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="quiet-hours-range" style="display:none;">
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">开始时间</div>
+                                        <div class="kkt-item-control">
+                                            <input type="time" id="setting-quiet-hours-start" value="23:00"
+                                                style="border:none; font-size:14px;">
+                                        </div>
+                                    </div>
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">结束时间</div>
+                                        <div class="kkt-item-control">
+                                            <input type="time" id="setting-quiet-hours-end" value="07:00"
+                                                style="border:none; font-size:14px;">
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <button type="button" class="kkt-danger-btn" id="clear-chat-history-btn">清空聊天记录</button>
+                            <div class="kkt-group" style="margin-top:10px;">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色可以拉黑用户</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-can-block-user" checked>
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 角色掌控模式：允许角色查看并操控用户手机 -->
+                            <div class="kkt-group" style="margin-top:10px;" id="setting-phone-control-group">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">允许角色查看并操控你的手机</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-phone-control-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-phone-control-options" style="display:none;">
+                                    <div class="kkt-item-label">每次可查看每个对话的消息条数</div>
+                                    <div class="kkt-item-control" style="display:flex;align-items:center;gap:8px;">
+                                        <input type="range" id="setting-phone-control-view-limit" min="5" max="50" step="1" value="10" style="flex:1;">
+                                        <span id="setting-phone-control-view-limit-value" style="min-width:28px;text-align:right;">10</span> 条
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-phone-control-actions" style="display:none;">
+                                    <button type="button" class="btn btn-small btn-secondary" id="setting-phone-control-log-btn">查看操控日志</button>
+                                    <button type="button" class="btn btn-small btn-secondary" id="setting-phone-control-recycle-btn" style="margin-left:8px;">回收站</button>
+                                    <button type="button" class="btn btn-small btn-danger" id="setting-phone-control-force-close-btn" style="margin-left:8px;">强制关闭</button>
+                                </div>
+                            </div>
+                            <div id="phone-control-warning-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+                                <div style="background:#fff;border-radius:12px;max-width:360px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+                                    <div style="font-weight:600;color:#ff3b30;margin-bottom:12px;">⚠️ 严肃警告</div>
+                                    <p style="font-size:14px;color:#333;margin-bottom:12px;">你即将授予该角色<strong>查看并操控你手机</strong>的权限。</p>
+                                    <p style="font-size:13px;color:#666;margin-bottom:8px;">开启后，该角色将能够：查看你与所有其他角色的聊天、日记与相册等；以你的身份给他人发消息；删除角色、清空记录、修改设置。</p>
+                                    <p style="font-size:13px;color:#ff3b30;margin-bottom:16px;">关闭此功能时，角色可能会强烈抵抗；且角色会永久记住 TA 在此期间的所有行为。</p>
+                                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                                        <button type="button" class="btn btn-secondary" id="phone-control-warning-cancel">取消</button>
+                                        <button type="button" class="btn btn-primary" id="phone-control-warning-confirm">我已了解风险，确认开启</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="phone-control-force-close-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+                                <div style="background:#fff;border-radius:12px;max-width:340px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+                                    <p style="font-size:14px;color:#333;margin-bottom:16px;">确定要强制关闭该角色的手机查看与操控权限吗？关闭后角色无法再阻止。</p>
+                                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                                        <button type="button" class="btn btn-secondary" id="phone-control-force-cancel">取消</button>
+                                        <button type="button" class="btn btn-danger" id="phone-control-force-confirm">强制关闭</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="phone-control-recycle-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+                                <div style="background:#fff;border-radius:12px;max-width:360px;max-height:70vh;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+                                    <div style="padding:16px;border-bottom:1px solid #eee;font-weight:600;">回收站</div>
+                                    <div id="phone-control-recycle-list" style="padding:12px;overflow-y:auto;max-height:50vh;"></div>
+                                    <div style="padding:12px;border-top:1px solid #eee;">
+                                        <button type="button" class="btn btn-secondary" id="phone-control-recycle-close">关闭</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="kkt-danger-btn" id="block-character-btn">拉黑角色</button>
+                            <div id="block-settings-panel" class="block-settings-panel" style="display:none; margin-top:10px;">
+                                <div class="kkt-group">
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label" style="color:#ff3b30;">该角色已被拉黑</div>
+                                    </div>
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">申请模式</div>
+                                        <div class="kkt-item-control">
+                                            <select id="block-reapply-mode" style="border:none;font-size:14px;">
+                                                <option value="fixed">固定间隔</option>
+                                                <option value="auto">角色自主判断</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="kkt-item" id="block-fixed-interval-row">
+                                        <div class="kkt-item-label">申请间隔（分钟）</div>
+                                        <div class="kkt-item-control">
+                                            <input type="number" id="block-fixed-interval" value="30" min="1" style="width:60px;text-align:right;border:none;">
+                                        </div>
+                                    </div>
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">已申请次数</div>
+                                        <div class="kkt-item-control">
+                                            <span id="block-request-count">0</span> 次
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="kkt-danger-btn block-trigger-btn" id="trigger-friend-request-btn">立即触发好友申请</button>
+                                <button type="button" class="kkt-danger-btn" id="unblock-character-btn">解除拉黑</button>
+                            </div>
+                        </div>
+
+                        <!-- 头像识别系统子页面（从功能 Tab 进入） -->
+                        <div id="setting-avatar-system-panel" class="settings-tab-content" style="display:none;">
+                            <div class="kkt-item kkt-back-row" id="setting-avatar-system-back" style="cursor:pointer; padding:12px 16px; border-bottom:1px solid #eee; display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:18px;">‹</span>
+                                <span>头像识别系统</span>
+                            </div>
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">启用头像识别系统</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-avatar-system-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色感知头像变化</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-sense-avatar-change">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色可自主更换头像</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-can-switch-avatar">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色可收藏用户图片为头像</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-collect-image-as-avatar">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色可自主收藏情头</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-collect-couple-avatar">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色感知当前情头状态</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-sense-couple-avatar">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-avatar-recognition-detail-row" style="cursor:pointer;">
+                                    <div class="kkt-item-label">头像识别字数</div>
+                                    <div class="kkt-item-control">
+                                        <span id="avatar-recognition-detail-display" style="color:#888;">详细（不限）</span>
+                                        <span class="kkt-arrow">›</span>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">用户头像库</div>
+                                    <div class="kkt-item-control">
+                                        <button type="button" id="setting-avatar-library-btn" class="btn btn-small btn-secondary" style="padding:4px 10px;">管理</button>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色头像库</div>
+                                    <div class="kkt-item-control">
+                                        <button type="button" id="setting-char-avatar-library-btn" class="btn btn-small btn-secondary" style="padding:4px 10px;">管理</button>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">情头库</div>
+                                    <div class="kkt-item-control">
+                                        <button type="button" id="setting-couple-avatar-library-btn" class="btn btn-small btn-secondary" style="padding:4px 10px;">管理</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- 【美化】Tab 内容 -->
@@ -3652,6 +4426,24 @@
                                     <div class="kkt-item-control">
                                         <label class="kkt-switch">
                                             <input type="checkbox" id="setting-show-status-update-msg">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">聊天内显示提醒事项消息</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-show-reminder-msg" checked>
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">聊天内显示头像操作消息</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-show-avatar-action-msg">
                                             <span class="kkt-slider"></span>
                                         </label>
                                     </div>
@@ -4744,7 +5536,11 @@
                 <div class="title-container">
                     <h1 class="title">收藏</h1>
                 </div>
-                <div class="placeholder"></div>
+                <div class="placeholder favorites-header-actions">
+                    <button type="button" class="icon-btn favorites-delete-btn" id="favorites-delete-btn" title="多选删除" aria-label="多选删除">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </button>
+                </div>
             </header>
             <div class="favorites-tabs">
                 <button type="button" class="favorites-tab active" data-filter="user">我的收藏</button>
@@ -4760,6 +5556,14 @@
                     <p class="favorites-empty-hint" id="favorites-empty-hint">在聊天中长按消息，选择「收藏」或「多选收藏」即可添加</p>
                 </div>
             </main>
+            <!-- 收藏多选操作栏 -->
+            <div id="favorites-multi-select-bar" class="favorites-multi-select-bar" style="display: none;">
+                <span id="favorites-select-count">已选 0 项</span>
+                <div class="favorites-multi-select-actions">
+                    <button type="button" class="btn btn-neutral btn-small" id="favorites-multi-select-cancel-btn">取消</button>
+                    <button type="button" class="btn btn-danger btn-small" id="favorites-batch-delete-btn">删除已选</button>
+                </div>
+            </div>
         </div>
 
         <!-- 收藏详情（查看内容 + 收藏寄语） -->
@@ -4913,6 +5717,12 @@
                             </path>
                         </svg>
                     </button>
+                </div>
+
+                <div class="forum-post-delete-toolbar" id="forum-post-delete-toolbar" style="display:none;">
+                    <button class="btn btn-small" id="forum-post-select-all-btn">全选</button>
+                    <button class="btn btn-small btn-primary" id="forum-post-delete-selected-btn" style="background:#ff4757;border-color:#ff4757;">删除选中</button>
+                    <button class="btn btn-small" id="forum-post-cancel-delete-btn">取消</button>
                 </div>
 
                 <div class="forum-filter-tabs">
@@ -5278,6 +6088,87 @@
             </div>
         </div>
 
+        <!-- 偷看代发：对方请求加好友 -->
+        <div id="peek-friend-request-modal" class="modal-overlay">
+            <div class="modal-window" style="max-width: 340px;">
+                <h3>好友申请</h3>
+                <div id="peek-friend-request-body" style="display:flex;flex-direction:column;align-items:center;padding:16px 0;">
+                    <img id="peek-friend-request-avatar" src="" alt="" class="squircle" style="width:64px;height:64px;object-fit:cover;border-radius:12px;margin-bottom:12px;">
+                    <p id="peek-friend-request-text" style="text-align:center;margin:0;font-size:14px;color:#333;"><strong id="peek-friend-request-name"></strong> 想加你为好友</p>
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-neutral btn-small" id="peek-friend-request-reject-btn">拒绝</button>
+                    <button type="button" class="btn btn-primary btn-small" id="peek-friend-request-accept-btn">同意</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 偷看代发：编辑 NPC 人设 -->
+        <div id="peek-edit-persona-modal" class="modal-overlay">
+            <div class="modal-window" style="max-width: 420px;">
+                <h3>编辑补充人设</h3>
+                <p style="font-size:12px;color:#888;margin:0 0 8px;">在此补充该联系人的额外人设信息，会用于 API 回复与加好友后的角色卡。</p>
+                <textarea id="peek-edit-persona-textarea" rows="6" style="width:100%;padding:10px;border:1px solid #e0e0e0;border-radius:8px;box-sizing:border-box;resize:vertical;"></textarea>
+                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+                    <button type="button" class="btn btn-neutral btn-small" id="peek-edit-persona-cancel-btn">取消</button>
+                    <button type="button" class="btn btn-primary btn-small" id="peek-edit-persona-save-btn">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 拉黑确认弹窗 -->
+        <div id="block-confirm-modal" class="modal-overlay">
+            <div class="modal-window" style="max-width: 340px;">
+                <h3>拉黑角色</h3>
+                <p style="font-size:14px;color:#666;line-height:1.5;margin:0 0 12px;">拉黑后角色将从聊天列表中灰显，你仍可在对话框中发消息，但角色不会回复。角色会尝试重新发送好友申请。</p>
+                <div class="kkt-group" style="margin:16px 0;">
+                    <label style="display:flex;align-items:center;gap:8px;padding:10px 0;cursor:pointer;">
+                        <input type="radio" name="block-mode" value="fixed" checked>
+                        <span>固定间隔申请：每</span>
+                        <input type="number" id="block-init-interval" value="30" min="1" style="width:50px;text-align:center;border:none;"> 分钟
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:10px 0;cursor:pointer;">
+                        <input type="radio" name="block-mode" value="auto">
+                        <span>角色自主判断（由角色性格决定时机）</span>
+                    </label>
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-neutral btn-small" id="block-confirm-cancel">取消</button>
+                    <button type="button" class="btn btn-small" id="block-confirm-ok" style="background:#ff3b30;color:#fff;">确定拉黑</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 拉黑角色好友申请弹窗 -->
+        <div id="friend-request-modal" class="modal-overlay">
+            <div class="modal-window" style="max-width: 340px;">
+                <h3>好友申请</h3>
+                <div id="friend-request-body" style="display:flex;flex-direction:column;align-items:center;padding:16px 0;">
+                    <img id="friend-request-avatar" src="" alt="" class="squircle" style="width:64px;height:64px;object-fit:cover;border-radius:12px;margin-bottom:12px;">
+                    <p id="friend-request-name" style="font-weight:600;font-size:15px;margin:0 0 10px;"></p>
+                    <div id="friend-request-reason" style="background:#f5f5f5;border-radius:10px;padding:12px 16px;width:100%;font-size:14px;color:#333;line-height:1.5;text-align:left;"></div>
+                    <p id="friend-request-meta" style="font-size:12px;color:#999;margin:10px 0 0;"></p>
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-neutral btn-small" id="friend-request-reject-btn">拒绝</button>
+                    <button type="button" class="btn btn-primary btn-small" id="friend-request-accept-btn">接受</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 用户向角色发送好友申请（被角色拉黑时） -->
+        <div id="user-friend-request-modal" class="modal-overlay">
+            <div class="modal-window" style="max-width: 340px;">
+                <h3>发送好友申请</h3>
+                <p style="font-size:13px;color:#666;margin:0 0 10px;">填写申请理由，对方会立即决定是否通过。</p>
+                <textarea id="user-friend-request-reason" placeholder="申请理由（选填）" rows="3" style="width:100%;resize:vertical;padding:10px;border-radius:8px;border:1px solid #ddd;margin-bottom:12px;"></textarea>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-neutral btn-small" id="user-friend-request-cancel">取消</button>
+                    <button type="button" class="btn btn-primary btn-small" id="user-friend-request-submit">提交</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 编辑论坛私信弹窗 -->
         <div id="forum-dm-edit-modal" class="modal-overlay">
             <div class="modal-window">
@@ -5396,6 +6287,16 @@
                 <div class="message-area" id="peek-message-area">
                     <!-- Simulated messages will be rendered here -->
                 </div>
+                <div class="peek-impersonate-bar" id="peek-impersonate-bar" style="display: none;">
+                    <div class="peek-impersonate-input-row">
+                        <input type="text" id="peek-impersonate-input" placeholder="冒充Ta发消息..." autocomplete="off">
+                        <button type="button" id="peek-impersonate-send-btn" class="btn btn-primary">发送</button>
+                    </div>
+                    <div class="peek-impersonate-actions">
+                        <button type="button" id="peek-impersonate-api-btn" class="btn btn-secondary btn-small">让对方回复 (API)</button>
+                        <button type="button" id="peek-impersonate-friend-btn" class="btn btn-secondary btn-small">添加好友</button>
+                    </div>
+                </div>
             </main>
         </div>
 
@@ -5413,6 +6314,9 @@
 
         <!-- Peek Browser Screen -->
         <div id="peek-browser-screen" class="screen"></div>
+
+        <!-- Peek Browser Detail Screen (帖子详情) -->
+        <div id="peek-browser-detail-screen" class="screen"></div>
 
         <!-- Peek Drafts Screen -->
         <div id="peek-drafts-screen" class="screen"></div>
@@ -5764,6 +6668,11 @@
                             <label for="peek-char-aware-peek-enabled" style="margin: 0;">角色知晓用户窥屏</label>
                         </div>
                         <p style="font-size: 12px; color: #888; margin: 4px 0 0 0;">开启后，角色会知道你偷看了他的手机</p>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 14px;">
+                            <input type="checkbox" id="peek-impersonate-enabled" style="width: auto;">
+                            <label for="peek-impersonate-enabled" style="margin: 0;">代发消息（冒充角色用TA手机发消息）</label>
+                        </div>
+                        <p style="font-size: 12px; color: #888; margin: 4px 0 0 0;">开启后，消息中的联系人会有基础人设，你可以在对话里冒充角色发消息并让对方回复</p>
                     </div>
                 </div>
                 <div class="collapsible-section">
@@ -5798,6 +6707,28 @@
                                 <span>到</span>
                                 <input type="number" id="peek-refresh-max-memos" min="1" max="15" placeholder="最多" style="width: 80px;">
                                 <span style="color:#888;">条</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="collapsible-section">
+                    <div class="collapsible-header">
+                        <h4>浏览器详情</h4>
+                        <span class="collapsible-arrow">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="peek-browser-detail-enabled" style="width: auto;">
+                            <label for="peek-browser-detail-enabled" style="margin: 0;">刷新时自动生成浏览器帖子详情</label>
+                        </div>
+                        <p style="font-size: 12px; color: #888; margin: 4px 0 12px 0;">开启后，每条浏览记录会附带帖子正文，可点击查看详情。会消耗更多 token。</p>
+                        <div class="form-group">
+                            <label>每条详情字数范围</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="number" id="peek-browser-detail-min-words" min="50" max="2000" placeholder="最少" style="width: 80px;">
+                                <span>到</span>
+                                <input type="number" id="peek-browser-detail-max-words" min="50" max="2000" placeholder="最多" style="width: 80px;">
+                                <span style="color:#888;">字</span>
                             </div>
                         </div>
                     </div>
@@ -5861,6 +6792,10 @@
                         <button type="button" class="btn btn-neutral piggy-btn-edit" id="piggy-bank-edit-btn">修改余额</button>
                     </div>
                 </div>
+                <div class="family-card-entry" id="family-card-entry-row">
+                    <span class="family-card-entry-label">亲属卡</span>
+                    <span class="family-card-entry-arrow">›</span>
+                </div>
                 <div class="piggy-bank-tabs">
                     <button type="button" class="piggy-tab active" data-piggy-tab="all">全部</button>
                     <button type="button" class="piggy-tab" data-piggy-tab="income">收入</button>
@@ -5889,6 +6824,68 @@
                     </div>
                 </form>
             </div>
+        </div>
+        <!-- 亲属卡创建弹窗 -->
+        <div id="family-card-create-modal" class="modal-overlay">
+            <div class="modal-window">
+                <h3>创建亲属卡</h3>
+                <form id="family-card-create-form">
+                    <div class="form-group">
+                        <label for="family-card-bank-name">银行名称</label>
+                        <input type="text" id="family-card-bank-name" placeholder="手动输入银行名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="family-card-limit">额度 (元)</label>
+                        <input type="number" id="family-card-limit" placeholder="5000" step="1" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="family-card-refresh">刷新周期</label>
+                        <select id="family-card-refresh">
+                            <option value="daily">每天</option>
+                            <option value="weekly">每周</option>
+                            <option value="monthly" selected>每月</option>
+                            <option value="custom">自定义天数</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="family-card-refresh-days-wrap" style="display:none;">
+                        <label for="family-card-refresh-days">刷新天数</label>
+                        <input type="number" id="family-card-refresh-days" placeholder="30" min="1" value="30">
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-neutral" id="family-card-create-cancel" style="flex:1;">取消</button>
+                        <button type="submit" class="btn btn-primary" id="family-card-create-submit" style="flex:1;">创建并发送</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- 创建后选择角色发送 -->
+        <div id="family-card-send-char-modal" class="modal-overlay">
+            <div class="modal-window">
+                <h3>选择发送给谁</h3>
+                <p class="family-card-send-hint">选择一名角色，亲属卡将发送到与该角色的聊天中</p>
+                <ul id="family-card-send-char-list" class="family-card-char-list"></ul>
+                <button type="button" class="btn btn-neutral" id="family-card-send-skip-btn" style="margin-top:10px;width:100%;">暂不发送</button>
+            </div>
+        </div>
+        <!-- 亲属卡列表页（从存钱罐点击亲属卡入口进入） -->
+        <div id="family-card-list-screen" class="screen">
+            <header class="app-header">
+                <button type="button" class="back-btn" data-target="piggy-bank-screen">&#8249;</button>
+                <div class="title-container"><h1 class="title">亲属卡</h1></div>
+                <button type="button" class="btn btn-primary btn-small" id="family-card-create-btn-in-list">创建</button>
+            </header>
+            <main class="content">
+                <div class="family-card-scroll-list" id="family-card-list-container"></div>
+            </main>
+        </div>
+        <!-- 亲属卡详情页 -->
+        <div id="family-card-detail-screen" class="screen">
+            <header class="app-header">
+                <button type="button" class="back-btn" data-target="family-card-list-screen">&#8249;</button>
+                <div class="title-container"><h1 class="title">亲属卡详情</h1></div>
+                <div class="placeholder"></div>
+            </header>
+            <main class="content family-card-detail-content" id="family-card-detail-content"></main>
         </div>
         <div id="pomodoro-screen" class="screen">
             <header class="app-header">
@@ -6044,6 +7041,11 @@
                         <label style="font-size: 12px; color: #666; display: block; margin-bottom: 5px;">自提口令</label>
                         <input type="text" id="shop-pickup-code" placeholder="输入取货码/口令"
                             style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; outline: none;">
+                    </div>
+
+                    <div class="form-group" id="shop-payment-method-group" style="margin-top: 15px;">
+                        <label style="font-size: 12px; color: #666;">支付方式</label>
+                        <div class="payment-method-list" id="shop-payment-methods"></div>
                     </div>
 
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -6899,11 +7901,13 @@
     <script src="js/modules/chat_render.js"></script>
     <script src="js/modules/chat_ai.js"></script>
     <script src="js/modules/chat_features.js"></script>
+    <script src="js/modules/avatar_recognition.js"></script>
     <script src="js/modules/chat_ops.js"></script>
     <script src="js/chat.js"></script> <!-- 聊天核心入口 -->
     <script src="js/group_chat.js"></script> <!-- 群聊系统：群聊管理、设置、Prompt生成 -->
     <script src="js/contacts.js"></script> <!-- 联系人：好友列表、名片 -->
     <script src="js/settings.js"></script> <!-- 设置管理：API设置、外观自定义、预设管理 -->
+    <script src="js/modules/block_system.js"></script> <!-- 拉黑与好友申请 -->
 
     <!-- [3. 独立功能模块 (Plugins)] -->
     <script src="js/modules/sticker.js"></script> <!-- 表情包管理系统 -->
@@ -6913,6 +7917,7 @@
     <script src="js/modules/worldbook.js"></script> <!-- 世界书设定集 -->
     <script src="js/modules/peek.js"></script> <!-- 偷看手机(相册/短信等) -->
     <script src="js/modules/journal.js"></script> <!-- 回忆日记生成 -->
+    <script src="js/modules/reminder.js"></script> <!-- 提醒事项 -->
     <script src="js/modules/storage.js"></script> <!-- 存储空间分析图表 -->
     <script src="js/modules/widgets.js"></script> <!-- 桌面小组件设置 -->
     <script src="js/modules/tutorial.js"></script> <!-- 教程、更新日志、GitHub备份 -->

@@ -250,3 +250,104 @@
     flex-shrink: 0;
     min-width: auto;
 }
+
+/* 收藏多选模式：卡片勾选框（默认隐藏） */
+.favorite-checkbox {
+    display: none;
+    width: 22px;
+    height: 22px;
+    border: 2px solid #ccc;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 12px;
+    transition: all 0.2s;
+}
+
+#favorites-screen.favorites-multi-select-mode .favorite-card {
+    display: flex;
+    align-items: flex-start;
+}
+
+#favorites-screen.favorites-multi-select-mode .favorite-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#favorites-screen.favorites-multi-select-mode .favorite-checkbox::after {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background 0.2s;
+}
+
+#favorites-screen.favorites-multi-select-mode .favorite-checkbox.checked {
+    border-color: var(--primary-color, #e91e63);
+    background: var(--primary-color, #e91e63);
+}
+
+#favorites-screen.favorites-multi-select-mode .favorite-checkbox.checked::after {
+    background: #fff;
+    width: 6px;
+    height: 6px;
+}
+
+#favorites-screen.favorites-multi-select-mode .favorite-card-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 收藏底部多选操作栏 */
+.favorites-multi-select-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 10px 20px;
+    border-radius: 30px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    z-index: 100;
+    width: 90%;
+    max-width: 400px;
+    animation: slideUpBar 0.3s ease-out;
+}
+
+.favorites-multi-select-bar #favorites-select-count {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+}
+
+.favorites-multi-select-actions {
+    display: flex;
+    gap: 10px;
+}
+
+#favorites-screen .favorites-header-actions .icon-btn {
+    background: none;
+    border: none;
+    padding: 6px;
+    cursor: pointer;
+    color: var(--func-icon-color, #666);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#favorites-screen .favorites-header-actions .icon-btn:hover,
+#favorites-screen .favorites-header-actions .icon-btn:active {
+    opacity: 0.8;
+}
+
+#favorites-screen .favorites-header-actions .icon-btn svg {
+    stroke: currentColor;
+}

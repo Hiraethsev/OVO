@@ -159,22 +159,50 @@ const DEFAULT_COT_PRESETS = [
 ];
 
 const globalSettingKeys = [
-    'apiSettings', 'summaryApiSettings', 'backgroundApiSettings', 'supplementPersonaApiSettings', 'wallpaper', 'homeScreenMode', 'fontUrl', 'localFontName', 'customIcons', 'customAppNames', 'namePresets',
-    'apiPresets', 'summaryApiPresets', 'backgroundApiPresets', 'supplementPersonaApiPresets', 'bubbleCssPresets', 'myPersonaPresets', 'globalCss',
+    'apiSettings', 'summaryApiSettings', 'backgroundApiSettings', 'supplementPersonaApiSettings', 'peekApiSettings', 'wallpaper', 'homeScreenMode', 'fontUrl', 'localFontName', 'customIcons', 'customAppNames', 'namePresets',
+    'apiPresets', 'summaryApiPresets', 'backgroundApiPresets', 'supplementPersonaApiPresets', 'peekApiPresets', 'bubbleCssPresets', 'myPersonaPresets', 'globalCss',
     'globalCssPresets', 'fontPresets', 'homeSignature', 'forumPosts', 'forumBindings', 'forumUserProfile', 'forumSettings', 'forumApiSettings', 'forumMessages', 'forumStrangerProfiles', 'forumFriendRequests', 'forumPendingRequestFromUser', 'pomodoroTasks', 'pomodoroSettings', 'insWidgetSettings', 'homeWidgetSettings',
     'chatFolders', 'fontSizeScale', 'activePersonaId', 'moreProfileCardBg', 'statusBarPresets', 'regexFilterPresets', 'themeSettings', 'themePresets', 'savedKeyboardHeight',
-    'globalSendSound', 'globalReceiveSound', 'globalIncomingCallSound', 'multiMsgSoundEnabled', 'soundPresets', 'galleryPresets', 'iconPresets', 'homeWidgetPresets', 'widgetWallpaperPresets', 'voicePresets',
+    'globalSendSound', 'globalReceiveSound', 'globalMessageSentSound', 'globalIncomingCallSound', 'multiMsgSoundEnabled', 'soundPresets', 'galleryPresets', 'iconPresets', 'homeWidgetPresets', 'widgetWallpaperPresets', 'voicePresets',
     'cotSettings', 'cotPresets', 'hasSeenVideoCallDisclaimer', 'hasSeenVideoCallAvatarHint',
     'favorites', 'piggyBank',
     'theaterScenarios', 'theaterPromptPresets',
     'theaterHtmlScenarios', 'theaterHtmlPromptPresets', 'theaterMode',
-    'theaterApiSettings',
-    'novelAiSettings'
+    'theaterApiSettings', 'theaterFontSize', 'theaterFontPreset',
+    'novelAiSettings', 'avatarRecognitionDetailLevel',
+    'phoneControlRecycleBin'
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
-const appVersion = "3.7";
+const appVersion = "3.15";
 const updateLog = [
+    {
+        version: "3.15",
+        date: "2026-03-15",
+        notes: [
+            "3.15更新：",
+            "内置了1900老师的输入框代码、萤火的uwu短屏代码，感谢两位女神的授权！",
+            "内置了投稿/反馈的网页链接，是完全匿名的。",
+            "1.新增论坛可以分享贴子给群聊，可以多选删除已有帖子",
+            "2.新增小剧场可以调节字体，世界书可以多选移动到分类和多选启用和停用（豹豹老师改）",
+            "3.新增免打扰时间段，这段时间应该不会有后台消息发来",
+            "4.新增提醒事项，角色可以自行创建自己的代办事项，也可以在聊天过程中，帮用户创建代办事项。到点会自动提醒",
+            "5.新增编辑可以新增消息，修复语音、视频不能自动播放的BUG",
+            "6.新增偷看手机专属API",
+            "7.新增头像系统，总之就是角色可以裁剪情头、自己更换头像，能发现用户头像的使用变化，比如说用户换头像会问一嘴。然后可以感知情头，生气了自己会换掉情头，或者用户换掉情头也会感知",
+            "8.新增识图可以一次性上传多张图，修复用户头像刷新不及时的BUG",
+            "9.新增删除状态栏按钮可以拖动",
+            "10.新增拉黑系统，可以拉黑角色或者被角色拉黑，拉黑角色后仍可发言，但是角色不能回复，加回好友之前角色会记得拉黑后用户发的话，角色可以拒绝用户的申请",
+            "11.新增浏览器可以点进去可以查看详情",
+            "12.新增可以用角色手机给联系人发消息了，可以加联系人为好友，在聊天过程里面补充人设。需要现在偷看设置里面开启此开关",
+            "13.新增角色可以查看并且控制用户手机，可以替用户发消息，可以替用户删除好友，可以随意开关设置里面的开关，并且在用户尝试关掉此权限的时候进行阻拦",
+            "14.新增亲属卡，可以赠送亲属卡给角色，或者角色可以赠予亲属卡给你，可以调整亲属卡额度，冻结，收回，角色同样也可以调整给用户的亲属卡额度，冻结，收回。并且用户使用亲属卡，角色会有感知",
+            "15.新增云备份可以大容量分片上传",
+            "16.新增发送消息时可以有声音",
+            "17.新增角色高级清理，可以直接清理聊天记录啥啥的",
+            "18.新增多选收藏可以合并，可以在外面多选删除收藏"
+        ]
+    },
     {
         version: "3.7",
         date: "2026-03-07",
@@ -488,6 +516,7 @@ var db = {
     summaryApiSettings: {},
     backgroundApiSettings: {},
     supplementPersonaApiSettings: {},
+    peekApiSettings: {},
     wallpaper: 'https://i.postimg.cc/W4Z9R9x4/ins-1.jpg',
     myStickers: [],
     homeScreenMode: 'night',
@@ -500,6 +529,7 @@ var db = {
     summaryApiPresets: [],
     backgroundApiPresets: [],
     supplementPersonaApiPresets: [],
+    peekApiPresets: [],
     bubbleCssPresets: [],
     myPersonaPresets: [],
     fontPresets: [],
@@ -566,6 +596,7 @@ var db = {
     themePresets: [],
     globalSendSound: '',
     globalReceiveSound: '',
+    globalMessageSentSound: '',
     globalIncomingCallSound: '',
     multiMsgSoundEnabled: false,
     soundPresets: [],
@@ -577,7 +608,8 @@ var db = {
     },
     cotPresets: JSON.parse(JSON.stringify(DEFAULT_COT_PRESETS)),
     archives: [],
-    favorites: []  // 消息收藏：{ id, messageId, chatId, chatType, chatName, content, timestamp, favoriteTime, note, sender }
+    favorites: [],  // 消息收藏：{ id, messageId, chatId, chatType, chatName, content, timestamp, favoriteTime, note, sender }
+    phoneControlRecycleBin: []  // 角色掌控模式：被角色“删除”的角色移入回收站，可恢复
 };
 
 var currentChatId = null;
@@ -744,6 +776,7 @@ const loadData = async () => {
             summaryApiSettings: {},
             backgroundApiSettings: {},
             supplementPersonaApiSettings: {},
+            peekApiSettings: {},
             wallpaper: 'https://i.postimg.cc/W4Z9R9x4/ins-1.jpg',
             homeScreenMode: 'night',
             fontUrl: '',
@@ -754,6 +787,7 @@ const loadData = async () => {
             summaryApiPresets: [],
             backgroundApiPresets: [],
             supplementPersonaApiPresets: [],
+            peekApiPresets: [],
             bubbleCssPresets: [],
             myPersonaPresets: [],
             fontPresets: [],
@@ -777,6 +811,7 @@ const loadData = async () => {
             moreProfileCardBg: 'https://i.postimg.cc/XvFDdTKY/Smart-Select-20251013-023208.jpg',
             globalSendSound: '',
             globalReceiveSound: '',
+            globalMessageSentSound: '',
             globalIncomingCallSound: '',
             multiMsgSoundEnabled: false,
             soundPresets: [],
@@ -789,20 +824,25 @@ const loadData = async () => {
             hasSeenVideoCallDisclaimer: false,
             hasSeenVideoCallAvatarHint: false,
             favorites: [],
-            piggyBank: { balance: 520, transactions: [] },
+            piggyBank: { balance: 520, transactions: [], familyCards: [], receivedFamilyCards: [] },
             theaterScenarios: [],
             theaterPromptPresets: [],
             theaterHtmlScenarios: [],
             theaterHtmlPromptPresets: [],
             theaterMode: 'text',
-            theaterApiSettings: { useTheaterApi: false, url: '', key: '', model: '' }
+            theaterApiSettings: { useTheaterApi: false, url: '', key: '', model: '' },
+            theaterFontSize: 15,
+            theaterFontPreset: null,
+            avatarRecognitionDetailLevel: 'detailed'
         };
         db[key] = settings[key] !== undefined ? settings[key] : (defaultValue[key] !== undefined ? JSON.parse(JSON.stringify(defaultValue[key])) : undefined);
     });
 
-    if (!db.piggyBank) db.piggyBank = { balance: 520, transactions: [] };
+    if (!db.piggyBank) db.piggyBank = { balance: 520, transactions: [], familyCards: [], receivedFamilyCards: [] };
     if (typeof db.piggyBank.balance !== 'number') db.piggyBank.balance = 520;
     if (!Array.isArray(db.piggyBank.transactions)) db.piggyBank.transactions = [];
+    if (!Array.isArray(db.piggyBank.familyCards)) db.piggyBank.familyCards = [];
+    if (!Array.isArray(db.piggyBank.receivedFamilyCards)) db.piggyBank.receivedFamilyCards = [];
     if (!db.forumStrangerProfiles || typeof db.forumStrangerProfiles !== 'object') db.forumStrangerProfiles = {};
     if (!Array.isArray(db.forumFriendRequests)) db.forumFriendRequests = [];
     if (!db.forumPendingRequestFromUser || typeof db.forumPendingRequestFromUser !== 'object') db.forumPendingRequestFromUser = {};
@@ -854,7 +894,44 @@ const loadData = async () => {
         if (!c.gallery) c.gallery = [];
         if (c.useRealGallery === undefined) c.useRealGallery = false;
         if (!c.callHistory) c.callHistory = [];
+        if (!c.userAvatarLibrary || !Array.isArray(c.userAvatarLibrary)) c.userAvatarLibrary = [];
+        if (!c.charAvatarLibrary || !Array.isArray(c.charAvatarLibrary)) c.charAvatarLibrary = [];
+        // 拉黑与好友申请
+        if (c.isBlocked === undefined) c.isBlocked = false;
+        if (!c.blockHistory || !Array.isArray(c.blockHistory)) c.blockHistory = [];
+        if (!c.friendRequests || !Array.isArray(c.friendRequests)) c.friendRequests = [];
+        if (!c.blockReapply || typeof c.blockReapply !== 'object') {
+            c.blockReapply = { mode: 'fixed', fixedInterval: 30, lastRequestTime: null, nextCheckTime: null, pendingRequestId: null };
+        }
+        // 角色拉黑用户（角色主动拉黑）
+        if (c.canBlockUser === undefined) c.canBlockUser = true;
+        // 角色掌控模式：允许角色查看并操控用户手机
+        if (c.phoneControlEnabled === undefined) c.phoneControlEnabled = false;
+        if (c.phoneControlViewLimit === undefined) c.phoneControlViewLimit = 10;
+        if (!Array.isArray(c.phoneControlHistory)) c.phoneControlHistory = [];
+        if (c.familyCardEnabled === undefined) c.familyCardEnabled = false;
+        if (c.isBlockedByChar === undefined) c.isBlockedByChar = false;
+        if (c.blockedByCharAt === undefined) c.blockedByCharAt = null;
+        if (c.blockedByCharReason === undefined) c.blockedByCharReason = '';
+        if (!c.charBlockHistory || !Array.isArray(c.charBlockHistory)) c.charBlockHistory = [];
+        if (!c.userFriendRequests || !Array.isArray(c.userFriendRequests)) c.userFriendRequests = [];
+        // 用户头像库迁移：旧数据只有 name（实为描述），拆分为 name（简短名称）+ description（描述）
+        c.userAvatarLibrary.forEach(function (item) {
+            if (item.description === undefined && item.name) {
+                item.description = item.name;
+                item.name = item.name.length > 12 ? item.name.slice(0, 12) + '…' : item.name;
+            }
+            if (item.name === undefined) item.name = (item.description && item.description.length > 12) ? item.description.slice(0, 12) + '…' : (item.description || '未命名');
+        });
     });
+    if (db.userAvatarLibrary && Array.isArray(db.userAvatarLibrary) && db.userAvatarLibrary.length > 0) {
+        db.characters.forEach(c => {
+            if (!c.userAvatarLibrary) c.userAvatarLibrary = [];
+            c.userAvatarLibrary.push(...db.userAvatarLibrary);
+        });
+        delete db.userAvatarLibrary;
+        if (typeof saveData === 'function') saveData();
+    }
     db.groups.forEach(g => {
         if (g.isPinned === undefined) g.isPinned = false;
         if (!g.worldBookIds) g.worldBookIds = [];

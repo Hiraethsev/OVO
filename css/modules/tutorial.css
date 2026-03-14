@@ -1,5 +1,157 @@
 /* --- Tutorial Screen Styles --- */
 
+/* --- Modern (V2) iOS Style Layout --- */
+.tutorial-modern-layout {
+    background-color: #f2f2f7; /* iOS grouped background */
+    padding: 16px;
+    min-height: 100%;
+}
+
+.tutorial-modern-group {
+    margin-bottom: 24px;
+}
+
+.tutorial-modern-group-title {
+    font-size: 13px;
+    color: #6d6d72;
+    text-transform: uppercase;
+    margin: 0 0 8px 16px;
+    letter-spacing: 0.05em;
+}
+
+.tutorial-modern-list {
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.tutorial-modern-item {
+    border-bottom: 1px solid #e5e5ea;
+}
+
+.tutorial-modern-item:last-child {
+    border-bottom: none;
+}
+
+.tutorial-modern-header {
+    padding: 14px 16px;
+    font-size: 16px;
+    color: #000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: #fff;
+    transition: background-color 0.2s;
+}
+
+.tutorial-modern-header:active {
+    background-color: #e5e5ea;
+}
+
+.tutorial-modern-header::after {
+    content: '›';
+    font-size: 20px;
+    color: #c7c7cc;
+    transition: transform 0.3s ease;
+    font-family: monospace;
+    line-height: 1;
+}
+
+.tutorial-modern-item.open .tutorial-modern-header::after {
+    transform: rotate(90deg);
+}
+
+.tutorial-modern-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-in-out;
+    background: #fff;
+}
+
+.tutorial-modern-item.open .tutorial-modern-content {
+    max-height: 5000px;
+}
+
+.tutorial-modern-content-inner {
+    padding: 12px 16px 20px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.tutorial-modern-content img {
+    width: 100%;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    display: block;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.tutorial-modern-content img:last-child {
+    margin-bottom: 0;
+}
+
+/* Action Buttons as List Items */
+.tutorial-modern-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 14px 16px;
+    background: #fff;
+    border: none;
+    border-bottom: 1px solid #e5e5ea;
+    font-size: 16px;
+    color: #007aff; /* iOS blue */
+    text-align: left;
+    cursor: pointer;
+    margin: 0;
+    font-family: inherit;
+}
+
+.tutorial-modern-action:last-child {
+    border-bottom: none;
+}
+
+.tutorial-modern-action:active {
+    background-color: #e5e5ea;
+}
+
+.tutorial-modern-action.danger {
+    color: #ff3b30; /* iOS red */
+}
+
+.tutorial-modern-action .arrow {
+    color: #c7c7cc;
+    font-size: 20px;
+    font-family: monospace;
+}
+
+.tutorial-modern-action:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* GitHub Card */
+.tutorial-modern-gh-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.tutorial-modern-gh-card input,
+.tutorial-modern-gh-card select {
+    background: #f2f2f7;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    font-size: 15px !important;
+}
+
+.tutorial-modern-gh-card .gh-btn {
+    border-radius: 8px !important;
+    font-weight: 500;
+}
+
 #tutorial-screen {
     background-color: #f2f2f2;
 }
@@ -164,4 +316,271 @@
 .guide-btn-skip {
     background: transparent;
     color: #999;
+}
+
+/* --- 角色高级清理弹窗 --- */
+.char-advanced-clean-window .char-clean-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 8px;
+}
+.char-advanced-clean-window .char-clean-head-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.char-advanced-clean-window .char-clean-head-btn {
+    padding: 4px 8px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+.char-advanced-clean-window .char-clean-entity-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px;
+    padding: 6px 0;
+    background: #fafafa;
+}
+.char-advanced-clean-window .char-clean-entity-list label {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px 12px;
+    margin: 0;
+    cursor: pointer;
+    gap: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.char-advanced-clean-window .char-clean-entity-list label:last-child {
+    border-bottom: none;
+}
+.char-advanced-clean-window .char-clean-entity-list label:hover {
+    background: #f0f4ff;
+}
+.char-advanced-clean-window .char-clean-entity-list input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+}
+.char-advanced-clean-window .char-clean-entity-list .char-clean-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+.char-advanced-clean-window .char-clean-entity-list .char-clean-name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: #333;
+    min-width: 0;
+}
+.char-advanced-clean-window .char-clean-options-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+    margin-top: 8px;
+}
+.char-advanced-clean-window .char-clean-options-list label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: #555;
+    padding: 6px 0;
+}
+.char-advanced-clean-window .char-clean-options-list input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+/* --- Rabbit Island (V3) Style Layout --- */
+.tutorial-rabbit-layout {
+    background: #fdfbfb; /* 极淡的粉白背景 */
+    padding: 20px 16px;
+    min-height: 100%;
+    position: relative;
+}
+
+.tutorial-rabbit-header-title {
+    font-size: 20px;
+    font-weight: 500;
+    color: #555;
+    text-align: center;
+    margin-bottom: 24px;
+    letter-spacing: 2px;
+}
+
+.tutorial-rabbit-card {
+    background: #ffffff;
+    border-radius: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    border: 1px solid #f5f0f1;
+    overflow: hidden;
+}
+
+.tutorial-rabbit-card-title {
+    padding: 16px 20px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #444;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: #ffffff;
+    transition: background-color 0.2s;
+}
+
+.tutorial-rabbit-card-title:active {
+    background-color: #faf8f9;
+}
+
+.tutorial-rabbit-card-title::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #ccc;
+    border-bottom: 2px solid #ccc;
+    transform: rotate(45deg);
+    transition: transform 0.3s ease;
+    margin-right: 4px;
+}
+
+.tutorial-rabbit-card.open .tutorial-rabbit-card-title::after {
+    transform: rotate(-135deg);
+    margin-top: 4px;
+}
+
+.tutorial-rabbit-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-in-out;
+    background: #ffffff;
+}
+
+.tutorial-rabbit-card.open .tutorial-rabbit-content {
+    max-height: 5000px;
+}
+
+.tutorial-rabbit-content-inner {
+    padding: 0 16px 20px;
+    border-top: 1px solid #fcfafb;
+}
+
+.tutorial-rabbit-content img {
+    width: 100%;
+    border-radius: 12px;
+    margin-top: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    border: 1px solid #fcfafb;
+    display: block;
+}
+
+.tutorial-rabbit-action {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding: 15px;
+    background: #ffffff;
+    color: #555;
+    border: 1px solid #f0eaeb;
+    border-radius: 16px;
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.01);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.tutorial-rabbit-action:active {
+    transform: scale(0.98);
+    background: #faf8f9;
+}
+
+.tutorial-rabbit-action.danger {
+    color: #e74c3c;
+    border-color: #fceeee;
+}
+
+.tutorial-rabbit-action.neutral {
+    background: #fdfbfb;
+    color: #666;
+}
+
+.tutorial-rabbit-update-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    padding: 14px;
+    background: #ffffff;
+    border-radius: 16px;
+    margin-bottom: 24px;
+    border: 1px solid #f0eaeb;
+    cursor: pointer;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.01);
+}
+
+.tutorial-rabbit-update-btn:active {
+    background: #faf8f9;
+}
+
+/* Update log modal for Rabbit mode */
+.rabbit-update-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(253, 251, 251, 0.95);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.rabbit-update-modal.show {
+    display: flex;
+}
+
+.rabbit-update-content {
+    background: #fff;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 24px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.05);
+    border: 1px solid #f5f0f1;
+}
+
+.rabbit-update-close {
+    margin-top: 20px;
+    width: 100%;
+    padding: 14px;
+    background: #fdfbfb;
+    color: #555;
+    border: 1px solid #f0eaeb;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.rabbit-update-close:active {
+    background: #f5f0f1;
 }
