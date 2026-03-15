@@ -1095,6 +1095,14 @@
 .payment-method-item .pm-name { flex: 1; font-size: 14px; }
 .payment-method-item .pm-balance { font-size: 13px; color: #666; }
 
+.fc-payment-section { border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; margin-top: 8px; }
+.fc-payment-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; cursor: pointer; font-size: 14px; color: #333; background: #f8f8f8; }
+.fc-toggle-arrow { font-size: 10px; transition: transform 0.2s; color: #999; }
+.fc-payment-section.expanded .fc-toggle-arrow { transform: rotate(90deg); }
+.fc-payment-cards { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.fc-payment-section.expanded .fc-payment-cards { max-height: 160px; overflow-y: auto; padding: 4px; }
+.fc-payment-cards .payment-method-item { margin: 4px 0; }
+
 /* 发送定位弹窗：距你约 一行 — 数字 60%，单位 40% */
 .location-distance-row {
     display: flex;

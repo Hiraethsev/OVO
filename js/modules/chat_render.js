@@ -1494,11 +1494,14 @@ function addMessageBubble(message, targetChatId, targetChatType) {
                 else if (message.parts && message.parts.some(p => p.type === 'html')) previewText = '[互动]';
             }
             
-            showToast({
-                avatar: senderAvatar,
-                name: senderName,
-                message: previewText.substring(0, 30)
-            });
+            // === 后台消息弹窗通知开关检查 ===
+            if (senderChat.bgToastEnabled !== false) {
+                showToast({
+                    avatar: senderAvatar,
+                    name: senderName,
+                    message: previewText.substring(0, 30)
+                });
+            }
         }
         return; 
     }

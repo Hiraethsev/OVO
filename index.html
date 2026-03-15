@@ -1018,6 +1018,15 @@
             <div class="ar-modal">
                 <div class="ar-modal-title">情头库</div>
                 <div class="ar-modal-body">
+                    <div class="ar-upload-row">
+                        <input type="file" id="ar-couple-library-file-input" accept="image/*" style="display:none;">
+                        <input type="file" id="ar-couple-library-file-input-char" accept="image/*" style="display:none;">
+                        <button type="button" id="ar-couple-library-upload-local" class="btn btn-small btn-neutral ar-btn-upload">本地上传</button>
+                        <div class="ar-url-row">
+                            <input type="text" id="ar-couple-library-url-input" class="ar-url-input" placeholder="图片链接">
+                            <button type="button" id="ar-couple-library-upload-url" class="btn btn-small btn-primary">URL 上传</button>
+                        </div>
+                    </div>
                     <div id="couple-avatar-library-list" class="ar-library-list ar-couple-library-list"></div>
                 </div>
                 <div class="ar-library-toolbar">
@@ -1054,6 +1063,43 @@
                         <button type="button" id="couple-edit-save-btn" class="btn btn-small btn-neutral">保存</button>
                         <button type="button" id="couple-edit-delete-btn" class="btn btn-small btn-danger">删除此项</button>
                         <button type="button" id="couple-edit-close-btn" class="btn btn-small btn-neutral">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 情头库·手动上传添加弹窗 -->
+        <div id="couple-avatar-add-modal" class="ar-modal-overlay">
+            <div class="ar-modal ar-couple-edit-modal">
+                <div class="ar-modal-title">添加到情头库</div>
+                <div class="ar-modal-body">
+                    <div class="ar-couple-edit-preview">
+                        <div class="ar-couple-edit-pair">
+                            <span class="ar-couple-edit-label">用户头像</span>
+                            <img id="ar-couple-add-user-img" src="" alt="">
+                        </div>
+                        <div class="ar-couple-edit-pair">
+                            <span class="ar-couple-edit-label">角色头像</span>
+                            <img id="ar-couple-add-char-img" src="" alt="" style="cursor:pointer; border:2px dashed #ccc;" title="点击选择角色头像">
+                            <input type="file" id="ar-couple-add-char-file" accept="image/*" style="display:none;">
+                            <div class="ar-url-row" style="margin-top:6px;">
+                                <input type="text" id="ar-couple-add-char-url-input" class="ar-url-input" placeholder="角色头像链接" style="font-size:12px;">
+                                <button type="button" id="ar-couple-add-char-url-btn" class="btn btn-small btn-neutral" style="font-size:12px; padding:4px 8px;">URL</button>
+                            </div>
+                        </div>
+                    </div>
+                    <label class="ar-option-row">
+                        <input type="checkbox" id="ar-couple-add-use-ai">
+                        <span>上传时调用 API 自动识别并填入描述（可选）</span>
+                    </label>
+                    <button type="button" id="ar-couple-add-recognize-btn" class="btn btn-small btn-neutral" style="margin-bottom:8px;">识别图像填入描述</button>
+                    <label class="ar-desc-label">名称（必填，如：甜蜜情头、校园情头）</label>
+                    <input type="text" id="ar-couple-add-name-input" class="ar-name-input" placeholder="情头名称" maxlength="30">
+                    <label class="ar-desc-label">描述（选填，可为 AI 识别结果）</label>
+                    <textarea id="ar-couple-add-description-input" class="ar-desc-input" placeholder="情头描述" rows="3"></textarea>
+                    <div class="ar-modal-actions">
+                        <button type="button" id="ar-couple-add-cancel-btn" class="btn btn-small btn-neutral">取消</button>
+                        <button type="button" id="ar-couple-add-confirm-btn" class="btn btn-small btn-primary">添加</button>
                     </div>
                 </div>
             </div>
@@ -4143,6 +4189,15 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">后台消息弹窗通知</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-bg-toast-enabled" checked>
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
                             <button type="button" class="kkt-danger-btn" id="clear-chat-history-btn">清空聊天记录</button>
@@ -4175,6 +4230,19 @@
                                         <span id="setting-phone-control-view-limit-value" style="min-width:28px;text-align:right;">10</span> 条
                                     </div>
                                 </div>
+                                <div class="kkt-item" id="setting-phone-control-folder-filter" style="display:none;">
+                                    <div class="kkt-item-label">只让角色看到指定分组的角色</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-phone-control-folder-filter-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-phone-control-folder-selection" style="display:none;">
+                                    <div class="kkt-item-label">可见分组</div>
+                                    <div class="kkt-item-control" id="setting-phone-control-folder-checkboxes"></div>
+                                </div>
                                 <div class="kkt-item" id="setting-phone-control-actions" style="display:none;">
                                     <button type="button" class="btn btn-small btn-secondary" id="setting-phone-control-log-btn">查看操控日志</button>
                                     <button type="button" class="btn btn-small btn-secondary" id="setting-phone-control-recycle-btn" style="margin-left:8px;">回收站</button>
@@ -4186,6 +4254,11 @@
                                     <div style="font-weight:600;color:#ff3b30;margin-bottom:12px;">⚠️ 严肃警告</div>
                                     <p style="font-size:14px;color:#333;margin-bottom:12px;">你即将授予该角色<strong>查看并操控你手机</strong>的权限。</p>
                                     <p style="font-size:13px;color:#666;margin-bottom:8px;">开启后，该角色将能够：查看你与所有其他角色的聊天、日记与相册等；以你的身份给他人发消息；删除角色、清空记录、修改设置。</p>
+                                    <div id="phone-control-token-warning" style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:none;">
+                                        <p style="font-size:13px;color:#856404;margin:0 0 4px 0;font-weight:600;">Token 消耗提醒</p>
+                                        <p style="font-size:12px;color:#856404;margin:0 0 2px 0;">开启后每次对话将额外消耗约 <strong id="phone-control-extra-tokens">--</strong> tokens（手机状态摘要 + 操控指令集）。</p>
+                                        <p style="font-size:12px;color:#856404;margin:0;">当前对话总 token：<strong id="phone-control-current-tokens">--</strong></p>
+                                    </div>
                                     <p style="font-size:13px;color:#ff3b30;margin-bottom:16px;">关闭此功能时，角色可能会强烈抵抗；且角色会永久记住 TA 在此期间的所有行为。</p>
                                     <div style="display:flex;gap:10px;justify-content:flex-end;">
                                         <button type="button" class="btn btn-secondary" id="phone-control-warning-cancel">取消</button>
@@ -4195,7 +4268,11 @@
                             </div>
                             <div id="phone-control-force-close-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;padding:20px;">
                                 <div style="background:#fff;border-radius:12px;max-width:340px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
-                                    <p style="font-size:14px;color:#333;margin-bottom:16px;">确定要强制关闭该角色的手机查看与操控权限吗？关闭后角色无法再阻止。</p>
+                                    <p style="font-size:14px;color:#333;margin-bottom:8px;">确定要强制关闭该角色的手机查看与操控权限吗？关闭后角色无法再阻止。</p>
+                                    <div id="phone-control-close-token-info" style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:none;">
+                                        <p style="font-size:12px;color:#856404;margin:0 0 2px 0;">该角色已有 <strong id="force-close-msg-count">0</strong> 条聊天记录，当前上下文约 <strong id="force-close-token-count">0</strong> tokens。</p>
+                                        <p style="font-size:12px;color:#856404;margin:0;">关闭权限后，角色掌控相关的 token 开销将不再产生。</p>
+                                    </div>
                                     <div style="display:flex;gap:10px;justify-content:flex-end;">
                                         <button type="button" class="btn btn-secondary" id="phone-control-force-cancel">取消</button>
                                         <button type="button" class="btn btn-danger" id="phone-control-force-confirm">强制关闭</button>
@@ -4203,7 +4280,7 @@
                                 </div>
                             </div>
                             <div id="phone-control-recycle-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;padding:20px;">
-                                <div style="background:#fff;border-radius:12px;max-width:360px;max-height:70vh;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+                                <div style="background:#fff;border-radius:12px;width:90%;max-width:480px;min-width:320px;max-height:70vh;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
                                     <div style="padding:16px;border-bottom:1px solid #eee;font-weight:600;">回收站</div>
                                     <div id="phone-control-recycle-list" style="padding:12px;overflow-y:auto;max-height:50vh;"></div>
                                     <div style="padding:12px;border-top:1px solid #eee;">
@@ -6885,11 +6962,19 @@
             <header class="app-header">
                 <button type="button" class="back-btn" data-target="piggy-bank-screen">&#8249;</button>
                 <div class="title-container"><h1 class="title">亲属卡</h1></div>
-                <button type="button" class="btn btn-primary btn-small" id="family-card-create-btn-in-list">创建</button>
+                <div class="header-actions">
+                    <button type="button" class="btn btn-neutral btn-small" id="family-card-manage-btn">管理</button>
+                    <button type="button" class="btn btn-primary btn-small" id="family-card-create-btn-in-list">创建</button>
+                </div>
             </header>
             <main class="content">
                 <div class="family-card-scroll-list" id="family-card-list-container"></div>
             </main>
+            <div class="family-card-delete-toolbar" id="family-card-delete-toolbar" style="display:none;">
+                <button type="button" class="btn btn-neutral btn-small" id="fc-select-all-btn">全选</button>
+                <button type="button" class="btn btn-danger btn-small" id="fc-delete-selected-btn">删除</button>
+                <button type="button" class="btn btn-neutral btn-small" id="fc-delete-cancel-btn">取消</button>
+            </div>
         </div>
         <!-- 亲属卡详情页 -->
         <div id="family-card-detail-screen" class="screen">

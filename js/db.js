@@ -174,8 +174,21 @@ const globalSettingKeys = [
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
-const appVersion = "3.15";
+const appVersion = "3.15.1";
 const updateLog = [
+    {
+        version: "3.15.1",
+        date: "2026-03-15",
+        notes: [
+            "3.15微量更新：",
+            "1.新增亲属卡删除，角色只能送一张亲属卡",
+            "2.新增后台消息弹窗",
+            "3.修复拉黑记忆一直持续记着，清空也没办法删除",
+            "4.新增情头库上传功能",
+            "5.修复状态栏文字修改后状态栏没有更新的BUG",
+            "6.修复浏览器标题过长被挡住，大家觉得现在的布局看着舒服吗"
+        ]
+    },
     {
         version: "3.15",
         date: "2026-03-15",

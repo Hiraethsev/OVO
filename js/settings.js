@@ -332,7 +332,21 @@ function setupChatSettings() {
         if (!character) return;
         if (confirm(`你确定要清空与“${character.remarkName}”的所有聊天记录吗？这个操作是不可恢复的！`)) {
             character.history = [];
-            character.status = '在线'; 
+            character.status = '在线';
+            // 清除拉黑相关记忆
+            character.blockHistory = [];
+            character.friendRequests = [];
+            character.charBlockHistory = [];
+            character.userFriendRequests = [];
+            character.isBlocked = false;
+            character.blockedAt = null;
+            character.blockReapply = null;
+            character.isBlockedByChar = false;
+            character.blockedByCharAt = null;
+            character.blockedByCharReason = null;
+            // 隐藏角色拉黑遮罩（如果有）
+            var charBlockedOverlay = document.getElementById('char-blocked-overlay');
+            if (charBlockedOverlay) charBlockedOverlay.style.display = 'none';
             await saveData();
             renderMessages(false, true);
             renderChatList();
@@ -405,17 +419,50 @@ function setupChatSettings() {
         const phoneControlEnabledEl = document.getElementById('setting-phone-control-enabled');
         const phoneControlOptionsEl = document.getElementById('setting-phone-control-options');
         const phoneControlActionsEl = document.getElementById('setting-phone-control-actions');
+        const phoneControlFolderFilterEl = document.getElementById('setting-phone-control-folder-filter');
+        const phoneControlFolderSelectionEl = document.getElementById('setting-phone-control-folder-selection');
         const phoneControlViewLimitEl = document.getElementById('setting-phone-control-view-limit');
         const phoneControlViewLimitValueEl = document.getElementById('setting-phone-control-view-limit-value');
         const warningModal = document.getElementById('phone-control-warning-modal');
         const forceCloseModal = document.getElementById('phone-control-force-close-modal');
         if (!phoneControlEnabledEl) return;
+        function showPhoneControlOptions() {
+            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'block';
+            if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'flex';
+            if (phoneControlFolderFilterEl) phoneControlFolderFilterEl.style.display = 'flex';
+            const folderFilterOn = document.getElementById('setting-phone-control-folder-filter-enabled');
+            if (phoneControlFolderSelectionEl) phoneControlFolderSelectionEl.style.display = (folderFilterOn && folderFilterOn.checked) ? 'block' : 'none';
+        }
+        function hidePhoneControlOptions() {
+            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'none';
+            if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'none';
+            if (phoneControlFolderFilterEl) phoneControlFolderFilterEl.style.display = 'none';
+            if (phoneControlFolderSelectionEl) phoneControlFolderSelectionEl.style.display = 'none';
+        }
         phoneControlEnabledEl.addEventListener('change', function () {
             if (this.checked) {
-                if (warningModal) warningModal.style.display = 'flex';
-                else {
-                    if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'block';
-                    if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'flex';
+                // 开启时：计算并显示 token 消耗提醒
+                if (warningModal) {
+                    const tokenWarningEl = document.getElementById('phone-control-token-warning');
+                    if (tokenWarningEl && currentChatId) {
+                        const character = db.characters.find(c => c.id === currentChatId);
+                        if (character) {
+                            // 估算手机掌控模式额外 token（指令集模板约 350 + 操控历史）
+                            const historyCount = (character.phoneControlHistory || []).length;
+                            const extraTokens = 350 + Math.min(historyCount, 15) * 30;
+                            document.getElementById('phone-control-extra-tokens').textContent = extraTokens + '+';
+                            // 当前对话总 token
+                            let currentTokens = 0;
+                            if (typeof estimateChatTokens === 'function') {
+                                currentTokens = estimateChatTokens(character.id, 'private');
+                            }
+                            document.getElementById('phone-control-current-tokens').textContent = currentTokens;
+                            tokenWarningEl.style.display = 'block';
+                        }
+                    }
+                    warningModal.style.display = 'flex';
+                } else {
+                    showPhoneControlOptions();
                 }
             } else {
                 this.checked = true;
@@ -433,15 +480,31 @@ function setupChatSettings() {
         document.getElementById('phone-control-warning-cancel') && document.getElementById('phone-control-warning-cancel').addEventListener('click', () => {
             if (warningModal) warningModal.style.display = 'none';
             if (phoneControlEnabledEl) phoneControlEnabledEl.checked = false;
-            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'none';
-            if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'none';
+            hidePhoneControlOptions();
         });
         document.getElementById('phone-control-warning-confirm') && document.getElementById('phone-control-warning-confirm').addEventListener('click', () => {
             if (warningModal) warningModal.style.display = 'none';
-            if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'block';
-            if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'flex';
+            showPhoneControlOptions();
+        });
+        document.getElementById('setting-phone-control-folder-filter-enabled') && document.getElementById('setting-phone-control-folder-filter-enabled').addEventListener('change', function () {
+            if (phoneControlFolderSelectionEl) phoneControlFolderSelectionEl.style.display = this.checked ? 'block' : 'none';
         });
         document.getElementById('setting-phone-control-force-close-btn') && document.getElementById('setting-phone-control-force-close-btn').addEventListener('click', () => {
+            // 强制关闭前显示 token 信息
+            const tokenInfoEl = document.getElementById('phone-control-close-token-info');
+            if (tokenInfoEl && currentChatId) {
+                const character = db.characters.find(c => c.id === currentChatId);
+                if (character) {
+                    const msgCount = character.history ? character.history.length : 0;
+                    let tokenCount = 0;
+                    if (typeof estimateChatTokens === 'function') {
+                        tokenCount = estimateChatTokens(character.id, 'private');
+                    }
+                    document.getElementById('force-close-msg-count').textContent = msgCount;
+                    document.getElementById('force-close-token-count').textContent = tokenCount;
+                    tokenInfoEl.style.display = (msgCount > 0) ? 'block' : 'none';
+                }
+            }
             if (forceCloseModal) forceCloseModal.style.display = 'flex';
         });
         document.getElementById('phone-control-force-cancel') && document.getElementById('phone-control-force-cancel').addEventListener('click', () => {
@@ -453,8 +516,7 @@ function setupChatSettings() {
                 character.phoneControlEnabled = false;
                 await saveData();
                 if (phoneControlEnabledEl) phoneControlEnabledEl.checked = false;
-                if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = 'none';
-                if (phoneControlActionsEl) phoneControlActionsEl.style.display = 'none';
+                hidePhoneControlOptions();
                 if (typeof showToast === 'function') showToast('已强制关闭');
             }
             if (forceCloseModal) forceCloseModal.style.display = 'none';
@@ -513,6 +575,47 @@ function setupChatSettings() {
             const modal = document.getElementById('phone-control-recycle-modal');
             if (modal) modal.style.display = 'none';
         });
+        function renderPhoneControlFolderCheckboxes(character) {
+            const container = document.getElementById('setting-phone-control-folder-checkboxes');
+            if (!container) return;
+            container.innerHTML = '';
+            const folders = db.chatFolders || [];
+            const visibleIds = (character && character.phoneControlVisibleFolderIds) ? character.phoneControlVisibleFolderIds : [];
+            if (folders.length === 0) {
+                const noFolderLabel = document.createElement('label');
+                noFolderLabel.style.cssText = 'display:flex;align-items:center;gap:4px;margin:4px 0;';
+                const noFolderCb = document.createElement('input');
+                noFolderCb.type = 'checkbox';
+                noFolderCb.value = '__no_folder__';
+                noFolderCb.checked = visibleIds.includes('__no_folder__');
+                noFolderLabel.appendChild(noFolderCb);
+                noFolderLabel.appendChild(document.createTextNode('未分组'));
+                container.appendChild(noFolderLabel);
+                container.appendChild(document.createTextNode('（暂无其他文件夹）'));
+                return;
+            }
+            const noFolderLabel = document.createElement('label');
+            noFolderLabel.style.cssText = 'display:flex;align-items:center;gap:4px;margin:4px 0;';
+            const noFolderCb = document.createElement('input');
+            noFolderCb.type = 'checkbox';
+            noFolderCb.value = '__no_folder__';
+            noFolderCb.checked = visibleIds.includes('__no_folder__');
+            noFolderLabel.appendChild(noFolderCb);
+            noFolderLabel.appendChild(document.createTextNode('未分组'));
+            container.appendChild(noFolderLabel);
+            folders.forEach(folder => {
+                const label = document.createElement('label');
+                label.style.cssText = 'display:flex;align-items:center;gap:4px;margin:4px 0;';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = folder.id;
+                cb.checked = visibleIds.includes(folder.id);
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(folder.name));
+                container.appendChild(label);
+            });
+        }
+        window.renderPhoneControlFolderCheckboxes = renderPhoneControlFolderCheckboxes;
     })();
 
     document.getElementById('link-world-book-btn').addEventListener('click', () => {
@@ -1232,6 +1335,10 @@ function loadSettingsToSidebar() {
             qhRangeEl.style.display = qhEnabledEl.checked ? 'block' : 'none';
         });
 
+        // === 加载后台消息弹窗通知设置 ===
+        const bgToastEl = document.getElementById('setting-bg-toast-enabled');
+        if (bgToastEl) bgToastEl.checked = e.bgToastEnabled !== false; // 默认开启
+
         document.getElementById('setting-use-real-gallery').checked = e.useRealGallery || false;
 
         // === 加载 TTS 配置 ===
@@ -1260,6 +1367,13 @@ function loadSettingsToSidebar() {
             if (phoneControlOptionsEl) phoneControlOptionsEl.style.display = phoneControlEnabledEl.checked ? 'block' : 'none';
             if (phoneControlActionsEl) phoneControlActionsEl.style.display = phoneControlEnabledEl.checked ? 'flex' : 'none';
         }
+        const phoneControlFolderFilterEl = document.getElementById('setting-phone-control-folder-filter');
+        const phoneControlFolderSelectionEl = document.getElementById('setting-phone-control-folder-selection');
+        const phoneControlFolderFilterEnabledEl = document.getElementById('setting-phone-control-folder-filter-enabled');
+        if (phoneControlFolderFilterEl) phoneControlFolderFilterEl.style.display = e.phoneControlEnabled ? 'flex' : 'none';
+        if (phoneControlFolderFilterEnabledEl) phoneControlFolderFilterEnabledEl.checked = e.phoneControlFolderFilterEnabled || false;
+        if (phoneControlFolderSelectionEl) phoneControlFolderSelectionEl.style.display = (e.phoneControlEnabled && e.phoneControlFolderFilterEnabled) ? 'block' : 'none';
+        if (typeof window.renderPhoneControlFolderCheckboxes === 'function') window.renderPhoneControlFolderCheckboxes(e);
         if (phoneControlViewLimitEl) {
             const limit = Math.min(50, Math.max(5, parseInt(e.phoneControlViewLimit, 10) || 10));
             phoneControlViewLimitEl.value = limit;
@@ -1505,6 +1619,10 @@ async function saveSettingsFromSidebar() {
         e.autoReply.quietHours.start = document.getElementById('setting-quiet-hours-start').value || '23:00';
         e.autoReply.quietHours.end = document.getElementById('setting-quiet-hours-end').value || '07:00';
 
+        // === 保存后台消息弹窗通知设置 ===
+        const bgToastEl = document.getElementById('setting-bg-toast-enabled');
+        if (bgToastEl) e.bgToastEnabled = bgToastEl.checked;
+
         e.useRealGallery = document.getElementById('setting-use-real-gallery').checked;
 
         if (e.isBlocked) {
@@ -1521,6 +1639,12 @@ async function saveSettingsFromSidebar() {
         if (phoneControlEnabledCheckbox) e.phoneControlEnabled = phoneControlEnabledCheckbox.checked;
         const phoneControlViewLimitInput = document.getElementById('setting-phone-control-view-limit');
         if (phoneControlViewLimitInput) e.phoneControlViewLimit = Math.min(50, Math.max(5, parseInt(phoneControlViewLimitInput.value, 10) || 10));
+        const phoneControlFolderFilterCheckbox = document.getElementById('setting-phone-control-folder-filter-enabled');
+        if (phoneControlFolderFilterCheckbox) e.phoneControlFolderFilterEnabled = phoneControlFolderFilterCheckbox.checked;
+        const phoneControlFolderCheckboxes = document.querySelectorAll('#setting-phone-control-folder-checkboxes input[type="checkbox"]');
+        if (phoneControlFolderCheckboxes.length > 0) {
+            e.phoneControlVisibleFolderIds = Array.from(phoneControlFolderCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+        }
 
         await saveData();
         showToast('设置已保存！');

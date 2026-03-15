@@ -520,6 +520,31 @@ async function processStream(response, chat, apiType, targetChatId, targetChatTy
     await handleAiReplyContent(fullResponse, chat, targetChatId, targetChatType, isBackground, isCharBlockedMonologue);
 }
 
+/** 返回该角色在手机掌控下可见的角色与群聊（未开启分组过滤则返回全部，开启则只返回指定文件夹内） */
+function getPhoneControlVisibleChats(controllingChar) {
+    if (!controllingChar.phoneControlFolderFilterEnabled || !controllingChar.phoneControlVisibleFolderIds || controllingChar.phoneControlVisibleFolderIds.length === 0) {
+        return {
+            characters: (db.characters || []).filter(c => c.id !== controllingChar.id),
+            groups: db.groups || []
+        };
+    }
+    const visibleIds = controllingChar.phoneControlVisibleFolderIds;
+    const includeNoFolder = visibleIds.includes('__no_folder__');
+    const folderIds = visibleIds.filter(id => id !== '__no_folder__');
+    const characters = (db.characters || []).filter(c => {
+        if (c.id === controllingChar.id) return false;
+        if (!c.folderId && includeNoFolder) return true;
+        if (c.folderId && folderIds.includes(c.folderId)) return true;
+        return false;
+    });
+    const groups = (db.groups || []).filter(g => {
+        if (!g.folderId && includeNoFolder) return true;
+        if (g.folderId && folderIds.includes(g.folderId)) return true;
+        return false;
+    });
+    return { characters, groups };
+}
+
 /** 解析并执行 [phone-control:action|key:value...] 指令，返回清理后的文本与是否执行过指令 */
 function executePhoneControlCommands(text, controllingChar) {
     if (!text || !controllingChar || !controllingChar.phoneControlEnabled) return { cleaned: text, executed: false };
@@ -549,18 +574,19 @@ function executePhoneControlCommands(text, controllingChar) {
             executed = true;
         };
 
+        const { characters: visibleChars, groups: visibleGroups } = getPhoneControlVisibleChats(controllingChar);
         const findTargetChat = () => {
-            const c = (db.characters || []).find(x => x.id !== controllingChar.id && (x.remarkName === targetName || x.realName === targetName));
+            const c = visibleChars.find(x => x.remarkName === targetName || x.realName === targetName);
             if (c) return { chat: c, chatId: c.id, chatType: 'private', name: c.remarkName || c.realName };
-            const g = (db.groups || []).find(x => x.name === targetName);
+            const g = visibleGroups.find(x => x.name === targetName);
             if (g) return { chat: g, chatId: g.id, chatType: 'group', name: g.name };
             return null;
         };
 
         if (action === 'view-chat-list') {
             const pad = (n) => (n < 10 ? '0' + n : '' + n);
-            const others = (db.characters || []).filter(c => c.id !== controllingChar.id);
-            const groupList = (db.groups || []);
+            const others = visibleChars;
+            const groupList = visibleGroups;
             const chatItems = [
                 ...others.map(c => ({ name: c.remarkName || c.realName || '未知', type: 'private', lastMsg: (c.history && c.history.length) ? c.history[c.history.length - 1] : null })),
                 ...groupList.map(g => ({ name: g.name || '群聊', type: 'group', lastMsg: (g.history && g.history.length) ? g.history[g.history.length - 1] : null }))
@@ -622,7 +648,7 @@ function executePhoneControlCommands(text, controllingChar) {
             }
             toRemove.push(match[0]);
         } else if (action === 'delete-character' && targetName) {
-            const c = (db.characters || []).find(x => x.id !== controllingChar.id && (x.remarkName === targetName || x.realName === targetName));
+            const c = visibleChars.find(x => x.remarkName === targetName || x.realName === targetName);
             if (c) {
                 if (!Array.isArray(db.phoneControlRecycleBin)) db.phoneControlRecycleBin = [];
                 db.phoneControlRecycleBin.push({ ...c, recycledAt: Date.now(), recycledByCharId: controllingChar.id });
@@ -633,7 +659,7 @@ function executePhoneControlCommands(text, controllingChar) {
             }
             toRemove.push(match[0]);
         } else if (action === 'toggle-setting' && targetName && params.setting) {
-            const c = (db.characters || []).find(x => x.id !== controllingChar.id && (x.remarkName === targetName || x.realName === targetName));
+            const c = visibleChars.find(x => x.remarkName === targetName || x.realName === targetName);
             if (c) {
                 const key = params.setting;
                 const val = (params.value || '').toLowerCase() === 'on' || (params.value || '').toLowerCase() === 'true';
@@ -647,6 +673,17 @@ function executePhoneControlCommands(text, controllingChar) {
             if (found) {
                 const count = (found.chat.history || []).length;
                 found.chat.history = [];
+                // 清除拉黑相关记忆
+                found.chat.blockHistory = [];
+                found.chat.friendRequests = [];
+                found.chat.charBlockHistory = [];
+                found.chat.userFriendRequests = [];
+                found.chat.isBlocked = false;
+                found.chat.blockedAt = null;
+                found.chat.blockReapply = null;
+                found.chat.isBlockedByChar = false;
+                found.chat.blockedByCharAt = null;
+                found.chat.blockedByCharReason = null;
                 pushHistory('action', 'clear-history', targetName, '清空' + count + '条');
                 if (typeof saveData === 'function') saveData();
                 if (typeof renderChatList === 'function') renderChatList();
@@ -1054,6 +1091,11 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
                         else if (periodStr.indexOf('每周') !== -1) refreshPeriod = 'weekly';
                         else if (periodStr.indexOf('每月') !== -1) refreshPeriod = 'monthly';
                         else { const d = parseInt(periodStr, 10); if (!isNaN(d) && d > 0) { refreshPeriod = 'custom'; refreshDays = d; } }
+                        const existingCard = (db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards.find(c => c.fromCharId === character.id && c.status === 'active') : null;
+                        if (existingCard) {
+                            existingCard.status = 'revoked';
+                            existingCard.statusChangedBy = 'system_replaced';
+                        }
                         if (typeof createReceivedFamilyCard === 'function') {
                             const card = createReceivedFamilyCard({ fromCharId: character.id, fromCharName: character.realName || '', limit, refreshPeriod, refreshDays });
                             message.receivedFamilyCardId = card.id;

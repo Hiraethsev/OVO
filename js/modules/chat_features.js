@@ -180,10 +180,16 @@ function setupWalletSystem() {
                 const balance = typeof getPiggyBalance === 'function' ? getPiggyBalance() : 520;
                 let html = '<label class="payment-method-item"><input type="radio" name="transfer-pay-method" value="balance" checked><span class="pm-name">余额</span><span class="pm-balance">' + balance + '</span></label>';
                 const received = (db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards.filter(c => c.status === 'active') : [];
-                received.forEach(c => {
-                    const remaining = Math.max(0, c.limit - (c.usedAmount || 0));
-                    html += '<label class="payment-method-item"><input type="radio" name="transfer-pay-method" value="' + c.id + '"><span class="pm-name">' + (c.fromCharName || '') + '的亲属卡</span><span class="pm-balance">剩余 ' + remaining + '</span></label>';
-                });
+                if (received.length > 0) {
+                    html += '<div class="fc-payment-section">';
+                    html += '<div class="fc-payment-header" onclick="this.parentElement.classList.toggle(\'expanded\')"><span>亲属卡 (' + received.length + '张)</span><span class="fc-toggle-arrow">▶</span></div>';
+                    html += '<div class="fc-payment-cards">';
+                    received.forEach(c => {
+                        const remaining = Math.max(0, c.limit - (c.usedAmount || 0));
+                        html += '<label class="payment-method-item"><input type="radio" name="transfer-pay-method" value="' + c.id + '"><span class="pm-name">' + (c.fromCharName || '') + '的亲属卡</span><span class="pm-balance">剩余 ' + remaining + '</span></label>';
+                    });
+                    html += '</div></div>';
+                }
                 methodList.innerHTML = html;
             }
             sendTransferModal.classList.add('visible');

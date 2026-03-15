@@ -1191,11 +1191,152 @@
         modal.onclick = function (e) { if (e.target === modal) closeEditModal(); };
     }
 
+    function openCoupleAvatarAddModal(charId, userImageUrl) {
+        var modal = document.getElementById('couple-avatar-add-modal');
+        var userImg = document.getElementById('ar-couple-add-user-img');
+        var charImg = document.getElementById('ar-couple-add-char-img');
+        var charFileInput = document.getElementById('ar-couple-add-char-file');
+        var charUrlInput = document.getElementById('ar-couple-add-char-url-input');
+        var charUrlBtn = document.getElementById('ar-couple-add-char-url-btn');
+        var useAiCheck = document.getElementById('ar-couple-add-use-ai');
+        var recognizeBtn = document.getElementById('ar-couple-add-recognize-btn');
+        var nameInput = document.getElementById('ar-couple-add-name-input');
+        var descInput = document.getElementById('ar-couple-add-description-input');
+        var cancelBtn = document.getElementById('ar-couple-add-cancel-btn');
+        var confirmBtn = document.getElementById('ar-couple-add-confirm-btn');
+        if (!modal || !userImg) return;
+        var char = getChar(charId);
+        if (!char) return;
+
+        var charImageUrl = '';
+        userImg.src = userImageUrl || '';
+        charImg.src = '';
+        charImg.style.border = '2px dashed #ccc';
+        if (useAiCheck) useAiCheck.checked = false;
+        if (nameInput) nameInput.value = '';
+        if (descInput) descInput.value = '';
+        if (charUrlInput) charUrlInput.value = '';
+        modal.classList.add('visible');
+
+        var finish = function () { modal.classList.remove('visible'); };
+
+        // 点击角色头像区域选择本地文件
+        if (charImg) charImg.onclick = function () {
+            if (charFileInput) charFileInput.click();
+        };
+        if (charFileInput) {
+            charFileInput.onchange = function (e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                if (typeof compressImage !== 'function') {
+                    if (typeof showToast === 'function') showToast('图片处理不可用');
+                    return;
+                }
+                compressImage(file, { quality: 0.8, maxWidth: 400, maxHeight: 400 }).then(function (dataUrl) {
+                    charImageUrl = dataUrl;
+                    charImg.src = dataUrl;
+                    charImg.style.border = '1px solid rgba(0,0,0,0.08)';
+                }).catch(function () {
+                    if (typeof showToast === 'function') showToast('图片处理失败');
+                });
+                e.target.value = '';
+            };
+        }
+        // 角色头像 URL 上传
+        if (charUrlBtn && charUrlInput) {
+            charUrlBtn.onclick = function () {
+                var url = (charUrlInput.value || '').trim();
+                if (!url) {
+                    if (typeof showToast === 'function') showToast('请输入角色头像链接');
+                    return;
+                }
+                charImageUrl = url;
+                charImg.src = url;
+                charImg.style.border = '1px solid rgba(0,0,0,0.08)';
+                charUrlInput.value = '';
+            };
+        }
+
+        // API 识别按钮
+        if (recognizeBtn) {
+            recognizeBtn.onclick = function () {
+                var imgToRecognize = userImageUrl || charImageUrl;
+                if (!imgToRecognize) {
+                    if (typeof showToast === 'function') showToast('请先上传图片');
+                    return;
+                }
+                recognizeBtn.disabled = true;
+                if (typeof showToast === 'function') showToast('正在识别…');
+                callVisionAPI(imgToRecognize).then(function (text) {
+                    if (descInput) descInput.value = text || '';
+                    if (typeof showToast === 'function') showToast('已填入描述，可修改后填写名称并添加');
+                }).catch(function (e) {
+                    console.warn('Couple avatar recognition failed', e);
+                    if (typeof showToast === 'function') showToast('识别失败，请手动填写');
+                }).finally(function () { recognizeBtn.disabled = false; });
+            };
+        }
+
+        if (cancelBtn) cancelBtn.onclick = function () { finish(); };
+
+        if (confirmBtn) confirmBtn.onclick = function () {
+            if (useAiCheck && useAiCheck.checked) {
+                var imgToRecognize = userImageUrl || charImageUrl;
+                if (!imgToRecognize) {
+                    if (typeof showToast === 'function') showToast('请先上传图片');
+                    return;
+                }
+                callVisionAPI(imgToRecognize).then(function (recognizedText) {
+                    if (descInput) descInput.value = recognizedText || '';
+                    if (typeof showToast === 'function') showToast('已识别，请填写名称后点击添加');
+                }).catch(function (e) {
+                    console.warn('Couple avatar recognition failed', e);
+                    if (typeof showToast === 'function') showToast('识别失败，请手动填写名称');
+                });
+                return;
+            }
+            var nameVal = nameInput && nameInput.value && nameInput.value.trim() ? nameInput.value.trim() : null;
+            if (!nameVal) {
+                if (typeof showToast === 'function') showToast('请填写情头名称');
+                return;
+            }
+            if (!userImageUrl) {
+                if (typeof showToast === 'function') showToast('缺少用户头像');
+                return;
+            }
+            if (!charImageUrl) {
+                if (typeof showToast === 'function') showToast('请选择角色头像（点击右侧图片区域或使用URL上传）');
+                return;
+            }
+            var descVal = descInput && descInput.value && descInput.value.trim() ? descInput.value.trim() : '';
+            var lib = ensureCoupleAvatarLibrary(char);
+            lib.push({
+                id: 'couple_' + Date.now(),
+                name: nameVal,
+                description: descVal,
+                userAvatar: { url: userImageUrl },
+                charAvatar: { url: charImageUrl },
+                sourceType: 'manual',
+                createdAt: Date.now(),
+                usedCount: 0
+            });
+            if (typeof saveData === 'function') saveData();
+            var listEl = document.getElementById('couple-avatar-library-list');
+            if (listEl && _coupleAvatarLibraryCurrentCharId === charId) renderCoupleLibraryList(char, listEl);
+            if (typeof showToast === 'function') showToast('已添加到情头库');
+            finish();
+        };
+        modal.onclick = function (e) { if (e.target === modal) finish(); };
+    }
+
     function openCoupleAvatarLibraryModal(charId) {
         var modal = document.getElementById('couple-avatar-library-modal');
         var list = document.getElementById('couple-avatar-library-list');
         var batchDeleteBtn = document.getElementById('couple-avatar-library-batch-delete');
         var clearAllBtn = document.getElementById('couple-avatar-library-clear-all');
+        var uploadLocalBtn = document.getElementById('ar-couple-library-upload-local');
+        var uploadUrlBtn = document.getElementById('ar-couple-library-upload-url');
+        var urlInput = document.getElementById('ar-couple-library-url-input');
         if (!modal || !list) return;
         var char = getChar(charId);
         if (!char) {
@@ -1205,6 +1346,43 @@
         _coupleAvatarLibraryCurrentCharId = charId;
         renderCoupleLibraryList(char, list);
         modal.classList.add('visible');
+
+        // 本地上传（用户头像）
+        if (uploadLocalBtn) {
+            uploadLocalBtn.onclick = function () {
+                var input = document.getElementById('ar-couple-library-file-input');
+                if (input) input.click();
+            };
+        }
+        var fileInput = document.getElementById('ar-couple-library-file-input');
+        if (fileInput) {
+            fileInput.onchange = function (e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                if (typeof compressImage !== 'function') {
+                    if (typeof showToast === 'function') showToast('请使用图片链接上传或检查环境');
+                    return;
+                }
+                compressImage(file, { quality: 0.8, maxWidth: 400, maxHeight: 400 }).then(function (dataUrl) {
+                    openCoupleAvatarAddModal(charId, dataUrl);
+                }).catch(function () {
+                    if (typeof showToast === 'function') showToast('图片处理失败');
+                });
+                e.target.value = '';
+            };
+        }
+        // URL 上传（用户头像）
+        if (uploadUrlBtn && urlInput) {
+            uploadUrlBtn.onclick = function () {
+                var url = (urlInput.value || '').trim();
+                if (!url) {
+                    if (typeof showToast === 'function') showToast('请输入图片链接');
+                    return;
+                }
+                urlInput.value = '';
+                openCoupleAvatarAddModal(charId, url);
+            };
+        }
 
         if (batchDeleteBtn) batchDeleteBtn.onclick = function () {
             if (list.classList.contains('ar-delete-mode')) {

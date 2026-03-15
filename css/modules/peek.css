@@ -715,10 +715,30 @@
     color: #212529;
 }
 
+#peek-browser-detail-screen .app-header {
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+}
+
+#peek-browser-detail-screen .app-header .back-btn {
+    margin-right: auto;
+}
+
+#peek-browser-detail-screen .app-header .title-container {
+    position: static;
+    transform: none;
+    width: 100%;
+    order: 1;
+    align-items: center;
+    text-align: center;
+}
+
 #peek-browser-detail-screen .app-header .title {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: calc(15px * var(--app-font-scale, 1));
+    font-weight: 500;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.4;
 }
 
 #peek-browser-detail-screen .content {

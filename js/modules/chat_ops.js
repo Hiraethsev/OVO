@@ -336,21 +336,65 @@ async function saveMessageEdit() {
                 
                 if (match) {
                     const rawStatus = match[0];
-                    chat.statusPanel.currentStatusRaw = rawStatus;
                     
                     let html = chat.statusPanel.replacePattern;
                     
                     for (let i = 1; i < match.length; i++) {
                         html = html.replace(new RegExp(`\\$${i}`, 'g'), match[i]);
                     }
+
+                    // 更新 history 中对应的旧条目
+                    if (!chat.statusPanel.history) chat.statusPanel.history = [];
+                    const oldRaw = chat.history[messageIndex].statusSnapshot
+                        ? chat.history[messageIndex].statusSnapshot.oldRaw || ''
+                        : '';
+                    const existingIndex = chat.statusPanel.history.findIndex(h => h.raw === oldRaw || h.raw === rawStatus);
+                    if (existingIndex !== -1) {
+                        chat.statusPanel.history[existingIndex].raw = rawStatus;
+                        chat.statusPanel.history[existingIndex].html = html;
+                        chat.statusPanel.history[existingIndex].timestamp = Date.now();
+                    } else {
+                        // 之前不是状态消息，现在编辑成了状态消息，新增一条
+                        chat.statusPanel.history.unshift({
+                            raw: rawStatus,
+                            html: html,
+                            timestamp: Date.now()
+                        });
+                        if (chat.statusPanel.history.length > 20) {
+                            chat.statusPanel.history = chat.statusPanel.history.slice(0, 20);
+                        }
+                    }
+
+                    chat.statusPanel.currentStatusRaw = rawStatus;
                     chat.statusPanel.currentStatusHtml = html;
                     
                     chat.history[messageIndex].isStatusUpdate = true;
                     chat.history[messageIndex].statusSnapshot = {
                         regex: pattern,
-                        replacePattern: chat.statusPanel.replacePattern
+                        replacePattern: chat.statusPanel.replacePattern,
+                        oldRaw: rawStatus
                     };
                 } else {
+                    // 编辑后不再匹配状态，从 history 中移除旧条目
+                    if (chat.history[messageIndex].isStatusUpdate && chat.statusPanel.history) {
+                        const oldRaw = chat.history[messageIndex].statusSnapshot
+                            ? chat.history[messageIndex].statusSnapshot.oldRaw || ''
+                            : '';
+                        if (oldRaw) {
+                            const removeIndex = chat.statusPanel.history.findIndex(h => h.raw === oldRaw);
+                            if (removeIndex !== -1) {
+                                chat.statusPanel.history.splice(removeIndex, 1);
+                            }
+                        }
+                        // 重新计算 currentStatus 为最新的 history 条目
+                        if (chat.statusPanel.history.length > 0) {
+                            chat.statusPanel.currentStatusRaw = chat.statusPanel.history[0].raw;
+                            chat.statusPanel.currentStatusHtml = chat.statusPanel.history[0].html;
+                        } else {
+                            chat.statusPanel.currentStatusRaw = '';
+                            chat.statusPanel.currentStatusHtml = '';
+                        }
+                    }
                     chat.history[messageIndex].isStatusUpdate = false;
                     delete chat.history[messageIndex].statusSnapshot;
                 }

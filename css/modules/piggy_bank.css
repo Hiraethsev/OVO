@@ -348,6 +348,45 @@
     background: rgba(0,0,0,0.5);
 }
 
+.family-card-mini .fc-delete-wrap {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 10;
+}
+.family-card-mini .fc-delete-svg {
+    width: 18px;
+    height: 18px;
+    color: rgba(255,255,255,0.95);
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5));
+    pointer-events: none;
+}
+.family-card-mini .fc-delete-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: #ff3b30;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.family-card-delete-toolbar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #fff;
+    border-top: 1px solid #e5e5e5;
+    flex-shrink: 0;
+}
+#family-card-list-screen .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 /* 创建亲属卡 - 封面 */
 .family-card-cover-input {
     width: 100%;

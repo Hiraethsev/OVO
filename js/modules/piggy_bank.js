@@ -79,6 +79,11 @@ function createFamilyCard(opts) {
 function createReceivedFamilyCard(opts) {
     if (!db.piggyBank) db.piggyBank = { balance: 520, transactions: [], familyCards: [], receivedFamilyCards: [] };
     if (!Array.isArray(db.piggyBank.receivedFamilyCards)) db.piggyBank.receivedFamilyCards = [];
+    const existing = db.piggyBank.receivedFamilyCards.find(c => c.fromCharId === (opts.fromCharId || '') && c.status === 'active');
+    if (existing) {
+        existing.status = 'revoked';
+        existing.statusChangedBy = 'system_replaced';
+    }
     const id = 'rfc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const periodMs = getPeriodMs(opts.refreshPeriod || 'monthly', opts.refreshDays || 30);
     const now = Date.now();
@@ -104,6 +109,22 @@ function createReceivedFamilyCard(opts) {
     };
     db.piggyBank.receivedFamilyCards.push(card);
     return card;
+}
+
+function deleteFamilyCards(cardIds) {
+    if (!db.piggyBank || !cardIds || !cardIds.length) return 0;
+    let count = 0;
+    cardIds.forEach(id => {
+        if (Array.isArray(db.piggyBank.familyCards)) {
+            const idx = db.piggyBank.familyCards.findIndex(c => c.id === id);
+            if (idx !== -1) { db.piggyBank.familyCards.splice(idx, 1); count++; }
+        }
+        if (Array.isArray(db.piggyBank.receivedFamilyCards)) {
+            const idx = db.piggyBank.receivedFamilyCards.findIndex(c => c.id === id);
+            if (idx !== -1) { db.piggyBank.receivedFamilyCards.splice(idx, 1); count++; }
+        }
+    });
+    return count;
 }
 
 function getPiggyBalance() {
@@ -206,6 +227,8 @@ function renderPiggyBankScreen() {
 function renderFamilyCardList() {
     const container = document.getElementById('family-card-list-container');
     if (!container) return;
+    const screen = document.getElementById('family-card-list-screen');
+    const isManageMode = screen && screen.classList.contains('fc-manage-mode');
     const sent = (db.piggyBank && db.piggyBank.familyCards) ? db.piggyBank.familyCards : [];
     const received = (db.piggyBank && db.piggyBank.receivedFamilyCards) ? db.piggyBank.receivedFamilyCards : [];
     const all = sent.map(c => ({ ...c, isReceived: false })).concat(received.map(c => ({ ...c, isReceived: true })));
@@ -227,8 +250,16 @@ function renderFamilyCardList() {
                 <div class="mini-card-number">**** ${escapeHtml(card.cardNumber)}</div>
                 <div class="mini-card-balance">剩余 ${formatMoney(remaining)}</div>
                 ${statusText ? '<div class="mini-card-status-badge ' + statusClass + '">' + escapeHtml(statusText) + '</div>' : ''}
+                ${isManageMode ? '<div class="fc-delete-wrap"><svg class="fc-delete-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg><input type="checkbox" class="fc-delete-checkbox" data-card-id="' + escapeHtml(card.id) + '" onclick="event.stopPropagation()"></div>' : ''}
             </div>`;
-        mini.addEventListener('click', () => openFamilyCardDetail(card.id, !!card.isReceived));
+        if (!isManageMode) {
+            mini.addEventListener('click', () => openFamilyCardDetail(card.id, !!card.isReceived));
+        } else {
+            mini.addEventListener('click', (e) => {
+                const cb = mini.querySelector('.fc-delete-checkbox');
+                if (cb && e.target !== cb) cb.checked = !cb.checked;
+            });
+        }
         container.appendChild(mini);
     });
 }
@@ -596,6 +627,58 @@ function setupPiggyBankApp() {
         if (familyCardCreateModal) familyCardCreateModal.classList.add('visible');
     });
 
+    const fcManageBtn = document.getElementById('family-card-manage-btn');
+    const fcDeleteToolbar = document.getElementById('family-card-delete-toolbar');
+    const fcSelectAllBtn = document.getElementById('fc-select-all-btn');
+    const fcDeleteSelectedBtn = document.getElementById('fc-delete-selected-btn');
+    const fcDeleteCancelBtn = document.getElementById('fc-delete-cancel-btn');
+    const fcListScreen = document.getElementById('family-card-list-screen');
+
+    function exitFcManageMode() {
+        if (fcListScreen) fcListScreen.classList.remove('fc-manage-mode');
+        if (fcDeleteToolbar) fcDeleteToolbar.style.display = 'none';
+        if (fcManageBtn) fcManageBtn.textContent = '管理';
+        renderFamilyCardList();
+    }
+
+    if (fcManageBtn) {
+        fcManageBtn.addEventListener('click', () => {
+            const isManage = fcListScreen && fcListScreen.classList.contains('fc-manage-mode');
+            if (isManage) {
+                exitFcManageMode();
+            } else {
+                if (fcListScreen) fcListScreen.classList.add('fc-manage-mode');
+                if (fcDeleteToolbar) fcDeleteToolbar.style.display = 'flex';
+                fcManageBtn.textContent = '完成';
+                renderFamilyCardList();
+            }
+        });
+    }
+    if (fcSelectAllBtn) {
+        fcSelectAllBtn.addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('.fc-delete-checkbox');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => { cb.checked = !allChecked; });
+            fcSelectAllBtn.textContent = allChecked ? '全选' : '取消全选';
+        });
+    }
+    if (fcDeleteSelectedBtn) {
+        fcDeleteSelectedBtn.addEventListener('click', async () => {
+            const checkboxes = document.querySelectorAll('.fc-delete-checkbox:checked');
+            const ids = Array.from(checkboxes).map(cb => cb.dataset.cardId || cb.getAttribute('data-card-id')).filter(Boolean);
+            if (ids.length === 0) {
+                if (typeof showToast === 'function') showToast('请先勾选要删除的亲属卡');
+                return;
+            }
+            if (!confirm('确定删除选中的 ' + ids.length + ' 张亲属卡？删除后角色将不再记得这张卡。')) return;
+            const count = deleteFamilyCards(ids);
+            if (typeof showToast === 'function') showToast(count ? '已删除 ' + count + ' 张亲属卡' : '删除失败');
+            if (typeof saveData === 'function') await saveData();
+            exitFcManageMode();
+        });
+    }
+    if (fcDeleteCancelBtn) fcDeleteCancelBtn.addEventListener('click', exitFcManageMode);
+
     (function initFamilyCardCoverInputs() {
         const MAX_COVER_SIZE = 2 * 1024 * 1024;
         const coverUrl = document.getElementById('family-card-cover-url');
@@ -665,6 +748,7 @@ if (typeof window !== 'undefined') {
     window.renderPiggyBankScreen = renderPiggyBankScreen;
     window.renderFamilyCardList = renderFamilyCardList;
     window.createReceivedFamilyCard = createReceivedFamilyCard;
+    window.deleteFamilyCards = deleteFamilyCards;
     window.refreshFamilyCardLimits = refreshFamilyCardLimits;
     window.getFamilyCardById = getFamilyCardById;
 }
