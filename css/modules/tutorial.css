@@ -3,7 +3,7 @@
 /* --- Modern (V2) iOS Style Layout --- */
 .tutorial-modern-layout {
     background-color: #f2f2f7; /* iOS grouped background */
-    padding: 16px;
+    padding: 16px 16px 80px;
     min-height: 100%;
 }
 
@@ -157,7 +157,7 @@
 }
 
 #tutorial-screen .content {
-    padding: 15px;
+    padding: 15px 15px 80px;
 }
 
 .tutorial-item {
@@ -405,7 +405,7 @@
 /* --- Rabbit Island (V3) Style Layout --- */
 .tutorial-rabbit-layout {
     background: #fdfbfb; /* 极淡的粉白背景 */
-    padding: 20px 16px;
+    padding: 20px 16px 80px;
     min-height: 100%;
     position: relative;
 }
@@ -583,4 +583,130 @@
 
 .rabbit-update-close:active {
     background: #f5f0f1;
+}
+
+/* --- Modern Link Cards (匿名许愿 / 公开许愿) --- */
+.tutorial-modern-link-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border-top: 1px solid #e5e5ea;
+    transition: background-color 0.2s;
+}
+
+.tutorial-modern-link-card:active {
+    background-color: #e5e5ea;
+}
+
+.tutorial-modern-link-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+}
+
+.tutorial-modern-link-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #f2f2f7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #007aff;
+}
+
+.tutorial-modern-link-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.tutorial-modern-link-title {
+    color: #000;
+    font-weight: 500;
+    font-size: 16px;
+    margin-bottom: 2px;
+}
+
+.tutorial-modern-link-desc {
+    font-size: 13px;
+    color: #8e8e93;
+}
+
+.tutorial-modern-link-card .arrow {
+    color: #c7c7cc;
+    font-size: 20px;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.tutorial-modern-link-note {
+    padding: 0 16px 12px;
+    font-size: 12px;
+    color: #8e8e93;
+    line-height: 1.5;
+}
+
+/* --- Rabbit Link Cards (匿名许愿 / 公开许愿) --- */
+.tutorial-rabbit-link-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    margin-bottom: 16px;
+}
+
+.tutorial-rabbit-link-card .tutorial-rabbit-card {
+    transition: transform 0.2s;
+}
+
+.tutorial-rabbit-link-card:active .tutorial-rabbit-card {
+    transform: scale(0.98);
+    background: #faf8f9;
+}
+
+.tutorial-rabbit-link-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+}
+
+.tutorial-rabbit-link-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #f5f0f1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #999;
+}
+
+.tutorial-rabbit-link-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.tutorial-rabbit-link-title {
+    color: #444;
+    font-weight: 500;
+    font-size: 15px;
+    margin-bottom: 3px;
+}
+
+.tutorial-rabbit-link-desc {
+    font-size: 13px;
+    color: #aaa;
+}
+
+.tutorial-rabbit-link-note {
+    padding: 0 20px 14px;
+    font-size: 12px;
+    color: #bbb;
+    line-height: 1.5;
+    border-top: 1px solid #fcfafb;
+    margin: 0 20px;
+    padding-top: 10px;
 }

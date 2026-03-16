@@ -118,28 +118,28 @@ function setupChatSettings() {
                 const targetEl = document.getElementById(targetId);
                 if (targetEl) targetEl.classList.add('active');
             }
-            // 从功能 Tab 切走时关闭「头像识别系统」子页，避免再切回功能时还停在子页
+            // 从拓展 Tab 切走时关闭「头像识别系统」子页，避免再切回拓展时还停在子页
             const avatarPanel = document.getElementById('setting-avatar-system-panel');
-            const funcTab = document.getElementById('setting-tab-func');
+            const extTab = document.getElementById('setting-tab-ext');
             if (avatarPanel) avatarPanel.style.display = 'none';
-            if (funcTab) funcTab.style.display = '';
+            if (extTab) extTab.style.display = '';
         });
     });
 
-    // 头像识别系统：功能 Tab 内一行入口，点击进入子页面
+    // 头像识别系统：拓展 Tab 内一行入口，点击进入子页面
     const avatarSystemEntry = document.getElementById('setting-avatar-system-entry');
     const avatarSystemPanel = document.getElementById('setting-avatar-system-panel');
     const avatarSystemBack = document.getElementById('setting-avatar-system-back');
     if (avatarSystemEntry && avatarSystemPanel) {
         avatarSystemEntry.addEventListener('click', () => {
-            if (document.getElementById('setting-tab-func')) document.getElementById('setting-tab-func').style.display = 'none';
+            if (document.getElementById('setting-tab-ext')) document.getElementById('setting-tab-ext').style.display = 'none';
             avatarSystemPanel.style.display = 'block';
         });
     }
     if (avatarSystemBack && avatarSystemPanel) {
         avatarSystemBack.addEventListener('click', () => {
             avatarSystemPanel.style.display = 'none';
-            if (document.getElementById('setting-tab-func')) document.getElementById('setting-tab-func').style.display = '';
+            if (document.getElementById('setting-tab-ext')) document.getElementById('setting-tab-ext').style.display = '';
         });
     }
     
@@ -354,6 +354,173 @@ function setupChatSettings() {
                 document.getElementById('chat-room-status-text').textContent = '在线';
             }
             showToast('聊天记录已清空');
+        }
+    });
+
+    // --- 聊天记录导出 ---
+    document.getElementById('export-chat-history-btn').addEventListener('click', () => {
+        const character = db.characters.find(c => c.id === currentChatId);
+        if (!character) return;
+        if (!character.history || character.history.length === 0) {
+            showToast('当前没有聊天记录可导出');
+            return;
+        }
+        const exportData = {
+            type: 'uwu-chat-history',
+            version: 1,
+            charId: character.id,
+            charName: character.remarkName,
+            exportTime: Date.now(),
+            history: character.history
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `聊天记录_${character.remarkName}_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('聊天记录导出成功');
+    });
+
+    // --- 聊天记录导入 ---
+    const importChatDropZone = document.getElementById('import-chat-file-drop-zone');
+    const importChatFileInput = document.getElementById('import-chat-history-file');
+    const importChatFileName = document.getElementById('import-chat-file-name');
+
+    // 点击触发文件选择
+    importChatDropZone.addEventListener('click', () => importChatFileInput.click());
+    importChatFileInput.addEventListener('change', () => {
+        if (importChatFileInput.files[0]) {
+            importChatFileName.textContent = importChatFileInput.files[0].name;
+            importChatFileName.style.color = '#333';
+            importChatDropZone.style.borderColor = '#4a9eff';
+        }
+    });
+    // 拖拽支持
+    importChatDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        importChatDropZone.style.borderColor = '#4a9eff';
+        importChatDropZone.style.background = 'rgba(74,158,255,0.05)';
+    });
+    importChatDropZone.addEventListener('dragleave', () => {
+        importChatDropZone.style.borderColor = '#ccc';
+        importChatDropZone.style.background = '';
+    });
+    importChatDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        importChatDropZone.style.borderColor = '#ccc';
+        importChatDropZone.style.background = '';
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.json')) {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            importChatFileInput.files = dt.files;
+            importChatFileName.textContent = file.name;
+            importChatFileName.style.color = '#333';
+            importChatDropZone.style.borderColor = '#4a9eff';
+        } else {
+            showToast('请选择 .json 文件');
+        }
+    });
+
+    document.getElementById('import-chat-history-btn').addEventListener('click', () => {
+        const character = db.characters.find(c => c.id === currentChatId);
+        if (!character) return;
+        // 重置文件输入和单选按钮
+        importChatFileInput.value = '';
+        importChatFileName.textContent = '点击选择文件或拖拽到此处';
+        importChatFileName.style.color = '#999';
+        importChatDropZone.style.borderColor = '#ccc';
+        importChatDropZone.style.background = '';
+        const appendRadio = document.querySelector('input[name="import-chat-mode"][value="append"]');
+        if (appendRadio) appendRadio.checked = true;
+        document.getElementById('import-chat-mode-hint').textContent = '追加：将导入的记录添加到现有记录后面';
+        document.getElementById('import-chat-history-modal').classList.add('visible');
+    });
+
+    // 导入模式切换提示
+    document.querySelectorAll('input[name="import-chat-mode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const hint = document.getElementById('import-chat-mode-hint');
+            if (e.target.value === 'append') {
+                hint.textContent = '追加：将导入的记录添加到现有记录后面';
+            } else {
+                hint.textContent = '覆盖：清空现有记录，替换为导入的记录';
+                hint.style.color = '#d32f2f';
+            }
+        });
+    });
+
+    document.getElementById('cancel-import-chat-btn').addEventListener('click', () => {
+        document.getElementById('import-chat-history-modal').classList.remove('visible');
+    });
+    document.getElementById('import-chat-history-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('import-chat-history-modal')) {
+            document.getElementById('import-chat-history-modal').classList.remove('visible');
+        }
+    });
+
+    document.getElementById('confirm-import-chat-btn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('import-chat-history-file');
+        const file = fileInput.files[0];
+        if (!file) {
+            showToast('请先选择文件');
+            return;
+        }
+        const character = db.characters.find(c => c.id === currentChatId);
+        if (!character) return;
+
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            // 验证数据格式
+            if (!data.history || !Array.isArray(data.history)) {
+                showToast('文件格式不正确，缺少聊天记录数据');
+                return;
+            }
+            if (data.type && data.type !== 'uwu-chat-history') {
+                showToast('文件类型不匹配');
+                return;
+            }
+
+            const mode = document.querySelector('input[name="import-chat-mode"]:checked').value;
+            const importHistory = data.history;
+
+            if (mode === 'overwrite') {
+                if (!confirm(`覆盖导入将清空当前所有聊天记录（${character.history.length}条），替换为导入的${importHistory.length}条记录。确定继续吗？`)) {
+                    return;
+                }
+                character.history = importHistory;
+            } else {
+                // 追加模式：为避免ID冲突，给导入的消息生成新ID
+                const existingIds = new Set(character.history.map(m => m.id));
+                importHistory.forEach(msg => {
+                    if (existingIds.has(msg.id)) {
+                        msg.id = generateUUID();
+                    }
+                });
+                character.history = character.history.concat(importHistory);
+                // 按时间排序
+                character.history.sort((a, b) => a.timestamp - b.timestamp);
+            }
+
+            if (typeof recalculateChatStatus === 'function') {
+                recalculateChatStatus(character);
+            }
+
+            await saveData();
+            currentPage = 1;
+            renderMessages(false, true);
+            renderChatList();
+            document.getElementById('import-chat-history-modal').classList.remove('visible');
+            showToast(`成功${mode === 'overwrite' ? '覆盖' : '追加'}导入 ${importHistory.length} 条聊天记录`);
+        } catch (e) {
+            console.error('导入聊天记录失败:', e);
+            showToast('导入失败：文件解析错误');
         }
     });
 
@@ -1667,7 +1834,8 @@ function setupApiSettingsApp() {
         };
     db.apiSettings && (n.value = db.apiSettings.provider || 'newapi', r.value = db.apiSettings.url || '', s.value = db.apiSettings.key || '', db.apiSettings.model && (a.innerHTML = `<option value="${db.apiSettings.model}">${db.apiSettings.model}</option>`));
     if (db.apiSettings && typeof db.apiSettings.timePerceptionEnabled !== 'undefined') { document.getElementById('time-perception-switch').checked = db.apiSettings.timePerceptionEnabled; }
-    if (db.apiSettings && typeof db.apiSettings.streamEnabled !== 'undefined') { document.getElementById('stream-switch').checked = db.apiSettings.streamEnabled; } else { document.getElementById('stream-switch').checked = true; } 
+    if (db.apiSettings && typeof db.apiSettings.streamEnabled !== 'undefined') { document.getElementById('stream-switch').checked = db.apiSettings.streamEnabled; } else { document.getElementById('stream-switch').checked = true; }
+    if (db.apiSettings && typeof db.apiSettings.quickReplyEnabled !== 'undefined') { document.getElementById('quick-reply-switch').checked = db.apiSettings.quickReplyEnabled; } else { document.getElementById('quick-reply-switch').checked = false; }
 
     const tempSlider = document.getElementById('temperature-slider');
     const tempValue = document.getElementById('temperature-value');
@@ -1785,7 +1953,8 @@ function setupApiSettingsApp() {
             key: s.value,
             model: a.value,
             timePerceptionEnabled: document.getElementById('time-perception-switch').checked,
-            streamEnabled: document.getElementById('stream-switch').checked, 
+            streamEnabled: document.getElementById('stream-switch').checked,
+            quickReplyEnabled: document.getElementById('quick-reply-switch').checked,
             temperature: parseFloat(document.getElementById('temperature-slider').value)
         };
         await saveData();
@@ -4791,7 +4960,7 @@ function renderCustomizeForm() {
     const iconOrder = [
         'chat-list-screen', 'api-settings-screen', 'wallpaper-screen',
         'world-book-screen', 'customize-screen', 'tutorial-screen',
-        'day-mode-btn', 'night-mode-btn', 'forum-screen', 'music-screen', 'diary-screen', 'piggy-bank-screen', 'pomodoro-screen', 'storage-analysis-screen', 'appearance-settings-screen', 'theater-screen'
+        'day-mode-btn', 'night-mode-btn', 'forum-screen', 'music-screen', 'diary-screen', 'piggy-bank-screen', 'pomodoro-screen', 'storage-analysis-screen', 'appearance-settings-screen', 'theater-screen', 'biekan-app', 'xiaowu-app'
     ];
 
     let iconsContentHTML = '';

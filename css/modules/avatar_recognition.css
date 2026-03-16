@@ -34,6 +34,7 @@
     width: 100%;
     overflow: hidden;
     animation: ar-slideUp 0.3s ease-out;
+    box-sizing: border-box;
 }
 
 @keyframes ar-slideUp {
@@ -427,6 +428,7 @@
     gap: 16px;
     justify-content: center;
     margin-bottom: 14px;
+    flex-wrap: wrap;
 }
 
 .ar-couple-edit-pair {
@@ -434,6 +436,8 @@
     flex-direction: column;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    max-width: 50%;
 }
 
 .ar-couple-edit-label {
@@ -447,6 +451,25 @@
     object-fit: cover;
     border-radius: 50%;
     border: 2px solid #eee;
+}
+
+/* 情头库弹窗移动端适配 */
+@media (max-width: 480px) {
+    .ar-couple-edit-modal .ar-modal {
+        max-width: calc(100vw - 32px);
+    }
+    .ar-couple-edit-modal .ar-modal-body {
+        padding: 14px;
+        overflow-x: hidden;
+    }
+    .ar-couple-edit-pair .ar-url-row {
+        flex-wrap: wrap;
+    }
+    .ar-couple-edit-pair .ar-url-row .ar-url-input {
+        min-width: 0;
+        width: 100%;
+        font-size: 12px;
+    }
 }
 
 .ar-couple-edit-modal .ar-modal-actions {

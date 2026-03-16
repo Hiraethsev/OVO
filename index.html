@@ -1661,6 +1661,15 @@
                                     </label>
                                 </div>
                             </div>
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">快速回复<p style="font-size:12px;color:#999;margin:4px 0 0;">开启后跳过思维链思考，直接输出回复</p></div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="quick-reply-switch">
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
                             <div class="kkt-item"
                                 style="flex-direction: column; align-items: stretch; padding-bottom: 15px;">
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -2605,6 +2614,40 @@
                                 </svg>
                             </div>
                             <span class="menu-item-label">正则</span>
+                        </div>
+                        <div class="menu-item" data-action="small-account">
+                            <div class="menu-icon-wrapper">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="12" cy="7" r="4"/>
+                                </svg>
+                            </div>
+                            <span class="menu-item-label">小号</span>
+                        </div>
+                        <div class="menu-item" data-action="moments">
+                            <div class="menu-icon-wrapper">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 6v6l4 2"/>
+                                </svg>
+                            </div>
+                            <span class="menu-item-label">动态</span>
+                        </div>
+                        <div class="menu-item" data-action="online">
+                            <div class="menu-icon-wrapper">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <!-- 左边的人 -->
+                                    <circle cx="7" cy="8" r="2.5"/>
+                                    <path d="M2 19.5v-1a5 5 0 0 1 5-5 5 5 0 0 1 2.5.67"/>
+                                    <!-- 右边的人 -->
+                                    <circle cx="17" cy="8" r="2.5"/>
+                                    <path d="M22 19.5v-1a5 5 0 0 0-5-5 5 5 0 0 0-2.5.67"/>
+                                    <!-- 中间的连接信号 -->
+                                    <path d="M10 5.5a3.5 3.5 0 0 1 4 0" stroke-width="1.2"/>
+                                    <path d="M9 3.5a5.5 5.5 0 0 1 6 0" stroke-width="1.2"/>
+                                </svg>
+                            </div>
+                            <span class="menu-item-label">联机</span>
                         </div>
                     </div>
                 </div>
@@ -3745,13 +3788,6 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="kkt-item" id="setting-avatar-system-entry" style="cursor:pointer;">
-                                    <div class="kkt-item-label">头像识别系统</div>
-                                    <div class="kkt-item-control">
-                                        <span class="kkt-arrow">›</span>
-                                    </div>
-                                </div>
-
                                 <div class="kkt-item" id="setting-reply-count-container" style="display: none;">
                                     <div class="kkt-item-label">回复条数范围</div>
                                     <div class="kkt-item-control" style="gap: 5px;">
@@ -4200,7 +4236,37 @@
                                 </div>
                             </div>
 
-                            <button type="button" class="kkt-danger-btn" id="clear-chat-history-btn">清空聊天记录</button>
+                            <button type="button" class="kkt-danger-btn" id="block-character-btn">拉黑角色</button>
+                            <div id="block-settings-panel" class="block-settings-panel" style="display:none; margin-top:10px;">
+                                <div class="kkt-group">
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label" style="color:#ff3b30;">该角色已被拉黑</div>
+                                    </div>
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">申请模式</div>
+                                        <div class="kkt-item-control">
+                                            <select id="block-reapply-mode" style="border:none;font-size:14px;">
+                                                <option value="fixed">固定间隔</option>
+                                                <option value="auto">角色自主判断</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="kkt-item" id="block-fixed-interval-row">
+                                        <div class="kkt-item-label">申请间隔（分钟）</div>
+                                        <div class="kkt-item-control">
+                                            <input type="number" id="block-fixed-interval" value="30" min="1" style="width:60px;text-align:right;border:none;">
+                                        </div>
+                                    </div>
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">已申请次数</div>
+                                        <div class="kkt-item-control">
+                                            <span id="block-request-count">0</span> 次
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="kkt-danger-btn block-trigger-btn" id="trigger-friend-request-btn">立即触发好友申请</button>
+                                <button type="button" class="kkt-danger-btn" id="unblock-character-btn">解除拉黑</button>
+                            </div>
                             <div class="kkt-group" style="margin-top:10px;">
                                 <div class="kkt-item">
                                     <div class="kkt-item-label">角色可以拉黑用户</div>
@@ -4288,40 +4354,21 @@
                                     </div>
                                 </div>
                             </div>
-                            <button type="button" class="kkt-danger-btn" id="block-character-btn">拉黑角色</button>
-                            <div id="block-settings-panel" class="block-settings-panel" style="display:none; margin-top:10px;">
-                                <div class="kkt-group">
-                                    <div class="kkt-item">
-                                        <div class="kkt-item-label" style="color:#ff3b30;">该角色已被拉黑</div>
-                                    </div>
-                                    <div class="kkt-item">
-                                        <div class="kkt-item-label">申请模式</div>
-                                        <div class="kkt-item-control">
-                                            <select id="block-reapply-mode" style="border:none;font-size:14px;">
-                                                <option value="fixed">固定间隔</option>
-                                                <option value="auto">角色自主判断</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="kkt-item" id="block-fixed-interval-row">
-                                        <div class="kkt-item-label">申请间隔（分钟）</div>
-                                        <div class="kkt-item-control">
-                                            <input type="number" id="block-fixed-interval" value="30" min="1" style="width:60px;text-align:right;border:none;">
-                                        </div>
-                                    </div>
-                                    <div class="kkt-item">
-                                        <div class="kkt-item-label">已申请次数</div>
-                                        <div class="kkt-item-control">
-                                            <span id="block-request-count">0</span> 次
-                                        </div>
+                            <!-- 聊天记录导入导出 -->
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">聊天记录</div>
+                                    <div class="kkt-item-control" style="display:flex; gap:8px;">
+                                        <button type="button" id="export-chat-history-btn" class="btn btn-small btn-secondary" style="margin:0; padding:4px 12px;">导出</button>
+                                        <button type="button" id="import-chat-history-btn" class="btn btn-small btn-secondary" style="margin:0; padding:4px 12px;">导入</button>
                                     </div>
                                 </div>
-                                <button type="button" class="kkt-danger-btn block-trigger-btn" id="trigger-friend-request-btn">立即触发好友申请</button>
-                                <button type="button" class="kkt-danger-btn" id="unblock-character-btn">解除拉黑</button>
                             </div>
+
+                            <button type="button" class="kkt-danger-btn" id="clear-chat-history-btn">清空聊天记录</button>
                         </div>
 
-                        <!-- 头像识别系统子页面（从功能 Tab 进入） -->
+                        <!-- 头像识别系统子页面（从拓展 Tab 进入） -->
                         <div id="setting-avatar-system-panel" class="settings-tab-content" style="display:none;">
                             <div class="kkt-item kkt-back-row" id="setting-avatar-system-back" style="cursor:pointer; padding:12px 16px; border-bottom:1px solid #eee; display:flex; align-items:center; gap:8px;">
                                 <span style="font-size:18px;">‹</span>
@@ -4798,6 +4845,50 @@
                                         style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 8px; resize: vertical; font-size: 13px; box-sizing: border-box;"></textarea>
                                     <p style="font-size: 12px; color: #999; margin-top: 5px; margin-bottom: 0;">
                                         用于控制画风，多个画师用逗号分隔。如 <code>artist:aki99, artist:ciloranko</code></p>
+                                </div>
+                            </div>
+
+                            <!-- 头像识别系统入口 -->
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div class="kkt-item" id="setting-avatar-system-entry" style="cursor:pointer;">
+                                    <div class="kkt-item-label">头像识别系统</div>
+                                    <div class="kkt-item-control">
+                                        <span class="kkt-arrow">›</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 状态栏管理按钮重置 -->
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div style="margin-bottom: 10px; padding-top: 5px; padding-left: 8px;">
+                                    <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">状态栏设置</div>
+                                    <p style="font-size: 11px; color: #999; margin: 5px 0 0;">状态栏相关的辅助功能</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">重置删除按钮位置</div>
+                                    <div class="kkt-item-control">
+                                        <button type="button" id="reset-status-manage-btn-pos" class="btn btn-small btn-secondary" style="padding: 4px 12px;">重置</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 线下模式 -->
+                            <div class="kkt-group" style="margin-top:15px;">
+                                <div style="margin-bottom: 10px; padding-top: 5px; padding-left: 8px;">
+                                    <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">线下模式</div>
+                                    <p style="font-size: 11px; color: #999; margin: 5px 0 0;">配置角色的线下行为与互动方式</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">启用线下模式</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-offline-mode-enabled" disabled>
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" style="justify-content: center; padding: 20px 15px;">
+                                    <p style="font-size: 12px; color: #bbb; text-align: center; margin: 0;">🚧 线下模式正在开发中，敬请期待…</p>
                                 </div>
                             </div>
                         </div>
@@ -7553,6 +7644,37 @@
             <div style="display: flex; gap: 10px; margin-top: 25px;">
                 <button id="confirm-delete-chunk-btn" class="btn btn-danger" style="flex: 1;">确认删除</button>
                 <button id="cancel-delete-chunk-btn" class="btn btn-neutral" style="flex: 1;">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 聊天记录导入弹窗 -->
+    <div id="import-chat-history-modal" class="modal-overlay">
+        <div class="modal-window" style="max-width:400px;">
+            <h3>导入聊天记录</h3>
+            <p style="font-size:13px; color:#666; margin:10px 0;">请选择之前导出的聊天记录文件（.json）</p>
+            <input type="file" id="import-chat-history-file" accept=".json" style="display:none;">
+            <div id="import-chat-file-drop-zone" style="margin:15px 0; border:2px dashed #ccc; border-radius:12px; padding:20px; text-align:center; cursor:pointer; transition:all 0.2s;">
+                <div style="font-size:28px; margin-bottom:8px;">📂</div>
+                <div id="import-chat-file-name" style="font-size:14px; color:#999;">点击选择文件或拖拽到此处</div>
+            </div>
+            <div style="margin:15px 0;">
+                <label style="font-size:14px; font-weight:600; margin-bottom:8px; display:block;">导入模式</label>
+                <div style="display:flex; gap:10px;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:14px;">
+                        <input type="radio" name="import-chat-mode" value="append" checked>
+                        <span>追加导入</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:14px;">
+                        <input type="radio" name="import-chat-mode" value="overwrite">
+                        <span>覆盖导入</span>
+                    </label>
+                </div>
+                <p id="import-chat-mode-hint" style="font-size:12px; color:#999; margin-top:6px;">追加：将导入的记录添加到现有记录后面</p>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button id="confirm-import-chat-btn" class="btn btn-primary" style="flex:1;">确认导入</button>
+                <button id="cancel-import-chat-btn" class="btn btn-neutral" style="flex:1;">取消</button>
             </div>
         </div>
     </div>

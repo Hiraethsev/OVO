@@ -90,7 +90,9 @@ const defaultIcons = {
     'pomodoro-screen': {name: '番茄钟', url: 'https://i.postimg.cc/PrYGRDPF/chan-76.png'},
     'storage-analysis-screen': {name: '存储分析', url: 'https://i.postimg.cc/J0F3Lt0T/chan-107.png'},
     'appearance-settings-screen': {name: '外观设置', url: 'https://i.postimg.cc/KcgT1wzQ/DF424409FC54EDFF74D78ECB1311E1D7.png'},
-    'theater-screen': {name: '小剧场', url: 'https://i.postimg.cc/t4gXjG8P/7632D362A35EC703E7A81F6FF0F8AE34.png'}
+    'theater-screen': {name: '小剧场', url: 'https://i.postimg.cc/t4gXjG8P/7632D362A35EC703E7A81F6FF0F8AE34.png'},
+    'biekan-app': {name: '别看', url: 'https://i.postimg.cc/5y6G7fn4/5A615115038157EA857BB5D4D8E54EC7.png'},
+    'xiaowu-app': {name: '小屋', url: 'https://i.postimg.cc/T1pS7TCw/9679677EBE50220F4B5BFE21575E096E.png'}
 };
 
 const peekScreenApps = {
@@ -174,8 +176,24 @@ const globalSettingKeys = [
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
-const appVersion = "3.15.1";
+const appVersion = "3.16";
 const updateLog = [
+    {
+        version: "3.16",
+        date: "2026-03-16",
+        notes: [
+            "3.16微量更新：",
+            "1.优化教程区域的白兔岛、简约和底部匿名、公开许愿的适配，新增自定义CSS美化",
+            "2.优化清空消息、头像识别系统位置",
+            "3.优化情头库上传歪歪布局的BUG",
+            "4.新增角色导入导出聊天记录",
+            "5.修复增加消息一直是USER的BUG",
+            "6.新增状态栏删除按钮重置位置的按钮，为了防止笨蛋小狗拖动出错！",
+            "7.优化导入世界书格式，改成全部为一个条目了",
+            "8.⭐受1900高人指点！！新增了一个跳过思考的开关，不知有效否⭐",
+            "许愿和反馈都收到了！明天严肃修改新增"
+        ]
+    },
     {
         version: "3.15.1",
         date: "2026-03-15",

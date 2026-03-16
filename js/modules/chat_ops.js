@@ -1091,13 +1091,16 @@ async function confirmInsertMessage() {
         newTimestamp = currentMessage.timestamp + 60000;
     }
 
-    // 创建新消息
+    // 根据当前编辑消息的角色决定新消息的角色
+    const isCharMessage = currentMessage.role === 'char' || currentMessage.role === 'assistant';
     const newMessage = {
         id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        content: `[${chat.myName || '我'}的消息：${newContent}]`,
+        content: isCharMessage
+            ? `[${chat.name || '角色'}的消息：${newContent}]`
+            : `[${chat.myName || '我'}的消息：${newContent}]`,
         timestamp: newTimestamp,
-        role: 'user',
-        senderId: 'user_me'
+        role: isCharMessage ? 'char' : 'user',
+        senderId: isCharMessage ? (currentMessage.senderId || chat.id) : 'user_me'
     };
 
     // 插入新消息到数组

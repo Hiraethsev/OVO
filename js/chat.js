@@ -142,6 +142,25 @@ function setupChatRoom() {
         initStatusManageBtnDrag(statusManageBtn, statusOverlay);
     }
 
+    // 重置状态栏管理按钮位置
+    const resetStatusBtnPos = document.getElementById('reset-status-manage-btn-pos');
+    if (resetStatusBtnPos) {
+        resetStatusBtnPos.addEventListener('click', () => {
+            localStorage.removeItem('statusManageBtnPosition');
+            const btn = document.getElementById('status-manage-btn');
+            if (btn) {
+                btn.style.left = '';
+                btn.style.top = '';
+                btn.style.right = '';
+            }
+            if (typeof showToast === 'function') {
+                showToast('删除按钮位置已重置');
+            } else {
+                alert('删除按钮位置已重置');
+            }
+        });
+    }
+
     // 状态栏多选 - 全选
     const statusSelectAllBtn = document.getElementById('status-select-all-btn');
     if (statusSelectAllBtn) {

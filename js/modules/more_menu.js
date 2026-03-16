@@ -34,6 +34,12 @@ function initMoreMenu() {
         } else if (action === 'regex-filter') {
             if (typeof openRegexFilterManager === 'function') openRegexFilterManager();
             else showToast('正则过滤功能加载中…');
+        } else if (action === 'small-account') {
+            showToast('小号功能正在开发中…');
+        } else if (action === 'moments') {
+            showToast('动态功能正在开发中…');
+        } else if (action === 'online') {
+            showToast('联机功能正在开发中…');
         }
     });
     });

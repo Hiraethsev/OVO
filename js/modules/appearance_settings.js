@@ -2,6 +2,8 @@
 // 整体 UI 切换：论坛、设置、APP 布局、小组件等（聊天列表与聊天详情页保持不变）
 
 const APPEARANCE_STORAGE_KEY = 'ovo_appearance_ui_mode';
+const CUSTOM_TUTORIAL_CSS_KEY = 'ovo_custom_tutorial_css';
+const CUSTOM_TUTORIAL_CSS_ENABLED_KEY = 'ovo_custom_tutorial_css_enabled';
 
 function getAppearanceMode() {
     try {
@@ -15,6 +17,54 @@ function setAppearanceMode(mode) {
     try {
         localStorage.setItem(APPEARANCE_STORAGE_KEY, mode);
     } catch (_) {}
+}
+
+function getCustomTutorialCss() {
+    try {
+        return localStorage.getItem(CUSTOM_TUTORIAL_CSS_KEY) || '';
+    } catch (_) {
+        return '';
+    }
+}
+
+function setCustomTutorialCss(css) {
+    try {
+        localStorage.setItem(CUSTOM_TUTORIAL_CSS_KEY, css);
+    } catch (_) {}
+}
+
+function isCustomTutorialCssEnabled() {
+    try {
+        return localStorage.getItem(CUSTOM_TUTORIAL_CSS_ENABLED_KEY) === 'true';
+    } catch (_) {
+        return false;
+    }
+}
+
+function setCustomTutorialCssEnabled(enabled) {
+    try {
+        localStorage.setItem(CUSTOM_TUTORIAL_CSS_ENABLED_KEY, enabled ? 'true' : 'false');
+    } catch (_) {}
+}
+
+function applyCustomTutorialCss() {
+    const styleId = 'ovo-custom-tutorial-style';
+    let styleEl = document.getElementById(styleId);
+    if (isCustomTutorialCssEnabled()) {
+        const css = getCustomTutorialCss();
+        if (css.trim()) {
+            if (!styleEl) {
+                styleEl = document.createElement('style');
+                styleEl.id = styleId;
+                document.head.appendChild(styleEl);
+            }
+            styleEl.textContent = css;
+        } else if (styleEl) {
+            styleEl.remove();
+        }
+    } else if (styleEl) {
+        styleEl.remove();
+    }
 }
 
 function renderAppearanceSettingsScreen() {
@@ -108,6 +158,31 @@ function renderAppearanceSettingsScreen() {
                 </div>
             </div>
 
+            <!-- 自定义 CSS 区 -->
+            <div class="appearance-section">
+                <div class="appearance-section-header">
+                    <h2 class="appearance-section-title">自定义美化</h2>
+                    <span class="appearance-section-desc">输入 CSS 代码自定义教程页面样式</span>
+                </div>
+                <div class="custom-css-area">
+                    <div class="custom-css-toggle-row">
+                        <span class="custom-css-toggle-label">启用自定义 CSS</span>
+                        <label class="custom-css-switch">
+                            <input type="checkbox" id="custom-tutorial-css-toggle" ${isCustomTutorialCssEnabled() ? 'checked' : ''}>
+                            <span class="custom-css-switch-slider"></span>
+                        </label>
+                    </div>
+                    <textarea id="custom-tutorial-css-input" class="custom-css-textarea" placeholder="/* 在此输入自定义 CSS */&#10;&#10;/* 例如修改教程页背景色: */&#10;#tutorial-content-area {&#10;  background: #1a1a2e;&#10;  color: #eee;&#10;}" spellcheck="false">${getCustomTutorialCss()}</textarea>
+                    <div class="custom-css-btn-row">
+                        <button type="button" id="custom-tutorial-css-save" class="custom-css-btn primary">保存并应用</button>
+                        <button type="button" id="custom-tutorial-css-reset" class="custom-css-btn neutral">清空</button>
+                    </div>
+                    <div class="custom-css-hint">
+                        <span>💡</span> 自定义 CSS 会叠加在当前选中的排版方案之上。可用浏览器开发者工具查看元素类名。
+                    </div>
+                </div>
+            </div>
+
         </main>
     `;
 
@@ -131,6 +206,45 @@ function renderAppearanceSettingsScreen() {
             }
         });
     });
+
+    // 自定义 CSS 事件绑定
+    const cssToggle = inner.querySelector('#custom-tutorial-css-toggle');
+    const cssTextarea = inner.querySelector('#custom-tutorial-css-input');
+    const cssSaveBtn = inner.querySelector('#custom-tutorial-css-save');
+    const cssResetBtn = inner.querySelector('#custom-tutorial-css-reset');
+
+    if (cssToggle) {
+        cssTextarea.disabled = !cssToggle.checked;
+
+        cssToggle.addEventListener('change', () => {
+            const enabled = cssToggle.checked;
+            setCustomTutorialCssEnabled(enabled);
+            cssTextarea.disabled = !enabled;
+            applyCustomTutorialCss();
+            if (typeof renderTutorialContent === 'function') renderTutorialContent();
+        });
+    }
+
+    if (cssSaveBtn) {
+        cssSaveBtn.addEventListener('click', () => {
+            const css = cssTextarea.value;
+            setCustomTutorialCss(css);
+            applyCustomTutorialCss();
+            if (typeof renderTutorialContent === 'function') renderTutorialContent();
+            if (typeof showToast === 'function') showToast('自定义 CSS 已保存并应用');
+        });
+    }
+
+    if (cssResetBtn) {
+        cssResetBtn.addEventListener('click', () => {
+            if (!confirm('确定要清空自定义 CSS 吗？')) return;
+            cssTextarea.value = '';
+            setCustomTutorialCss('');
+            applyCustomTutorialCss();
+            if (typeof renderTutorialContent === 'function') renderTutorialContent();
+            if (typeof showToast === 'function') showToast('自定义 CSS 已清空');
+        });
+    }
 }
 
 (function initAppearanceSettings() {
@@ -138,6 +252,7 @@ function renderAppearanceSettingsScreen() {
         const screen = document.getElementById('appearance-settings-screen');
         if (!screen || screen.querySelector('.appearance-settings-inner')) return;
         renderAppearanceSettingsScreen();
+        applyCustomTutorialCss();
     }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', injectWhenReady);

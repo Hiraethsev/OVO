@@ -443,6 +443,14 @@ function setupHomeScreen() {
                     <img src="${getIcon('appearance-settings-screen')}" alt="外观" class="icon-img">
                     <span class="app-name">${getName('appearance-settings-screen')}</span>
                 </a>
+                <a href="#" class="app-icon" data-action="biekan-app">
+                    <img src="${getIcon('biekan-app')}" alt="别看" class="icon-img">
+                    <span class="app-name">${getName('biekan-app')}</span>
+                </a>
+                <a href="#" class="app-icon" data-action="xiaowu-app">
+                    <img src="${getIcon('xiaowu-app')}" alt="小屋" class="icon-img">
+                    <span class="app-name">${getName('xiaowu-app')}</span>
+                </a>
              </div>
         </div>
 
@@ -479,6 +487,8 @@ function setupHomeScreen() {
     document.querySelector('[data-target="world-book-screen"]').addEventListener('click', renderWorldBookList);
     document.querySelector('[data-target="customize-screen"]').addEventListener('click', renderCustomizeForm);
     document.querySelector('[data-target="tutorial-screen"]').addEventListener('click', renderTutorialContent);
+    document.querySelector('[data-action="biekan-app"]')?.addEventListener('click', (e) => { e.preventDefault(); showToast('别看APP正在开发中…'); });
+    document.querySelector('[data-action="xiaowu-app"]')?.addEventListener('click', (e) => { e.preventDefault(); showToast('小屋APP正在开发中…'); });
     if (typeof setupPiggyBankApp === 'function') setupPiggyBankApp();
     updateBatteryStatus();
 

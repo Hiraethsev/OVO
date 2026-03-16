@@ -383,9 +383,12 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                     });
 
                     // 3. 插入 Prefill (预填/强塞)
+                    const quickReply = db.apiSettings && db.apiSettings.quickReplyEnabled;
                     messages.push({
                         role: 'assistant',
-                        content: '<thinking>'
+                        content: quickReply
+                            ? '<thinking>\n跳过cot，专注回复\n</thinking>\n[finire]'
+                            : '<thinking>'
                     });
                 }
             }
@@ -2364,9 +2367,12 @@ async function getCallReply(chat, callType, callContext, onStreamUpdate) {
             });
 
             // 3. 插入 Prefill (预填/强塞)
+            const quickReply = db.apiSettings && db.apiSettings.quickReplyEnabled;
             messages.push({
                 role: 'assistant',
-                content: '<thinking>'
+                content: quickReply
+                    ? '<thinking>\n跳过cot，专注回复\n</thinking>\n[finire]'
+                    : '<thinking>'
             });
         }
     }

@@ -72,18 +72,10 @@ function parseTextToWorldBookEntries(text) {
     const entries = [];
     const raw = (text || '').trim();
     if (!raw) return entries;
-    const blocks = raw.split(/\n\s*\n/).map(b => b.trim()).filter(B => B.length > 0);
     const category = '导入';
-    blocks.forEach(block => {
-        const lines = block.split(/\n/);
-        const name = lines[0].trim();
-        const content = lines.slice(1).join('\n').trim();
-        if (name && content) {
-            entries.push({ name, content, category });
-        } else if (block.length > 0) {
-            entries.push({ name: name || '未命名条目', content: content || block, category });
-        }
-    });
+    const lines = raw.split(/\n/);
+    const name = lines[0].trim() || '未命名条目';
+    entries.push({ name, content: raw, category });
     return entries;
 }
 
