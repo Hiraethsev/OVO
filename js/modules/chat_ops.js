@@ -14,6 +14,52 @@ function handleMessageLongPress(messageWrapper, x, y) {
     const message = chat.history.find(m => m.id === messageId);
     if (!message) return;
 
+    let menuItems = [];
+
+    if (message.isNodeBoundary) {
+        menuItems.push({
+            label: '删除节点标记',
+            action: async () => {
+                if (confirm('确定要删除该节点标记吗？如果是开始标记，将同时删除该节点记录。')) {
+                    const char = db.characters.find(c => c.id === currentChatId);
+                    if (!char) return;
+                    
+                    if (message.nodeAction === 'start') {
+                        if (char.nodes) {
+                            char.nodes = char.nodes.filter(n => n.id !== message.nodeId);
+                        }
+                        if (char.activeNodeId === message.nodeId) {
+                            char.activeNodeId = null;
+                        }
+                    } else if (message.nodeAction === 'end') {
+                        if (char.nodes) {
+                            const node = char.nodes.find(n => n.id === message.nodeId);
+                            if (node) {
+                                node.status = 'active';
+                                char.activeNodeId = message.nodeId;
+                            }
+                        }
+                    }
+                    
+                    char.history = char.history.filter(m => m.id !== messageId);
+                    
+                    await saveData();
+                    renderMessages(false, true);
+                    if (typeof NodeSystem !== 'undefined') {
+                        NodeSystem.checkActiveNodeUI();
+                    }
+                    showToast('节点标记已删除');
+                }
+            }
+        });
+        
+        if (menuItems.length > 0) {
+            triggerHapticFeedback('medium');
+            createContextMenu(menuItems, x, y);
+        }
+        return;
+    }
+
     const isImageRecognitionMsg = message.parts && message.parts.some(p => p.type === 'image');
     const isVoiceMessage = /\[.*?的语音：.*?\]/.test(message.content);
     const isStickerMessage = /\[.*?的表情包：.*?\]|\[.*?发送的表情包：.*?\]/.test(message.content);
@@ -29,8 +75,6 @@ function handleMessageLongPress(messageWrapper, x, y) {
     }
     const isInvisibleMessage = invisibleRegex.test(message.content);
     const isWithdrawn = message.isWithdrawn; 
-
-    let menuItems = [];
 
     if (!isWithdrawn) {
         if (!isImageRecognitionMsg && !isVoiceMessage && !isStickerMessage && !isPhotoVideoMessage && !isTransferMessage && !isGiftMessage && !isInvisibleMessage) {
@@ -58,6 +102,98 @@ function handleMessageLongPress(messageWrapper, x, y) {
             renderMessages(false, true); 
         }
     });
+
+    if (currentChatType === 'private') {
+        menuItems.push({
+            label: '插入节点',
+            action: () => {
+                // 优化：使用自定义弹窗代替原生 confirm
+                const position = confirm('点击“确定”在此消息之后插入，点击“取消”在此消息之前插入') ? 'after' : 'before';
+                if (typeof NodeSystem !== 'undefined') {
+                    NodeSystem.insertNodeBoundary(messageId, position);
+                }
+            }
+        });
+    }
+
+    // 下载语音：全局 TTS 开关 + 角色 TTS 开关都开启时才显示
+    if (!isWithdrawn && !isInvisibleMessage &&
+        typeof MinimaxTTSService !== 'undefined' && MinimaxTTSService.config.enabled && MinimaxTTSService.isConfigured() &&
+        chat.ttsConfig && chat.ttsConfig.chatTtsEnabled &&
+        typeof VoiceSelector !== 'undefined') {
+        menuItems.push({
+            label: '下载语音',
+            action: async () => {
+                const isUserMsg = message.role === 'user';
+                const mode = isUserMsg ? 'user' : 'char';
+                // 用户消息需要用户 TTS 也配置好
+                if (isUserMsg && !MinimaxTTSService.isUserConfigured()) {
+                    showToast('用户 TTS 未配置');
+                    return;
+                }
+                const voiceConfig = VoiceSelector.getVoiceConfig(currentChatId, mode);
+                if (!voiceConfig || !voiceConfig.voiceId) {
+                    showToast('未设置' + (isUserMsg ? '用户' : '角色') + '音色');
+                    return;
+                }
+                // 提取纯文本
+                let text = message.content || '';
+                text = text.replace(/\[.*?\]/g, '').replace(/[\(（].*?[\)）]/g, '').replace(/「.*?」/g, '').trim();
+                if (!text) {
+                    showToast('消息内容为空');
+                    return;
+                }
+                try {
+                    showToast('🔊 正在生成语音...');
+                    const opts = { speed: voiceConfig.speed };
+                    if (isUserMsg) opts.forUser = true;
+                    await MinimaxTTSService.download(text, voiceConfig.voiceId, voiceConfig.language || 'auto', opts);
+                    showToast('✅ 语音已下载');
+                } catch (err) {
+                    console.error('[ChatOps] 下载语音失败:', err);
+                    showToast('❌ 下载失败: ' + err.message);
+                }
+            }
+        });
+    }
+
+    // 重新生图：NovelAI 已启用 + 消息是已生成过图的照片/视频消息
+    if (!isWithdrawn && isPhotoVideoMessage && message.novelAiImageUrl &&
+        db.novelAiSettings && db.novelAiSettings.enabled && db.novelAiSettings.token) {
+        menuItems.push({
+            label: '重新生图',
+            action: async () => {
+                // 从消息内容提取 prompt
+                const pvMatch = message.content.match(/\[(?:.+?)发来的照片\/视频[：:]([\s\S]+?)\]/);
+                if (!pvMatch) { showToast('无法提取图片描述'); return; }
+                const pvContent = pvMatch[1].trim();
+                const tagMatch = pvContent.match(/\{\{([\s\S]+?)\}\}/);
+                const naiPrompt = tagMatch ? tagMatch[1].trim() : pvContent;
+                if (!naiPrompt) { showToast('提示词为空'); return; }
+
+                try {
+                    showToast('🎨 正在重新生图...');
+                    const result = await generateNovelAiImage(naiPrompt);
+                    if (result && result.imageUrl) {
+                        // 保存旧图到版本历史
+                        if (!message._imageVersions) message._imageVersions = [];
+                        message._imageVersions.push({
+                            imageUrl: message.novelAiImageUrl,
+                            savedAt: Date.now()
+                        });
+                        // 更新为新图
+                        message.novelAiImageUrl = result.imageUrl;
+                        await saveData();
+                        renderMessages(false, true);
+                        showToast('✅ 生图完成');
+                    }
+                } catch (err) {
+                    console.error('[ChatOps] 重新生图失败:', err);
+                    showToast('❌ 生图失败: ' + err.message);
+                }
+            }
+        });
+    }
 
     menuItems.push({label: '删除', action: () => enterMultiSelectMode(messageId)});
     if (!isInvisibleMessage) {
@@ -1093,13 +1229,15 @@ async function confirmInsertMessage() {
 
     // 根据当前编辑消息的角色决定新消息的角色
     const isCharMessage = currentMessage.role === 'char' || currentMessage.role === 'assistant';
+    const messageContent = isCharMessage
+        ? `[${chat.name || '角色'}的消息：${newContent}]`
+        : `[${chat.myName || '我'}的消息：${newContent}]`;
     const newMessage = {
         id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        content: isCharMessage
-            ? `[${chat.name || '角色'}的消息：${newContent}]`
-            : `[${chat.myName || '我'}的消息：${newContent}]`,
+        content: messageContent,
+        parts: [{type: 'text', text: messageContent}],
         timestamp: newTimestamp,
-        role: isCharMessage ? 'char' : 'user',
+        role: isCharMessage ? 'assistant' : 'user',
         senderId: isCharMessage ? (currentMessage.senderId || chat.id) : 'user_me'
     };
 

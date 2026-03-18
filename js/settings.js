@@ -1431,6 +1431,10 @@ function loadSettingsToSidebar() {
         if (charSenseCoupleEl) charSenseCoupleEl.checked = e.charSenseCoupleAvatarEnabled === true;
         document.getElementById('setting-char-reminder-enabled').checked = e.charReminderEnabled || false;
 
+        // 消息版本管理
+        const keepRegenEl = document.getElementById('setting-keep-regen-versions');
+        if (keepRegenEl) keepRegenEl.checked = e.keepRegenVersions || false;
+
         const sp = e.statusPanel || {};
         document.getElementById('setting-status-panel-enabled').checked = sp.enabled || false;
         document.getElementById('setting-status-prompt-suffix').value = sp.promptSuffix || '';
@@ -1474,6 +1478,8 @@ function loadSettingsToSidebar() {
         document.getElementById('setting-video-call-enabled').checked = e.videoCallEnabled || false;
         document.getElementById('setting-real-camera-enabled').checked = e.realCameraEnabled || false;
         document.getElementById('setting-vc-novelai-enabled').checked = e.vcNovelAiEnabled || false;
+        const saveCallOnInterruptEl = document.getElementById('setting-save-call-on-interrupt');
+        if (saveCallOnInterruptEl) saveCallOnInterruptEl.checked = e.saveCallOnInterrupt || false;
 
         // === 加载 NovelAI 生图设置（模型/尺寸/画师串）到拓展 Tab ===
         if (db.novelAiSettings) {
@@ -1742,6 +1748,10 @@ async function saveSettingsFromSidebar() {
         e.showAvatarActionMsg = document.getElementById('setting-show-avatar-action-msg').checked;
         e.charReminderEnabled = document.getElementById('setting-char-reminder-enabled').checked;
 
+        // 消息版本管理
+        const keepRegenSave = document.getElementById('setting-keep-regen-versions');
+        e.keepRegenVersions = keepRegenSave ? keepRegenSave.checked : false;
+
         if (!e.statusPanel) e.statusPanel = {};
         e.statusPanel.enabled = document.getElementById('setting-status-panel-enabled').checked;
         e.statusPanel.promptSuffix = document.getElementById('setting-status-prompt-suffix').value;
@@ -1763,6 +1773,8 @@ async function saveSettingsFromSidebar() {
         e.videoCallEnabled = document.getElementById('setting-video-call-enabled').checked;
         e.realCameraEnabled = document.getElementById('setting-real-camera-enabled').checked;
         e.vcNovelAiEnabled = document.getElementById('setting-vc-novelai-enabled').checked;
+        const saveCallOnInterruptSave = document.getElementById('setting-save-call-on-interrupt');
+        e.saveCallOnInterrupt = saveCallOnInterruptSave ? saveCallOnInterruptSave.checked : false;
 
         // === 保存 NovelAI 生图设置（模型/尺寸/画师串）回 db.novelAiSettings ===
         {
@@ -3826,7 +3838,7 @@ function openWidgetManageModal() {
     modal.style.display = 'flex';
 }
 
-// ---------- 小组件和壁纸方案 ----------
+// ---------- 主屏幕预设方案 ----------
 const DEFAULT_HOME_SIGNATURE = '编辑个性签名...';
 const DEFAULT_INS_WIDGET = { avatar1: 'https://i.postimg.cc/Y96LPskq/o-o-2.jpg', bubble1: 'love u.', avatar2: 'https://i.postimg.cc/GtbTnxhP/o-o-1.jpg', bubble2: 'miss u.' };
 
@@ -4006,7 +4018,7 @@ function exportWidgetWallpaperScheme() {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = (payload.preset.name || '小组件壁纸方案') + '.json';
+    a.download = (payload.preset.name || '主屏幕预设方案') + '.json';
     a.click();
     URL.revokeObjectURL(a.href);
     showToast('方案已导出');
@@ -4019,7 +4031,7 @@ function importWidgetWallpaperScheme(file) {
         try {
             const data = JSON.parse(reader.result);
             if (!data || data.type !== 'widget-wallpaper-scheme' || !data.preset) {
-                showToast('不是有效的小组件壁纸方案文件');
+                showToast('不是有效的主屏幕预设方案文件');
                 return;
             }
             const preset = data.preset;
@@ -4044,7 +4056,7 @@ function importWidgetWallpaperScheme(file) {
 }
 
 function resetWidgetWallpaperToDefault() {
-    if (!confirm('确定要恢复默认吗？将清除当前所有小组件、壁纸和应用图标设置。')) return;
+    if (!confirm('确定要恢复默认吗？将清除当前所有主屏幕预设设置（小组件、壁纸、应用图标）。')) return;
     db.wallpaper = DEFAULT_WALLPAPER_URL;
     if (typeof applyWallpaper === 'function') applyWallpaper(DEFAULT_WALLPAPER_URL);
     db.homeWidgetSettings = JSON.parse(JSON.stringify(defaultWidgetSettings));
@@ -4067,7 +4079,7 @@ function resetWidgetWallpaperToDefault() {
         preview.textContent = '';
     }
     renderCustomizeForm();
-    showToast('已恢复默认（小组件+壁纸+图标）');
+    showToast('已恢复默认（主屏幕预设）');
 }
 
 function _getIconPresets() {
@@ -5078,7 +5090,7 @@ function renderCustomizeForm() {
     const widgetWallpaperSectionHTML = `
     <div class="kkt-group collapsible-section" style="background-color: #fff; border: none; margin-bottom: 15px;">
         <div class="kkt-item collapsible-header" style="background-color: #fff; border-bottom: 1px solid #f5f5f5; cursor: pointer; padding: 15px;">
-            <div class="kkt-item-label" style="font-weight:bold; color:#333; font-size: 15px;">小组件和壁纸</div>
+            <div class="kkt-item-label" style="font-weight:bold; color:#333; font-size: 15px;">主屏幕预设方案</div>
             <span class="collapsible-arrow">▼</span>
         </div>
         <div class="collapsible-content">
@@ -5100,7 +5112,7 @@ function renderCustomizeForm() {
                     <button type="button" id="widget-wallpaper-import-btn" class="btn btn-small btn-neutral" style="padding:4px 8px;">导入方案</button>
                 </div>
                 <div style="display: flex; justify-content: flex-end;">
-                    <button type="button" id="widget-wallpaper-reset-btn" class="btn btn-neutral btn-small" style="width: auto;">恢复默认（小组件+壁纸+图标）</button>
+                    <button type="button" id="widget-wallpaper-reset-btn" class="btn btn-neutral btn-small" style="width: auto;">恢复默认（主屏幕预设）</button>
                 </div>
                 <input type="file" id="widget-wallpaper-import-file" accept=".json,.ee" style="display:none;">
             </div>
@@ -5429,7 +5441,116 @@ margin-left: auto !important;
     </div>
     `;
     
-    container.innerHTML = iconsSectionHTML + namesSectionHTML + widgetSectionHTML + widgetWallpaperSectionHTML + fontsSectionHTML + soundSectionHTML + globalCssSectionHTML;
+    // ---------- 夜间模式设置 ----------
+    const nightSettings = db.nightModeSettings || {};
+    const nightModeSectionHTML = `
+    <div class="kkt-group collapsible-section" style="background-color: #fff; border: none; margin-bottom: 15px;">
+        <div class="kkt-item collapsible-header" style="background-color: #fff; border-bottom: 1px solid #f5f5f5; cursor: pointer; padding: 15px;">
+            <div class="kkt-item-label" style="font-weight:bold; color:#333; font-size: 15px;">夜间模式</div>
+            <span class="collapsible-arrow">▼</span>
+        </div>
+        <div class="collapsible-content">
+            <div class="kkt-item" style="display:block; padding: 15px;">
+                <p style="font-size: 13px; color: #888; margin-bottom: 12px; line-height: 1.5;">开启后整个应用切换为暗色主题，也可设置定时自动切换。支持自定义夜间模式的 CSS 样式覆盖。</p>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <label style="font-size:14px; color:#333;">启用夜间模式</label>
+                    <label class="kkt-switch"><input type="checkbox" id="night-mode-enabled" ${nightSettings.enabled ? 'checked' : ''}><span class="kkt-slider"></span></label>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <label style="font-size:14px; color:#333;">定时自动切换</label>
+                    <label class="kkt-switch"><input type="checkbox" id="night-mode-auto" ${nightSettings.auto ? 'checked' : ''}><span class="kkt-slider"></span></label>
+                </div>
+                <div id="night-mode-schedule" style="display:${nightSettings.auto ? 'flex' : 'none'}; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+                    <label style="font-size:13px; color:#666;">开始</label>
+                    <input type="time" id="night-mode-start" value="${nightSettings.startTime || '22:00'}" style="border:1px solid #ddd; border-radius:6px; padding:4px 8px; font-size:13px;">
+                    <label style="font-size:13px; color:#666;">结束</label>
+                    <input type="time" id="night-mode-end" value="${nightSettings.endTime || '07:00'}" style="border:1px solid #ddd; border-radius:6px; padding:4px 8px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:14px; color:#333;">自定义夜间 CSS</label>
+                        <div style="display:flex; gap:6px;">
+                            <button type="button" id="night-css-apply-btn" class="btn btn-primary btn-small" style="padding:4px 8px;">应用</button>
+                            <button type="button" id="night-css-reset-btn" class="btn btn-small" style="padding:4px 8px;">重置</button>
+                        </div>
+                    </div>
+                    <textarea id="night-mode-custom-css" rows="5" placeholder="例如：\nbody.night-mode-active .screen { background: #0d0d1a; }\nbody.night-mode-active .chat-item { background: #16162b; }" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${nightSettings.customCss || ''}</textarea>
+                </div>
+
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button type="button" id="night-mode-export-btn" class="btn btn-small btn-neutral" style="padding:4px 8px;">导出配置</button>
+                    <button type="button" id="night-mode-import-btn" class="btn btn-small btn-neutral" style="padding:4px 8px;">导入配置</button>
+                    <input type="file" id="night-mode-import-file" accept=".json" style="display:none;">
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+
+    // ---------- 顶栏状态栏设置 ----------
+    const statusBarSettings = db.homeStatusBarSettings || {};
+    const statusBarSectionHTML = `
+    <div class="kkt-group collapsible-section" style="background-color: #fff; border: none; margin-bottom: 15px;">
+        <div class="kkt-item collapsible-header" style="background-color: #fff; border-bottom: 1px solid #f5f5f5; cursor: pointer; padding: 15px;">
+            <div class="kkt-item-label" style="font-weight:bold; color:#333; font-size: 15px;">顶栏电量 + 时间</div>
+            <span class="collapsible-arrow">▼</span>
+        </div>
+        <div class="collapsible-content">
+            <div class="kkt-item" style="display:block; padding: 15px;">
+                <p style="font-size: 13px; color: #888; margin-bottom: 12px; line-height: 1.5;">在所有页面顶部透明显示实时时间和电量，融入界面不遮挡。可自定义顶栏容器、时间、电量的 CSS 样式。</p>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <label style="font-size:14px; color:#333;">显示顶栏状态栏</label>
+                    <label class="kkt-switch"><input type="checkbox" id="home-statusbar-enabled" ${statusBarSettings.enabled ? 'checked' : ''}><span class="kkt-slider"></span></label>
+                </div>
+
+                <div style="background:#f5f5f5; border-radius:10px; padding:10px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#333;">
+                    <span id="statusbar-preview-time" style="font-weight:600;">--:--</span>
+                    <span style="display:flex; align-items:center; gap:4px;">
+                        <svg width="18" height="11" viewBox="0 0 24 12" fill="none"><path d="M1 2.5C1 1.95 1.45 1.5 2 1.5H20C20.55 1.5 21 1.95 21 2.5V9.5C21 10.05 20.55 10.5 20 10.5H2C1.45 10.5 1 10.05 1 9.5V2.5Z" stroke="#666" stroke-width="1"/><path d="M22.5 4V8" stroke="#666" stroke-width="1.5" stroke-linecap="round"/><rect id="statusbar-preview-battery-fill" x="2" y="2.5" width="18" height="7" rx="0.5" fill="#666"/></svg>
+                        <span id="statusbar-preview-level">--%</span>
+                    </span>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:14px; color:#333;">顶栏容器 CSS</label>
+                    </div>
+                    <textarea id="statusbar-container-css" rows="4" placeholder="例如：\nbackground: rgba(0,0,0,0.3);\ncolor: #fff;\nborder-radius: 0;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.containerCss || ''}</textarea>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:14px; color:#333;">时间样式 CSS</label>
+                    </div>
+                    <textarea id="statusbar-time-css" rows="3" placeholder="例如：\nfont-size: 14px;\nfont-weight: bold;\ncolor: #fff;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.timeCss || ''}</textarea>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:14px; color:#333;">电量样式 CSS</label>
+                    </div>
+                    <textarea id="statusbar-battery-css" rows="3" placeholder="例如：\nfont-size: 12px;\ncolor: #4CAF50;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.batteryCss || ''}</textarea>
+                </div>
+
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:8px;">
+                    <button type="button" id="statusbar-apply-btn" class="btn btn-primary btn-small" style="padding:4px 8px;">应用</button>
+                    <button type="button" id="statusbar-reset-btn" class="btn btn-small" style="padding:4px 8px;">重置</button>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button type="button" id="statusbar-export-btn" class="btn btn-small btn-neutral" style="padding:4px 8px;">导出配置</button>
+                    <button type="button" id="statusbar-import-btn" class="btn btn-small btn-neutral" style="padding:4px 8px;">导入配置</button>
+                    <input type="file" id="statusbar-import-file" accept=".json" style="display:none;">
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+
+    container.innerHTML = iconsSectionHTML + namesSectionHTML + widgetSectionHTML + widgetWallpaperSectionHTML + fontsSectionHTML + soundSectionHTML + globalCssSectionHTML + nightModeSectionHTML + statusBarSectionHTML;
     customizeForm.appendChild(container);
 
     populateGlobalCssPresetSelect();
@@ -5461,7 +5582,340 @@ margin-left: auto !important;
     if (globalCssTextarea) {
         globalCssTextarea.value = db.globalCss || '';
     }
+
+    // ---------- 夜间模式事件绑定 ----------
+    setupNightModeBindings();
+    // ---------- 顶栏状态栏事件绑定 ----------
+    setupStatusBarBindings();
 }
+
+// ============================================
+// 夜间模式
+// ============================================
+
+function setupNightModeBindings() {
+    const enabledCb = document.getElementById('night-mode-enabled');
+    const autoCb = document.getElementById('night-mode-auto');
+    const scheduleDiv = document.getElementById('night-mode-schedule');
+    const startInput = document.getElementById('night-mode-start');
+    const endInput = document.getElementById('night-mode-end');
+    const cssArea = document.getElementById('night-mode-custom-css');
+
+    if (enabledCb) enabledCb.addEventListener('change', async () => {
+        if (!db.nightModeSettings) db.nightModeSettings = {};
+        db.nightModeSettings.enabled = enabledCb.checked;
+        await saveData();
+        applyNightMode();
+        showToast(enabledCb.checked ? '夜间模式已开启' : '夜间模式已关闭');
+    });
+
+    if (autoCb) autoCb.addEventListener('change', async () => {
+        if (!db.nightModeSettings) db.nightModeSettings = {};
+        db.nightModeSettings.auto = autoCb.checked;
+        if (scheduleDiv) scheduleDiv.style.display = autoCb.checked ? 'flex' : 'none';
+        await saveData();
+        applyNightMode();
+    });
+
+    if (startInput) startInput.addEventListener('change', async () => {
+        if (!db.nightModeSettings) db.nightModeSettings = {};
+        db.nightModeSettings.startTime = startInput.value;
+        await saveData();
+        applyNightMode();
+    });
+
+    if (endInput) endInput.addEventListener('change', async () => {
+        if (!db.nightModeSettings) db.nightModeSettings = {};
+        db.nightModeSettings.endTime = endInput.value;
+        await saveData();
+        applyNightMode();
+    });
+
+    document.getElementById('night-css-apply-btn')?.addEventListener('click', async () => {
+        if (!db.nightModeSettings) db.nightModeSettings = {};
+        db.nightModeSettings.customCss = cssArea?.value || '';
+        await saveData();
+        applyNightMode();
+        showToast('夜间模式 CSS 已应用');
+    });
+
+    document.getElementById('night-css-reset-btn')?.addEventListener('click', async () => {
+        if (!db.nightModeSettings) db.nightModeSettings = {};
+        db.nightModeSettings.customCss = '';
+        if (cssArea) cssArea.value = '';
+        await saveData();
+        applyNightMode();
+        showToast('夜间模式 CSS 已重置');
+    });
+
+    // 导出
+    document.getElementById('night-mode-export-btn')?.addEventListener('click', () => {
+        const payload = { type: 'night-mode-config', settings: db.nightModeSettings || {} };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '夜间模式配置.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast('夜间模式配置已导出');
+    });
+
+    // 导入
+    document.getElementById('night-mode-import-btn')?.addEventListener('click', () => {
+        document.getElementById('night-mode-import-file')?.click();
+    });
+    document.getElementById('night-mode-import-file')?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const data = JSON.parse(reader.result);
+                if (!data || data.type !== 'night-mode-config' || !data.settings) {
+                    showToast('不是有效的夜间模式配置文件');
+                    return;
+                }
+                db.nightModeSettings = data.settings;
+                await saveData();
+                applyNightMode();
+                renderCustomizeForm();
+                showToast('夜间模式配置已导入');
+            } catch (_) {
+                showToast('文件解析失败');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+}
+
+function applyNightMode() {
+    const settings = db.nightModeSettings || {};
+    let shouldBeNight = false;
+
+    if (settings.enabled) {
+        if (settings.auto) {
+            const now = new Date();
+            const hhmm = now.getHours() * 60 + now.getMinutes();
+            const start = parseTimeToMinutes(settings.startTime || '22:00');
+            const end = parseTimeToMinutes(settings.endTime || '07:00');
+            if (start > end) {
+                shouldBeNight = hhmm >= start || hhmm < end;
+            } else {
+                shouldBeNight = hhmm >= start && hhmm < end;
+            }
+        } else {
+            shouldBeNight = true;
+        }
+    }
+
+    if (shouldBeNight) {
+        document.body.classList.add('night-mode-active');
+    } else {
+        document.body.classList.remove('night-mode-active');
+    }
+
+    // 自定义CSS
+    let styleEl = document.getElementById('night-mode-custom-style');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'night-mode-custom-style';
+        document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = shouldBeNight && settings.customCss ? settings.customCss : '';
+}
+
+function parseTimeToMinutes(str) {
+    const [h, m] = (str || '00:00').split(':').map(Number);
+    return h * 60 + (m || 0);
+}
+
+// ============================================
+// 顶栏状态栏
+// ============================================
+
+function setupStatusBarBindings() {
+    const enabledCb = document.getElementById('home-statusbar-enabled');
+    const containerCssArea = document.getElementById('statusbar-container-css');
+    const timeCssArea = document.getElementById('statusbar-time-css');
+    const batteryCssArea = document.getElementById('statusbar-battery-css');
+
+    // 实时预览
+    updateStatusBarPreviewInSettings();
+
+    if (enabledCb) enabledCb.addEventListener('change', async () => {
+        if (!db.homeStatusBarSettings) db.homeStatusBarSettings = {};
+        db.homeStatusBarSettings.enabled = enabledCb.checked;
+        await saveData();
+        applyHomeStatusBar();
+        showToast(enabledCb.checked ? '顶栏状态栏已开启' : '顶栏状态栏已关闭');
+    });
+
+    document.getElementById('statusbar-apply-btn')?.addEventListener('click', async () => {
+        if (!db.homeStatusBarSettings) db.homeStatusBarSettings = {};
+        db.homeStatusBarSettings.containerCss = containerCssArea?.value || '';
+        db.homeStatusBarSettings.timeCss = timeCssArea?.value || '';
+        db.homeStatusBarSettings.batteryCss = batteryCssArea?.value || '';
+        await saveData();
+        applyHomeStatusBar();
+        showToast('顶栏样式已应用');
+    });
+
+    document.getElementById('statusbar-reset-btn')?.addEventListener('click', async () => {
+        if (!db.homeStatusBarSettings) db.homeStatusBarSettings = {};
+        db.homeStatusBarSettings.containerCss = '';
+        db.homeStatusBarSettings.timeCss = '';
+        db.homeStatusBarSettings.batteryCss = '';
+        if (containerCssArea) containerCssArea.value = '';
+        if (timeCssArea) timeCssArea.value = '';
+        if (batteryCssArea) batteryCssArea.value = '';
+        await saveData();
+        applyHomeStatusBar();
+        showToast('顶栏样式已重置');
+    });
+
+    // 导出
+    document.getElementById('statusbar-export-btn')?.addEventListener('click', () => {
+        const payload = { type: 'home-statusbar-config', settings: db.homeStatusBarSettings || {} };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '顶栏状态栏配置.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast('顶栏配置已导出');
+    });
+
+    // 导入
+    document.getElementById('statusbar-import-btn')?.addEventListener('click', () => {
+        document.getElementById('statusbar-import-file')?.click();
+    });
+    document.getElementById('statusbar-import-file')?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const data = JSON.parse(reader.result);
+                if (!data || data.type !== 'home-statusbar-config' || !data.settings) {
+                    showToast('不是有效的顶栏配置文件');
+                    return;
+                }
+                db.homeStatusBarSettings = data.settings;
+                await saveData();
+                applyHomeStatusBar();
+                renderCustomizeForm();
+                showToast('顶栏配置已导入');
+            } catch (_) {
+                showToast('文件解析失败');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+}
+
+function updateStatusBarPreviewInSettings() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const timeEl = document.getElementById('statusbar-preview-time');
+    if (timeEl) timeEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    if ('getBattery' in navigator) {
+        navigator.getBattery().then(battery => {
+            const level = Math.floor(battery.level * 100);
+            const levelEl = document.getElementById('statusbar-preview-level');
+            const fillEl = document.getElementById('statusbar-preview-battery-fill');
+            if (levelEl) levelEl.textContent = `${level}%`;
+            if (fillEl) fillEl.setAttribute('width', 18 * battery.level);
+        }).catch(() => {});
+    }
+}
+
+function applyHomeStatusBar() {
+    const phoneScreen = document.querySelector('.phone-screen');
+    if (!phoneScreen) return;
+    const settings = db.homeStatusBarSettings || {};
+    let bar = phoneScreen.querySelector('.home-top-statusbar');
+
+    if (!settings.enabled) {
+        if (bar) bar.remove();
+        let styleEl = document.getElementById('home-statusbar-custom-style');
+        if (styleEl) styleEl.textContent = '';
+        return;
+    }
+
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'home-top-statusbar';
+        bar.innerHTML = `
+            <span class="htsb-time"></span>
+            <span class="htsb-battery">
+                <svg width="18" height="11" viewBox="0 0 24 12" fill="none">
+                    <path d="M1 2.5C1 1.95 1.45 1.5 2 1.5H20C20.55 1.5 21 1.95 21 2.5V9.5C21 10.05 20.55 10.5 20 10.5H2C1.45 10.5 1 10.05 1 9.5V2.5Z" stroke="currentColor" stroke-width="1"/>
+                    <path d="M22.5 4V8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <rect class="htsb-battery-fill" x="2" y="2.5" width="18" height="7" rx="0.5" fill="currentColor"/>
+                </svg>
+                <span class="htsb-battery-level">--%</span>
+            </span>`;
+        phoneScreen.insertBefore(bar, phoneScreen.firstChild);
+    }
+
+    // 更新时间
+    const pad = n => String(n).padStart(2, '0');
+    const updateBar = () => {
+        const now = new Date();
+        const timeEl = bar.querySelector('.htsb-time');
+        if (timeEl) timeEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    };
+    updateBar();
+
+    // 更新电量
+    if ('getBattery' in navigator) {
+        navigator.getBattery().then(battery => {
+            const updateBat = () => {
+                const level = Math.floor(battery.level * 100);
+                const levelEl = bar.querySelector('.htsb-battery-level');
+                const fillEl = bar.querySelector('.htsb-battery-fill');
+                if (levelEl) levelEl.textContent = `${level}%`;
+                if (fillEl) fillEl.setAttribute('width', 18 * battery.level);
+            };
+            updateBat();
+            battery.addEventListener('levelchange', updateBat);
+            battery.addEventListener('chargingchange', updateBat);
+        }).catch(() => {});
+    }
+
+    // 自定义CSS
+    let styleEl = document.getElementById('home-statusbar-custom-style');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'home-statusbar-custom-style';
+        document.head.appendChild(styleEl);
+    }
+    let css = '';
+    if (settings.containerCss) css += `.home-top-statusbar { ${settings.containerCss} }\n`;
+    if (settings.timeCss) css += `.home-top-statusbar .htsb-time { ${settings.timeCss} }\n`;
+    if (settings.batteryCss) css += `.home-top-statusbar .htsb-battery, .home-top-statusbar .htsb-battery-level { ${settings.batteryCss} }\n`;
+    styleEl.textContent = css;
+}
+
+// 定时刷新顶栏时间
+setInterval(() => {
+    const bar = document.querySelector('.phone-screen > .home-top-statusbar .htsb-time');
+    if (bar) {
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        bar.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    }
+}, 30000);
+
+// 定时检查夜间模式自动切换
+setInterval(() => {
+    if (db.nightModeSettings?.enabled && db.nightModeSettings?.auto) {
+        applyNightMode();
+    }
+}, 60000);
 
 
 // ============================================

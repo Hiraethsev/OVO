@@ -314,6 +314,130 @@ const VideoCallModule = {
             incomingRejectBtn.addEventListener('click', () => this.rejectCall());
         }
 
+        // --- 通话中断保护：监听页面退出/隐藏事件 ---
+        const self = this;
+        window.addEventListener('beforeunload', () => {
+            self._saveInterruptData();
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                self._saveInterruptData();
+            }
+        });
+        // 启动时检查是否有中断的通话需要恢复
+        this.restoreInterruptedCall();
+    },
+
+    // --- 通话中断保护方法 ---
+
+    _saveInterruptData: function() {
+        if (!this.state.isCallActive || !this.state.currentChat) return;
+        if (!this.state.currentChat.saveCallOnInterrupt) return;
+        if (this.state.currentCallContext.length === 0) return;
+
+        const data = {
+            chatId: this.state.currentChat.id,
+            callType: this.state.callType,
+            startTime: this.state.startTime,
+            seconds: this.state.seconds,
+            context: this.state.currentCallContext,
+            savedAt: Date.now()
+        };
+        try {
+            localStorage.setItem('vc_interrupt_data', JSON.stringify(data));
+        } catch (e) {
+            console.warn('[VideoCall] 保存中断数据失败:', e);
+        }
+    },
+
+    _clearInterruptData: function() {
+        try {
+            localStorage.removeItem('vc_interrupt_data');
+        } catch (e) {}
+    },
+
+    restoreInterruptedCall: async function() {
+        let raw;
+        try {
+            raw = localStorage.getItem('vc_interrupt_data');
+        } catch (e) { return; }
+        if (!raw) return;
+
+        // 立即清除，防止重复恢复
+        this._clearInterruptData();
+
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) { return; }
+
+        if (!data || !data.chatId || !data.context || data.context.length === 0) return;
+
+        // 等待 db 加载完成
+        const waitForDb = () => new Promise(resolve => {
+            const check = () => {
+                if (typeof db !== 'undefined' && db.characters) resolve();
+                else setTimeout(check, 200);
+            };
+            check();
+        });
+        await waitForDb();
+
+        let chat = db.characters.find(c => c.id === data.chatId);
+        if (!chat) chat = (db.groups || []).find(g => g.id === data.chatId);
+        if (!chat) return;
+        if (!chat.saveCallOnInterrupt) return;
+
+        // 检查是否已经有这个时间段的记录（避免重复）
+        if (chat.callHistory && chat.callHistory.some(r => r.startTime === data.startTime)) return;
+
+        const startTimeDate = new Date(data.startTime);
+        const dateStr = `${startTimeDate.getFullYear()}/${startTimeDate.getMonth()+1}/${startTimeDate.getDate()} ${startTimeDate.getHours().toString().padStart(2,'0')}:${startTimeDate.getMinutes().toString().padStart(2,'0')}`;
+        const durationStr = this.formatDuration(data.seconds);
+
+        const callRecord = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            startTime: data.startTime,
+            duration: data.seconds,
+            type: data.callType,
+            context: [...data.context],
+            summary: "",
+            interrupted: true
+        };
+
+        if (!chat.callHistory) chat.callHistory = [];
+        chat.callHistory.push(callRecord);
+
+        const summaryMsg = {
+            id: `msg_${Date.now()}_${Math.random()}`,
+            role: 'assistant',
+            content: `[通话记录（非正常中断）：${dateStr}；${durationStr}；]`,
+            timestamp: Date.now(),
+            callRecordId: callRecord.id
+        };
+        chat.history.push(summaryMsg);
+
+        if (typeof saveData === 'function') await saveData();
+
+        if (typeof showToast === 'function') showToast('已恢复中断的通话记录，正在生成总结...');
+
+        if (typeof renderMessages === 'function' && typeof currentChatId !== 'undefined' && currentChatId === chat.id) {
+            renderMessages(false, true);
+        }
+
+        if (typeof generateCallSummary === 'function') {
+            generateCallSummary(chat, data.context).then(async (summary) => {
+                if (summary) {
+                    callRecord.summary = summary;
+                    summaryMsg.content = `[通话记录（非正常中断）：${dateStr}；${durationStr}；${summary}]`;
+                    if (typeof saveData === 'function') await saveData();
+                    if (typeof renderMessages === 'function' && typeof currentChatId !== 'undefined' && currentChatId === chat.id) {
+                        renderMessages(false, false);
+                    }
+                    if (typeof showToast === 'function') showToast('中断通话总结已生成');
+                }
+            });
+        }
     },
 
     // --- 悬浮窗逻辑 ---
@@ -878,6 +1002,10 @@ const VideoCallModule = {
         this.state.timerInterval = setInterval(() => {
             this.state.seconds++;
             updateTime();
+            // 每10秒更新一次中断保护数据
+            if (this.state.seconds % 10 === 0) {
+                this._saveInterruptData();
+            }
         }, 1000);
     },
 
@@ -1293,6 +1421,7 @@ const VideoCallModule = {
     },
 
     endCall: async function(isLoading = false) {
+        this._clearInterruptData();
         this.state.isCallActive = false;
         this.state.isMinimized = false;
         this.state.hasEnteredCallScene = false;

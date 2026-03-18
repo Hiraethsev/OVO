@@ -483,6 +483,35 @@ const MinimaxTTSService = {
         }
     },
 
+    // 下载语音文件
+    download: async function(text, voiceId, language, options = {}) {
+        try {
+            const audioUrl = await this.synthesize(text, voiceId, language, options);
+            // 从 blob URL 获取 blob
+            const resp = await fetch(audioUrl);
+            const blob = await resp.blob();
+            const now = new Date();
+            const ts = now.getFullYear().toString() +
+                String(now.getMonth() + 1).padStart(2, '0') +
+                String(now.getDate()).padStart(2, '0') + '_' +
+                String(now.getHours()).padStart(2, '0') +
+                String(now.getMinutes()).padStart(2, '0') +
+                String(now.getSeconds()).padStart(2, '0');
+            const filename = '语音_' + ts + '.mp3';
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            return true;
+        } catch (err) {
+            console.error('[TTS] 下载失败:', err);
+            throw err;
+        }
+    },
+
     // 清空缓存
     clearCache: function() {
         // 释放所有 Blob URL

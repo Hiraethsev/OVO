@@ -36,14 +36,44 @@ function renderMessages(isLoadMore = false, forceScrollToBottom = false) {
     const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
     if (!chat || !chat.history) return;
     const oldScrollHeight = messageArea.scrollHeight;
-    const totalMessages = chat.history.length;
+    
+    // 节点系统：过滤掉已收纳节点的消息
+    let displayHistory = chat.history;
+    if (currentChatType === 'private' && chat.nodes) {
+        const archivedNodeIds = chat.nodes.filter(n => n.status === 'archived').map(n => n.id);
+        if (archivedNodeIds.length > 0) {
+            let currentArchivedNodeId = null;
+            displayHistory = chat.history.filter(m => {
+                // 如果消息本身带有 nodeId 且该节点已被收纳，直接过滤掉（包括 start 和 end 边界消息）
+                if (m.nodeId && archivedNodeIds.includes(m.nodeId)) {
+                    return false;
+                }
+                
+                // 兼容旧逻辑：处理没有 nodeId 的普通消息，通过 start/end 边界来判断
+                if (m.isNodeBoundary) {
+                    if (m.nodeAction === 'start' && archivedNodeIds.includes(m.nodeId)) {
+                        currentArchivedNodeId = m.nodeId;
+                        return false;
+                    }
+                    if (m.nodeAction === 'end' && m.nodeId === currentArchivedNodeId) {
+                        currentArchivedNodeId = null;
+                        return false;
+                    }
+                }
+                if (currentArchivedNodeId) return false;
+                return true;
+            });
+        }
+    }
+
+    const totalMessages = displayHistory.length;
     
     // 确保 MESSAGES_PER_PAGE 存在
     const pageSize = (typeof MESSAGES_PER_PAGE !== 'undefined') ? MESSAGES_PER_PAGE : 20;
 
     const end = totalMessages - (currentPage - 1) * pageSize;
     const start = Math.max(0, end - pageSize);
-    const messagesToRender = chat.history.slice(start, end);
+    const messagesToRender = displayHistory.slice(start, end);
     if (!isLoadMore) messageArea.innerHTML = '';
     const fragment = document.createDocumentFragment();
     
@@ -78,16 +108,16 @@ function renderMessages(isLoadMore = false, forceScrollToBottom = false) {
             invisibleRegex = /\[.*?(?:接收|退回).*?的转账\]|\[.*?(?:接收|退还).*?的亲属卡\]|\[.*?(?:冻结|解冻|收回)了(?:给.*?的)?亲属卡\]|\[.*?调整(?:给.*?的)?亲属卡额度为：.*?\]|\[.*?更新状态为：.*?\]|\[.*?已接收礼物\]|\[system:.*?\]|\[.*?邀请.*?加入了群聊\]|\[.*?修改群名为：.*?\]|\[system-display:.*?\]|\[.*?同意了.*?的代付请求\]|\[.*?拒绝了.*?的代付请求\]|\[avatar-action:.*?\]|<thinking>[\s\S]*?<\/thinking>|^<thinking>[\s\S]*/;
         }
 
-        const isSystemMsg = /\[system:.*?\]|\[system-display:.*?\]/.test(msg.content);
+        const isSystemMsg = /\[system:.*?\]|\[system-display:.*?\]/.test(msg.content) || msg.isNodeBoundary;
         
         if (!isSystemMsg) {
             let prevMsg = null;
             let currentIndexInHistory = start + index;
             
             for (let i = currentIndexInHistory - 1; i >= 0; i--) {
-                const candidate = chat.history[i];
+                const candidate = displayHistory[i];
                 // 跳过隐藏的上下文消息（如角色自知消息），不影响连续消息判断
-                if (candidate.hiddenFromDisplay) continue;
+                if (candidate.hiddenFromDisplay || candidate.isNodeBoundary) continue;
                 if (!invisibleRegex.test(candidate.content)) {
                     prevMsg = candidate;
                     break;
@@ -108,7 +138,59 @@ function renderMessages(isLoadMore = false, forceScrollToBottom = false) {
         }
 
         const bubble = createMessageBubbleElement(msg, isContinuous);
-        if (bubble) fragment.appendChild(bubble);
+        if (bubble) {
+            fragment.appendChild(bubble);
+            
+            // 节点系统：渲染独立摘要
+            if (msg.nodeSummary) {
+                // 判断是否是连续带有相同摘要的最后一条消息
+                let isLastSummaryMsg = true;
+                let currentIndexInHistory = start + index;
+                
+                // 往后找下一条可见消息
+                for (let i = currentIndexInHistory + 1; i < displayHistory.length; i++) {
+                    const nextMsg = displayHistory[i];
+                    // 跳过隐藏消息
+                    if (nextMsg.hiddenFromDisplay || nextMsg.isNodeBoundary || nextMsg.isThinking) continue;
+                    
+                    // 如果下一条消息是同一个发送者，且带有相同的摘要，则当前消息不是最后一条
+                    const currentSender = msg.role === 'user' ? 'user' : (msg.senderId || 'assistant');
+                    const nextSender = nextMsg.role === 'user' ? 'user' : (nextMsg.senderId || 'assistant');
+                    
+                    if (currentSender === nextSender && nextMsg.nodeSummary === msg.nodeSummary) {
+                        isLastSummaryMsg = false;
+                    }
+                    break; // 只看下一条可见消息
+                }
+
+                if (isLastSummaryMsg) {
+                    const summaryText = db.nodeSummaryText || '摘要';
+                    const summaryWrapper = document.createElement('div');
+                    const roleClass = msg.role === 'user' ? 'sent' : 'received';
+                    summaryWrapper.className = `message-wrapper system-notification independent-summary-wrapper ${roleClass}`;
+                    summaryWrapper.style.margin = '10px 0';
+                    
+                    const summaryEl = document.createElement('div');
+                    summaryEl.className = 'node-summary-container independent-summary';
+                    summaryEl.style.maxWidth = '90%';
+                    
+                    summaryEl.innerHTML = `
+                        <div class="node-summary-toggle">
+                            <span class="node-summary-star spin">☆</span>
+                            <span>${DOMPurify.sanitize(summaryText)}</span>
+                        </div>
+                        <div class="node-summary-content" style="display:none;">${DOMPurify.sanitize(msg.nodeSummary)}</div>
+                    `;
+                    summaryEl.querySelector('.node-summary-toggle').addEventListener('click', () => {
+                        const content = summaryEl.querySelector('.node-summary-content');
+                        content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                    });
+                    
+                    summaryWrapper.appendChild(summaryEl);
+                    fragment.appendChild(summaryWrapper);
+                }
+            }
+        }
     });
     const existingLoadBtn = document.getElementById('load-more-btn');
     if (existingLoadBtn) existingLoadBtn.remove();
@@ -166,7 +248,7 @@ function createMessageBubbleElement(message, isContinuous = false) {
     // 这里需要把 isThinking 从 message 里解构出来
     let {role, content, timestamp, id, transferStatus, giftStatus, stickerData, senderId, quote, isWithdrawn, originalContent, isStatusUpdate, isThinking} = message;
     // 角色消息中的 {{user}} 替换为当前对话的「我的名字」
-    if (role === 'assistant' && chat && chat.myName && typeof content === 'string') {
+    if ((role === 'assistant' || role === 'char') && chat && chat.myName && typeof content === 'string') {
         content = content.replace(/\{\{user\}\}/g, chat.myName);
     }
     // 【新增补丁】如果内容以 <thinking> 开头，强制标记为 isThinking
@@ -179,6 +261,88 @@ function createMessageBubbleElement(message, isContinuous = false) {
     if ((isStatusUpdate || isThinking || message.isTransferAction) && !isDebugMode) return null;
     // 拦截：hiddenFromDisplay 标记的消息（如角色自知上下文消息），不渲染成气泡
     if (message.hiddenFromDisplay && !isDebugMode) return null;
+
+    // 节点系统：渲染独立摘要消息
+    if (message.isNodeSummaryMsg) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message-wrapper system-notification independent-summary-wrapper received';
+        wrapper.dataset.id = id;
+        wrapper.style.margin = '10px 0';
+        
+        const summaryText = db.nodeSummaryText || '摘要';
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'node-summary-container independent-summary';
+        summaryEl.style.maxWidth = '90%';
+        
+        summaryEl.innerHTML = `
+            <div class="node-summary-toggle">
+                <span class="node-summary-star spin">☆</span>
+                <span>${DOMPurify.sanitize(summaryText)}</span>
+            </div>
+            <div class="node-summary-content" style="display:none;">${DOMPurify.sanitize(message.content)}</div>
+        `;
+        
+        summaryEl.querySelector('.node-summary-toggle').addEventListener('click', () => {
+            const content = summaryEl.querySelector('.node-summary-content');
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        wrapper.appendChild(summaryEl);
+        return wrapper;
+    }
+
+    // 节点系统：渲染节点边界分割线
+    if (message.isNodeBoundary) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'node-divider-wrapper';
+        wrapper.dataset.id = id;
+        
+        const node = chat.nodes ? chat.nodes.find(n => n.id === message.nodeId) : null;
+        const nodeName = node ? node.name : '未知节点';
+        
+        if (message.nodeAction === 'start') {
+            wrapper.innerHTML = `
+                <div class="node-divider-line"></div>
+                <div class="node-divider-content active">
+                    <div class="node-divider-icon pulse"></div>
+                    <span>${DOMPurify.sanitize(nodeName)} 开启</span>
+                </div>
+                <div class="node-divider-line"></div>
+            `;
+        } else {
+            wrapper.innerHTML = `
+                <div class="node-divider-line"></div>
+                <div class="node-divider-content node-end-text" style="cursor:pointer;" title="点击管理该节点">
+                    <div class="node-divider-icon"></div>
+                    <span>${DOMPurify.sanitize(nodeName)} 结束</span>
+                </div>
+                <div class="node-divider-line"></div>
+            `;
+            
+            const textEl = wrapper.querySelector('.node-end-text');
+            if (textEl) {
+                textEl.addEventListener('click', () => {
+                    if (typeof NodeSystem !== 'undefined') {
+                        // 检查节点是否已经被收纳或删除
+                        const char = db.characters.find(c => c.id === currentChatId);
+                        if (char && char.nodes) {
+                            const node = char.nodes.find(n => n.id === message.nodeId);
+                            if (node && node.status !== 'archived') {
+                                document.getElementById('node-end-name').textContent = nodeName;
+                                const modal = document.getElementById('node-end-modal');
+                                // 临时将 activeNodeId 设为该节点，以便 endNode 逻辑能正确找到它
+                                char.activeNodeId = message.nodeId;
+                                modal.classList.add('visible');
+                            } else {
+                                showToast('该节点已收纳或删除，请在节点大厅管理');
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        return wrapper;
+    }
 
     // ... 后续代码不变 ...
 
@@ -530,6 +694,42 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
         return wrapper;
     }
 
+    // 节点自定义输出格式：第三方（renderAsSystem）检查
+    if (currentChatType === 'private' && role !== 'user' && !isThinking) {
+        const char = db.characters.find(c => c.id === currentChatId);
+        if (char && char.activeNodeId) {
+            const activeNode = char.nodes && char.nodes.find(n => n.id === char.activeNodeId);
+            if (activeNode && activeNode.customConfig && Array.isArray(activeNode.customConfig.customOutputFormat)) {
+                const systemFormats = activeNode.customConfig.customOutputFormat.filter(f => typeof f === 'object' && f.renderAsSystem);
+                if (systemFormats.length > 0) {
+                    // 检查消息内容是否完全匹配某个 renderAsSystem 的自定义格式
+                    const trimmed = content.trim();
+                    const bracketMatch = trimmed.match(/^\[([^\]]+)\]$/);
+                    if (bracketMatch) {
+                        // 消息内容是一个完整的 [xxx] 格式，检查是否匹配某个第三方格式
+                        const isSystemFormat = systemFormats.some(f => {
+                            // 从格式模板中提取关键字前缀进行匹配，如 [检定结果：{xxx}] -> 匹配 [检定结果：
+                            const fmt = f.format || '';
+                            const prefixMatch = fmt.match(/^\[([^{}\]]+)/);
+                            if (prefixMatch) {
+                                return trimmed.startsWith('[' + prefixMatch[1]);
+                            }
+                            return false;
+                        });
+                        if (isSystemFormat) {
+                            wrapper.className = 'message-wrapper system-notification';
+                            wrapper.dataset.id = id;
+                            if (message.isContextDisabled) wrapper.classList.add('context-disabled');
+                            const displayText = bracketMatch[1];
+                            wrapper.innerHTML = `<div class="system-notification-bubble">${DOMPurify.sanitize(displayText)}</div>`;
+                            return wrapper;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     const isSent = (role === 'user');
     let avatarUrl, bubbleTheme, senderNickname = '';
     const themeKey = chat.theme || 'white_pink';
@@ -564,7 +764,7 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     if (avatarClass.includes('avatar-invisible')) {
         wrapper.classList.add('avatar-invisible-layout');
     }
-    if (currentChatType === 'private' && chat.history && chat.history[0] && chat.history[0].id === id && role === 'assistant') {
+    if (currentChatType === 'private' && chat.history && chat.history[0] && chat.history[0].id === id && (role === 'assistant' || role === 'char')) {
         wrapper.classList.add('is-first-greeting');
     }
     const bubbleRow = document.createElement('div');
@@ -587,7 +787,9 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const textRegex = /\[(?:.+?)的消息[：:]([\s\S]+?)\]/;
     /* 用户定位 [我的位置：...] 或 角色定位 [XXX的位置：...] */
     const locationRegex = /\[(.+?)的位置[：:](.+?)(?:；距你约\s*([\d.]+)\s*(米|千米|公里))?\]/;
-    
+    // 【新增】自定义 HTML 渲染包裹标签正则
+    const uwuxjcRegex = /<uwuxjc>([\s\S]*?)<\/uwuxjc>/i;
+
     // 新版购物车小票格式: [A为B下单了：配送方式|总价|商品名 x数量]
     const shopOrderRegexNew = /\[(.*?)为(.*?)下单了[：:](.*?)\|(.*?)\|(.*?)\]/;
     // 代付请求格式: [A向B发起了代付请求:总价|商品名 x数量]
@@ -620,7 +822,8 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     const imageRecogMatch = content.match(imageRecogRegex);
     const textMatch = content.match(textRegex);
     const locationMatch = content.match(locationRegex);
-    
+        // 【新增】匹配 uwuxjc 标签
+    const uwuxjcMatch = content.match(uwuxjcRegex);
     if (callRecordMatch) {
         // 匹配结果: [0]全文, [1]类型(视频/语音), [2]时间, [3]时长, [4]总结
         const type = callRecordMatch[1]; 
@@ -1201,13 +1404,42 @@ const contentMatch = content.match(/^\[.*?(?:消息|回复)[：:]([\s\S]+)\]$/);
     } else if (textMatch) {
         bubbleElement = document.createElement('div');
         bubbleElement.className = `message-bubble ${isSent ? 'sent' : 'received'}`;
-        let userText = textMatch[1].trim().replace(/\[发送时间:.*?\]/g, '').trim();
+        let userText = textMatch[1].trim().replace(/$$发送时间:.*?$$/g, '').trim();
         bubbleElement.innerHTML = `<span class="bubble-content">${DOMPurify.sanitize(userText)}</span>`;
         if (!chat.useCustomBubbleCss) {
             bubbleElement.style.backgroundColor = bubbleTheme.bg;
             bubbleElement.style.color = bubbleTheme.text;
         }
+        } else if (uwuxjcMatch) {
+        // 拦截 <uwuxjc> 标签并作为 HTML 渲染
+        bubbleElement = document.createElement('div');
+        bubbleElement.className = `message-bubble ${isSent ? 'sent' : 'received'} html-bubble`;
+        
+        // 宽度自动适配屏幕大小，允许横向滚动防止撑爆布局
+        bubbleElement.style.width = '100%';
+        bubbleElement.style.maxWidth = '100%';
+        bubbleElement.style.overflowX = 'auto';
+        
+        const htmlContent = uwuxjcMatch[1].trim().replace(/\[发送时间:.*?\]/g, '');
+        
+        if (htmlContent.includes('<!DOCTYPE html>') || htmlContent.includes('<html')) {
+            // iframe 模式：去掉初始高度，添加 onload 事件自动获取内部元素高度并自适应撑开
+            bubbleElement.innerHTML = `<iframe srcdoc="${htmlContent.replace(/"/g, '&quot;')}" scrolling="no" style="width: 100%; min-width: 250px; border: none; background: white; border-radius: 10px; overflow: hidden;" onload="this.style.height = (this.contentWindow.document.documentElement.scrollHeight + 20) + 'px';"></iframe>`;
+        } else {
+            // 直接插入节点模式：天然根据内容自动撑开高度
+            bubbleElement.innerHTML = DOMPurify.sanitize(htmlContent, { 
+                ADD_TAGS: ['style', 'div', 'span', 'table', 'tr', 'td', 'th', 'tbody', 'thead', 'button', 'input', 'img', 'svg', 'path', 'a', 'b', 'i', 'strong', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'li', 'ol'], 
+                ADD_ATTR: ['style', 'class', 'id', 'href', 'src', 'width', 'height', 'viewBox', 'd', 'fill', 'stroke'] 
+            });
+        }
+        
+        if (!chat.useCustomBubbleCss) {
+            bubbleElement.style.backgroundColor = bubbleTheme.bg;
+            bubbleElement.style.color = bubbleTheme.text;
+        }
     } else if (message && Array.isArray(message.parts) && message.parts.length > 0 && message.parts[0].type === 'html') {
+
+
         bubbleElement = document.createElement('div');
         bubbleElement.className = `message-bubble ${isSent ? 'sent' : 'received'} html-bubble`;
         const htmlContent = message.parts[0].text;
@@ -1731,6 +1963,35 @@ function addMessageBubble(message, targetChatId, targetChatType) {
                 }
 
                 messageArea.appendChild(bubbleElement);
+                
+                // 节点系统：渲染独立摘要
+                if (message.nodeSummary) {
+                    const summaryText = db.nodeSummaryText || '摘要';
+                    const summaryWrapper = document.createElement('div');
+                    const roleClass = message.role === 'user' ? 'sent' : 'received';
+                    summaryWrapper.className = `message-wrapper system-notification independent-summary-wrapper ${roleClass}`;
+                    summaryWrapper.style.margin = '10px 0';
+                    
+                    const summaryEl = document.createElement('div');
+                    summaryEl.className = 'node-summary-container independent-summary';
+                    summaryEl.style.maxWidth = '90%';
+                    
+                    summaryEl.innerHTML = `
+                        <div class="node-summary-toggle">
+                            <span class="node-summary-star spin">☆</span>
+                            <span>${DOMPurify.sanitize(summaryText)}</span>
+                        </div>
+                        <div class="node-summary-content" style="display:none;">${DOMPurify.sanitize(message.nodeSummary)}</div>
+                    `;
+                    summaryEl.querySelector('.node-summary-toggle').addEventListener('click', () => {
+                        const content = summaryEl.querySelector('.node-summary-content');
+                        content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                    });
+                    
+                    summaryWrapper.appendChild(summaryEl);
+                    messageArea.appendChild(summaryWrapper);
+                }
+
                 messageArea.scrollTop = messageArea.scrollHeight;
             }
         }
@@ -1879,6 +2140,35 @@ function addMessageBubble(message, targetChatId, targetChatType) {
             }
 
             messageArea.appendChild(bubbleElement);
+            
+            // 节点系统：渲染独立摘要
+            if (message.nodeSummary) {
+                const summaryText = db.nodeSummaryText || '摘要';
+                const summaryWrapper = document.createElement('div');
+                const roleClass = message.role === 'user' ? 'sent' : 'received';
+                summaryWrapper.className = `message-wrapper system-notification independent-summary-wrapper ${roleClass}`;
+                summaryWrapper.style.margin = '10px 0';
+                
+                const summaryEl = document.createElement('div');
+                summaryEl.className = 'node-summary-container independent-summary';
+                summaryEl.style.maxWidth = '90%';
+                
+                summaryEl.innerHTML = `
+                    <div class="node-summary-toggle">
+                        <span class="node-summary-star spin">☆</span>
+                        <span>${DOMPurify.sanitize(summaryText)}</span>
+                    </div>
+                    <div class="node-summary-content" style="display:none;">${DOMPurify.sanitize(message.nodeSummary)}</div>
+                `;
+                summaryEl.querySelector('.node-summary-toggle').addEventListener('click', () => {
+                    const content = summaryEl.querySelector('.node-summary-content');
+                    content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                });
+                
+                summaryWrapper.appendChild(summaryEl);
+                messageArea.appendChild(summaryWrapper);
+            }
+
             messageArea.scrollTop = messageArea.scrollHeight;
         }
     }

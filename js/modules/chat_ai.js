@@ -121,6 +121,83 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
         
         let historySlice = chat.history.slice(-chat.maxMemory);
         
+        // 节点系统：上下文截断与记忆隔离
+        if (chatType === 'private' && chat.activeNodeId && chat.nodes) {
+            const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
+            if (activeNode) {
+                let startIndex = -1;
+                for (let i = chat.history.length - 1; i >= 0; i--) {
+                    const m = chat.history[i];
+                    if (m.isNodeBoundary && m.nodeAction === 'start' && m.nodeId === chat.activeNodeId) {
+                        startIndex = i;
+                        break;
+                    }
+                }
+                if (startIndex !== -1) {
+                    // 无论是否开启 readMemory，当前对话视口严格只保留节点内的消息
+                    const nodeMsgs = chat.history.slice(startIndex + 1);
+                    historySlice = nodeMsgs.slice(-chat.maxMemory);
+                    
+                    // 上下文截断 (保留摘要)
+                    if (activeNode.enableSummary) {
+                        const summaryFloor = db.nodeSummaryFloor || 10;
+                        const nodeMsgsInSlice = historySlice.filter(m => !m.isNodeBoundary);
+                        if (nodeMsgsInSlice.length > summaryFloor) {
+                            const msgsToSummarize = nodeMsgsInSlice.slice(0, nodeMsgsInSlice.length - summaryFloor);
+                            historySlice = historySlice.map(m => {
+                                if (msgsToSummarize.includes(m)) {
+                                    if (m.isNodeSummaryMsg) {
+                                        return { ...m, content: `[过往剧情摘要：${m.content}]`, parts: [{type: 'text', text: `[过往剧情摘要：${m.content}]`}] };
+                                    } else if (m.nodeSummary) {
+                                        // 替换为摘要消息
+                                        return { ...m, content: `[过往剧情摘要：${m.nodeSummary}]`, parts: [{type: 'text', text: `[过往剧情摘要：${m.nodeSummary}]`}] };
+                                    } else {
+                                        // 没有摘要的旧消息直接丢弃
+                                        return { ...m, isContextDisabled: true };
+                                    }
+                                }
+                                return m;
+                            });
+                            
+                            // 去重连续的相同摘要
+                            let lastSummary = null;
+                            historySlice = historySlice.filter(m => {
+                                if (m.content && typeof m.content === 'string' && m.content.startsWith('[过往剧情摘要：')) {
+                                    if (m.content === lastSummary) return false;
+                                    lastSummary = m.content;
+                                    return true;
+                                }
+                                lastSummary = null;
+                                return true;
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // 节点系统：过滤掉已收纳节点的消息
+        if (chatType === 'private' && chat.nodes) {
+            const archivedNodeIds = chat.nodes.filter(n => n.status === 'archived').map(n => n.id);
+            if (archivedNodeIds.length > 0) {
+                let currentArchivedNodeId = null;
+                historySlice = historySlice.filter(m => {
+                    if (m.isNodeBoundary) {
+                        if (m.nodeAction === 'start' && archivedNodeIds.includes(m.nodeId)) {
+                            currentArchivedNodeId = m.nodeId;
+                            return false;
+                        }
+                        if (m.nodeAction === 'end' && m.nodeId === currentArchivedNodeId) {
+                            currentArchivedNodeId = null;
+                            return false;
+                        }
+                    }
+                    if (currentArchivedNodeId) return false;
+                    return true;
+                });
+            }
+        }
+        
         // 使用工具函数进行过滤（包含深度克隆、屏蔽过滤、双语修正、状态栏剔除）
         historySlice = filterHistoryForAI(chat, historySlice);
         // 【新增】过滤掉不应进入上下文的消息（如思考过程、被撤回的消息标记等）
@@ -136,7 +213,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
         if (provider === 'gemini') {
             let lastMsgTimeForAI = 0;
             const contents = historySlice.map(msg => {
-                const role = msg.role === 'assistant' ? 'model' : 'user';
+                const role = (msg.role === 'assistant' || msg.role === 'char') ? 'model' : 'user';
                 
                 let prefix = '';
                 const currentMsgTime = msg.timestamp;
@@ -330,10 +407,11 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                            content[0].text = '[id:' + msg.id + ']\n' + content[0].text;
                        }
                    }
+                   const apiRole = msg.role === 'char' ? 'assistant' : msg.role;
                    if (typeof content === 'string') {
-                       messages.push({role: msg.role, content: content});
+                       messages.push({role: apiRole, content: content});
                    } else {
-                       messages.push({role: msg.role, content: content});
+                       messages.push({role: apiRole, content: content});
                    }
                }
             });
@@ -355,11 +433,32 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
             }
 
             // 2. 插入 CoT 序列（无论前台后台，只要开启就插入）
-            const cotEnabled = db.cotSettings && db.cotSettings.enabled;
+            let cotEnabled = false;
+            let activePresetId = 'default';
+            
+            // 检查是否处于线下模式节点
+            let isOfflineNode = false;
+            if (chatType === 'private' && chat.activeNodeId && chat.nodes) {
+                const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
+                if (activeNode) {
+                    let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
+                                   (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
+                    if (baseMode === 'offline') {
+                        isOfflineNode = true;
+                    }
+                }
+            }
+
+            if (isOfflineNode) {
+                cotEnabled = db.cotSettings && db.cotSettings.offlineEnabled;
+                activePresetId = (db.cotSettings && db.cotSettings.activeOfflinePresetId) || 'default_offline';
+            } else {
+                cotEnabled = db.cotSettings && db.cotSettings.enabled;
+                activePresetId = (db.cotSettings && db.cotSettings.activePresetId) || 'default';
+            }
             
             if (cotEnabled) {
                 let cotInstruction = '';
-                const activePresetId = (db.cotSettings && db.cotSettings.activePresetId) || 'default';
                 const preset = (db.cotPresets || []).find(p => p.id === activePresetId);
                 
                 if (preset && preset.items) {
@@ -440,7 +539,18 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
             
             // === 【补丁：把被吃掉的开头补回来】 ===
             // 仅在 CoT 开启且检测到闭合标签时补全
-            const cotEnabled = db.cotSettings && db.cotSettings.enabled;
+            let isOfflineNode = false;
+            if (chatType === 'private' && chat.activeNodeId && chat.nodes) {
+                const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
+                if (activeNode) {
+                    let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
+                                   (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
+                    if (baseMode === 'offline') {
+                        isOfflineNode = true;
+                    }
+                }
+            }
+            const cotEnabled = isOfflineNode ? (db.cotSettings && db.cotSettings.offlineEnabled) : (db.cotSettings && db.cotSettings.enabled);
             // 【修改】去掉了 !isBackground，确保后台模式也能正确补全标签
             if (cotEnabled && fullResponse && !fullResponse.trim().startsWith('<thinking>')) {
                  if (fullResponse.includes('</thinking>')) {
@@ -508,9 +618,19 @@ async function processStream(response, chat, apiType, targetChatId, targetChatTy
         }
     }
     // === 【补丁：补全流式输出时丢失的开头标签】 ===
-        // === 【补丁：补全流式输出时丢失的开头标签】 ===
     // 无论前台后台，只要是CoT开启且被预填吃掉了开头，都要补回来
-    const cotEnabled = db.cotSettings && db.cotSettings.enabled;
+    let isOfflineNode = false;
+    if (targetChatType === 'private' && chat.activeNodeId && chat.nodes) {
+        const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
+        if (activeNode) {
+            let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
+                           (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
+            if (baseMode === 'offline') {
+                isOfflineNode = true;
+            }
+        }
+    }
+    const cotEnabled = isOfflineNode ? (db.cotSettings && db.cotSettings.offlineEnabled) : (db.cotSettings && db.cotSettings.enabled);
     // 【修改】去掉了 !isBackground，确保后台模式也能正确补全标签
     if (cotEnabled && fullResponse && !fullResponse.trim().startsWith('<thinking>')) {
          // 这里判断：如果内容里有闭合的 </thinking> 但开头没有 <thinking>，说明开头被 Prefill 吃掉了
@@ -617,7 +737,7 @@ function executePhoneControlCommands(text, controllingChar) {
             if (found) {
                 const hist = (found.chat.history || []).filter(m => !m.isContextDisabled && !m.isThinking).slice(-limit);
                 const lines = hist.map(m => {
-                    const role = m.role === 'user' ? '用户' : (found.chatType === 'group' ? (m.role === 'assistant' ? m.name || '角色' : '用户') : (found.chat.realName || found.chat.remarkName));
+                    const role = m.role === 'user' ? '用户' : (found.chatType === 'group' ? ((m.role === 'assistant' || m.role === 'char') ? m.name || '角色' : '用户') : (found.chat.realName || found.chat.remarkName));
                     const content = (m.content || '').replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim().slice(0, 200);
                     return `${role}：${content}`;
                 });
@@ -696,7 +816,7 @@ function executePhoneControlCommands(text, controllingChar) {
     }
     let cleaned = text;
     toRemove.forEach(s => { cleaned = cleaned.replace(s, ''); });
-    cleaned = cleaned.replace(/\n{2,}/g, '\n').trim();
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
     return { cleaned, executed };
 }
 
@@ -720,7 +840,7 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
         while ((match = favoriteRegex.exec(fullResponse)) !== null) {
             favoriteCommands.push({ messageId: match[1], note: (match[2] || '').trim() });
         }
-        fullResponse = fullResponse.replace(favoriteRegex, '').replace(/\n{2,}/g, '\n').trim();
+        fullResponse = fullResponse.replace(favoriteRegex, '').replace(/\n{3,}/g, '\n\n').trim();
         if (targetChatType === 'private' && chat.characterAutoFavoriteEnabled && typeof addCharacterFavorite === 'function') {
             favoriteCommands.forEach(function(cmd) {
                 addCharacterFavorite(cmd.messageId, targetChatId, cmd.note);
@@ -736,8 +856,8 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
             }
         }
 
-        // 2. 捕获并分离 <thinking> 内容
-        const thinkingMatch = fullResponse.match(/<thinking>([\s\S]*?)<\/thinking>/);
+        // 1.7 捕获并分离 <thinking> 内容 (必须在提取摘要前执行，防止思维链内部的摘要标签被误提取)
+        const thinkingMatch = fullResponse.match(/<thinking>([\s\S]*)<\/thinking>/);
         if (thinkingMatch) {
             const thinkingContent = thinkingMatch[0]; // 包含标签的完整内容
             
@@ -776,6 +896,20 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
             
             // 从即将显示的文本中移除思考内容
             fullResponse = fullResponse.replace(thinkingContent, "");
+        }
+
+        // 1.8 节点系统：提取摘要
+        let extractedNodeSummary = null;
+        if (targetChatType === 'private' && chat.activeNodeId) {
+            const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
+            if (activeNode && activeNode.enableSummary) {
+                const summaryRegex = /<summary>([\s\S]*?)<\/summary>|\[摘要[：:]([\s\S]*?)\]/;
+                const summaryMatch = fullResponse.match(summaryRegex);
+                if (summaryMatch) {
+                    extractedNodeSummary = (summaryMatch[1] || summaryMatch[2]).trim();
+                    fullResponse = fullResponse.replace(summaryRegex, '').trim();
+                }
+            }
         }
 
         if (db.globalReceiveSound) {
@@ -925,7 +1059,7 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
                             char.currentBubbleCssPresetName = preset.name;
                             if (typeof updateCustomBubbleStyle === 'function') updateCustomBubbleStyle(targetChatId, preset.css, true);
                             if (typeof saveData === 'function') saveData();
-                            contentAfterStrip = contentAfterStrip.replace(themeSwitchMatch[0], '').replace(/\n\s*\n/g, '\n').trim();
+                            contentAfterStrip = contentAfterStrip.replace(themeSwitchMatch[0], '').replace(/\n{3,}/g, '\n\n').trim();
                         }
                     }
                     item.content = contentAfterStrip;
@@ -1215,6 +1349,18 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
             }
         }
 
+        if (extractedNodeSummary) {
+            const summaryMsg = {
+                id: `msg_${Date.now()}_${Math.random()}`,
+                role: 'system',
+                isNodeSummaryMsg: true,
+                content: extractedNodeSummary,
+                timestamp: Date.now()
+            };
+            chat.history.push(summaryMsg);
+            addMessageBubble(summaryMsg, targetChatId, targetChatType);
+        }
+
         await saveData();
         renderChatList();
 
@@ -1254,13 +1400,73 @@ async function handleRegenerate() {
         return;
     }
 
-    const lastUserMessageIndex = chat.history.map(m => m.role).lastIndexOf('user');
+    let lastUserMessageIndex = -1;
+    for (let i = chat.history.length - 1; i >= 0; i--) {
+        const m = chat.history[i];
+        if (m.role === 'user' || (m.isNodeBoundary && m.nodeAction === 'start')) {
+            lastUserMessageIndex = i;
+            break;
+        }
+    }
 
     if (lastUserMessageIndex === -1 || lastUserMessageIndex === chat.history.length - 1) {
         showToast('AI尚未回复，无法重新生成。');
         return;
     }
 
+    // 检查是否开启了保留重说消息
+    if (chat.keepRegenVersions) {
+        // 弹出确认框
+        const modal = document.getElementById('regen-save-confirm-modal');
+        modal.classList.add('visible');
+
+        // 移除旧监听器，避免重复绑定
+        const yesBtn = document.getElementById('regen-save-yes-btn');
+        const noBtn = document.getElementById('regen-save-no-btn');
+        const newYes = yesBtn.cloneNode(true);
+        const newNo = noBtn.cloneNode(true);
+        yesBtn.parentNode.replaceChild(newYes, yesBtn);
+        noBtn.parentNode.replaceChild(newNo, noBtn);
+
+        newYes.addEventListener('click', async () => {
+            modal.classList.remove('visible');
+            // 保存即将被删除的AI回复到用户消息的版本记录中
+            const userMsg = chat.history[lastUserMessageIndex];
+            if (!userMsg._regenVersions) userMsg._regenVersions = [];
+            const aiReplies = [];
+            for (let i = lastUserMessageIndex + 1; i < chat.history.length; i++) {
+                aiReplies.push({
+                    content: chat.history[i].content,
+                    role: chat.history[i].role,
+                    senderId: chat.history[i].senderId,
+                    timestamp: chat.history[i].timestamp,
+                    parts: chat.history[i].parts ? JSON.parse(JSON.stringify(chat.history[i].parts)) : undefined
+                });
+            }
+            // 避免重复保存相同内容
+            const lastSaved = userMsg._regenVersions[userMsg._regenVersions.length - 1];
+            const newContent = aiReplies.map(r => r.content).join('');
+            if (!lastSaved || lastSaved.replies.map(r => r.content).join('') !== newContent) {
+                userMsg._regenVersions.push({
+                    replies: aiReplies,
+                    savedAt: Date.now()
+                });
+            }
+            await _doRegenerate(chat, lastUserMessageIndex);
+        });
+
+        newNo.addEventListener('click', async () => {
+            modal.classList.remove('visible');
+            await _doRegenerate(chat, lastUserMessageIndex);
+        });
+
+        return;
+    }
+
+    await _doRegenerate(chat, lastUserMessageIndex);
+}
+
+async function _doRegenerate(chat, lastUserMessageIndex) {
     const originalLength = chat.history.length;
     chat.history.splice(lastUserMessageIndex + 1);
 
@@ -1390,6 +1596,177 @@ function formatUserPhoneStateForPrompt(character) {
     return out;
 }
 
+function getOnlineLogicRules(character, startIndex = 4) {
+    let rules = `${startIndex}. 我的消息中可能会出现特殊格式，请根据其内容和你的角色设定进行回应：
+- [${character.myName}发送的表情包：xxx]：我给你发送了一个名为xxx的表情包。你只需要根据表情包的名字理解我的情绪或意图并回应，不需要真的发送图片。
+- [${character.myName}发来了一张图片：]：我给你发送了一张图片，你需要对图片内容做出回应。
+- [${character.myName}送来的礼物：xxx]：我给你送了一个礼物，xxx是礼物的描述。
+- [${character.myName}的语音：xxx]：我给你发送了一段内容为xxx的语音。
+- [${character.myName}发来的照片/视频：xxx]：我给你分享了一个描述为xxx的照片或视频。
+- [${character.myName}给你转账：xxx元；备注：xxx]：我给你转了一笔钱。
+- [我的位置：xxx；距你约 x 千米]：我向你发送了我当前所在的位置。其中“我的位置”后的内容为我目前的地点；“距你约”后的数字和单位（如米、千米）（我选填）表示我与你之间的距离。请根据我所在的位置以及距离信息（如果有距离信息的话）自然地回应，例如关心安全、提议见面、调侃距离远近等。
+- 你也可以主动告诉我你当前所在位置，使用格式 [${character.realName}的位置：xxx；距你约 x 米]（地点必填，距你约为选填），这样我就知道你在哪里，我们之间距离有多少。
+- [${character.myName}向${character.realName}发起了代付请求:金额|商品清单]：我正在向你发起代付请求，希望你为这些商品买单。你需要根据我们当前的关系和你的性格决定是否同意。
+- [${character.myName}为${character.realName}下单了：配送方式|金额|商品清单]：我已经下单购买了商品送给你。
+- [${character.myName}引用“{被引用内容}”并回复：{回复内容}]：我引用了某条历史消息并做出了新的回复。你需要理解我引用的上下文并作出回应。
+- [${character.myName}同意了${character.realName}的代付请求]：我同意了你的代付请求，并为你支付了订单。
+- [${character.myName}拒绝了${character.realName}的代付请求]：我拒绝了你的代付请求。
+- [${character.myName} 撤回了一条消息：xxx]：我撤回了刚刚发送的一条消息，xxx是被我撤回的原文。这可能意味着我发错了、说错了话或者改变了主意。你需要根据你的人设和我们当前对话的氛围对此作出自然的反应。例如，可以装作没看见并等待我的下一句话，或好奇地问一句“怎么撤回啦？”。
+- [system: xxx]：这是一条系统指令，用于设定场景或提供上下文，此条信息不应在对话中被直接提及，你只需理解其内容并应用到后续对话中。
+${startIndex + 1}. ✨重要✨ 当我给你送礼物时，你必须通过发送一条指令来表示你已接收礼物。格式必须为：[${character.realName}已接收礼物]。这条指令消息本身不会显示给用户，但会触发礼物状态的变化。你可以在发送这条指令后，再附带一条普通的聊天消息来表达你的感谢和想法。
+${startIndex + 2}. ✨重要✨ 当我给你转账时，你必须对此做出回应。你有两个选择，且必须严格遵循以下格式之一，这条指令消息本身不会显示给用户，但会触发转账状态的变化。你可以选择在发送这条指令后，再附带一条普通的聊天消息来表达你的想法。
+a) 接收转账: [${character.realName}接收${character.myName}的转账]
+b) 退回转账: [${character.realName}退回${character.myName}的转账]
+${startIndex + 3}. ✨重要✨ 当我送你亲属卡时，你必须对此做出回应。接收格式：[${character.realName}接收${character.myName}的亲属卡]。退还格式：[${character.realName}退还${character.myName}的亲属卡]。此条不显示，仅触发状态。
+${startIndex + 4}. ✨重要✨ 当我向你发起代付请求时，你必须对此做出回应。你有两个选择，且必须严格遵循以下格式之一，这条指令消息本身不会显示给用户，但会触发代付订单状态的变化。你可以选择在发送这条指令后，再附带一条普通的聊天消息来表达你的想法。
+a) [${character.realName}同意了${character.myName}的代付请求]
+b) [${character.realName}拒绝了${character.myName}的代付请求]\n`;
+
+    let nextIndex = startIndex + 5;
+
+    if (character.shopInteractionEnabled) {
+        rules += `${nextIndex}. ✨重要✨ **商城互动**：你可以使用商城功能来增加互动乐趣。
+   a) **主动给我买东西**：当你想给我买东西时可以下单。格式：[${character.realName}为${character.myName}下单了：配送方式|金额|商品清单]。
+      - 配送方式可选：“即时配送”、“自提口令”。
+        - “自提口令”：你可以设置一个“自提口令”（用户可见）随订单一同发送，我输入指定的口令才能拿到商品。格式：[${character.realName}为${character.myName}下单了：自提口令: 你的口令|金额|商品清单]。口令不局限于数字，可以是短语/短句，但不超过8个字。
+   b) **求代付**：当你没钱了，或者想撒娇让我买单时，可以发起代付请求。格式：[${character.realName}向${character.myName}发起了代付请求:金额|商品清单]。
+   c) **直接送礼物**：[${character.realName}送来的礼物：xxx]。礼物不是只有特殊意义的时候才适合发送，适合场景：日常生活中的小惊喜、具有特殊意义的礼品、${character.realName}想给${character.myName}送礼物时。
+   d) **转账**：[${character.realName}的转账：xxx元；备注：xxx]。\n`;
+        if (character.familyCardEnabled) {
+            rules += `   e) **赠送亲属卡**：格式：[${character.realName}赠送亲属卡：额度{金额}元；刷新周期：{每天|每周|每月}]。冻结/解冻/收回：[${character.realName}冻结了亲属卡]、[${character.realName}解冻了亲属卡]、[${character.realName}收回了亲属卡]。调整额度：[${character.realName}调整亲属卡额度为：{金额}元]。\n`;
+        }
+    } else {
+        rules += `${nextIndex}. ✨重要✨ 你可以主动给我转账或送礼物。转账格式必须为：[${character.realName}的转账：xxx元；备注：xxx]。送礼物格式必须为：[${character.realName}送来的礼物：xxx]。礼物不是只有特殊意义的时候才适合发送，当你只是想给我买什么或是想给日常生活中的小惊喜时都可以送礼物。\n`;
+        if (character.familyCardEnabled) {
+            rules += `你还可以赠送亲属卡（格式：[${character.realName}赠送亲属卡：额度xxx元；刷新周期：每月]），以及冻结/解冻/收回、调整额度。\n`;
+        }
+    }
+    nextIndex++;
+
+    rules += `${nextIndex}. ✨重要✨ 你可以在对话中更新你的当前状态，但不超过15个字。比如，聊到一半你可能会说“我先去洗个澡”，然后更新你的状态，以反映你当前的行为或心情。这会让互动更真实。格式为：[${character.realName}更新状态为：xxx]。例如：[${character.realName}更新状态为：正在看电影...]。这条指令不会显示为聊天消息，只会更新你在我界面上的状态。\n`;
+    nextIndex++;
+    rules += `${nextIndex}. ✨重要✨ 关于撤回消息：你可以撤回你刚刚发送的消息。当你打错了字、说错了话、感到尴尬、反悔、或者只是改变了主意时，都可以这样做。这是一个体现你角色性格的机会。格式为：[${character.realName}撤回了一条消息：{被撤回消息的原文}]。⚠️严禁输出原消息再输出撤回指令！系统会自动处理“先显示原消息再变为撤回状态”的动画效果。你只需要输出这一条撤回指令即可。\n`;
+    nextIndex++;
+    rules += `${nextIndex}. ✨重要✨ 你可以选择单独一条消息引用，当你想要对于单独某句话做出回应/反驳/吐槽/补充时，**必须**使用引用格式，格式为：[${character.realName}引用“{某条消息内容}”并回复：{回复内容}]。这能让对话逻辑更清晰。\n`;
+    nextIndex++;
+    rules += `${nextIndex}. 你的所有回复都必须直接是聊天内容，绝对不允许包含任何如[心理活动]、(动作)、*环境描写*等多余的、在括号或星号里的叙述性文本。\n`;
+    nextIndex++;
+
+    const groups = (character.stickerGroups || '').split(/[,，]/)
+        .map(s => s.trim())
+        .filter(s => s && s !== '未分类');
+        
+    if (groups.length > 0) {
+        const availableStickers = db.myStickers.filter(s => groups.includes(s.group));
+        if (availableStickers.length > 0) {
+            const stickerNames = availableStickers.map(s => s.name).join(', ');
+            rules += `${nextIndex}. 你拥有发送表情包的能力。这是一个可选功能，你可以根据对话氛围和内容，自行判断是否需要发送表情包来辅助表达。**必须从以下列表中选择表情包，不允许凭空捏造**：[${stickerNames}]。请使用格式：[表情包：名称]。**不要连续重复发送同一表情，尽量丰富一点，不要每次回复都发送表情**⚠️严格限制：必须完全精确地使用库中的名称，严禁编造中不存在的名称，否则表情包将无法显示。\n`;
+            nextIndex++;
+        }
+    }
+
+    if (character.useRealGallery && character.gallery && character.gallery.length > 0) {
+        const photoNames = character.gallery.map(p => p.name).join(', ');
+        rules += `${nextIndex}. 你的手机相册里存有以下真实照片：[${photoNames}]。你可以根据对话内容发送这些照片。若要发送，请在“照片/视频”指令中准确填入照片名称。\n`;
+        nextIndex++;
+    }
+
+    return rules;
+}
+
+function getOnlineOutputFormats(character, worldBooksBefore, worldBooksAfter) {
+    let photoVideoFormat = '';
+    const _novelAiAutoEnabled = db.novelAiSettings && db.novelAiSettings.enabled && db.novelAiSettings.token;
+    if (character.useRealGallery && character.gallery && character.gallery.length > 0) {
+        if (_novelAiAutoEnabled) {
+            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{相册图片名称} 或 {中文描述}{{english, novelai, tags}}] (优先使用相册名称；若相册无匹配则填写中文描述，并在 {{ }} 内写英文 NovelAI/Danbooru 风格 tag。根据角色性别用1boy或1girl，包含外貌特征、服装、表情、动作、场景，不加质量词，不超过25个tag)`;
+        } else {
+            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{相册图片名称} 或 {文字描述}] (优先使用相册名称，若相册无匹配则填写照片/视频的详细文字描述)`;
+        }
+    } else {
+        if (_novelAiAutoEnabled) {
+            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{中文描述}{{english, novelai, tags}}] (发图时必须在 {{ }} 内写英文 NovelAI/Danbooru 风格 tag。根据角色性别用1boy或1girl，包含外貌特征、服装、表情、动作、场景，不加质量词，不超过25个tag)`;
+        } else {
+            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{描述}]`;
+        }
+    }
+ 
+    let outputFormats = `
+a) 普通消息: [${character.realName}的消息：{消息内容}]
+b) 双语模式下的普通消息（非双语模式请忽略此条）: [${character.realName}的消息：{外语原文}「中文翻译」]
+c) 送我的礼物: [${character.realName}送来的礼物：{礼物描述}]
+d) 语音消息: [${character.realName}的语音：{语音内容}]
+${photoVideoFormat}
+f) 给我的转账: [${character.realName}的转账：{金额}元；备注：{备注}]`;
+
+    const groups = (character.stickerGroups || '').split(/[,，]/).map(s => s.trim()).filter(s => s && s !== '未分类');
+    let canUseStickers = false;
+    if (groups.length > 0) {
+        const availableStickers = db.myStickers.filter(s => groups.includes(s.group));
+        if (availableStickers.length > 0) canUseStickers = true;
+    }
+
+    if (canUseStickers) {
+        outputFormats += `\ng) 表情包: [${character.realName}的表情包：{表情包名称}]`;
+    }
+
+    outputFormats += `
+h) 对我礼物的回应(此条不显示): [${character.realName}已接收礼物]
+i) 对我转账的回应(此条不显示): [${character.realName}接收${character.myName}的转账] 或 [${character.realName}退回${character.myName}的转账]
+ia) 对我亲属卡的回应(此条不显示): [${character.realName}接收${character.myName}的亲属卡] 或 [${character.realName}退还${character.myName}的亲属卡]
+j) 更新状态(此条不显示): [${character.realName}更新状态为：{新状态}]
+k) 引用我的回复: [${character.realName}引用“{我的某条消息内容}”并回复：{回复内容}]
+l) 发送并撤回消息: [${character.realName}撤回了一条消息：{被撤回的消息内容}]。注意：直接使用此指令系统就会自动模拟“发送后撤回”的效果，请勿先发送原消息。
+m) 同意代付(此条不显示): [${character.realName}同意了${character.myName}的代付请求]
+n) 拒绝代付(此条不显示): [${character.realName}拒绝了${character.myName}的代付请求]
+s) 发送我的位置: [${character.realName}的位置：{地点}；距你约 {数字}{单位}]（必填：地点，即你当前所在位置；选填：距你约的数字和单位，单位可用米/千米/公里，不填则只发地点）`;
+
+    if (character.videoCallEnabled) {
+        outputFormats += `
+q) 发起视频通话: [${character.realName}向${character.myName}发起了视频通话]
+r) 发起语音通话: [${character.realName}向${character.myName}发起了语音通话]`;
+    }
+
+    if (character.shopInteractionEnabled) {
+        outputFormats += `
+o) 主动下单: [${character.realName}为${character.myName}下单了：配送方式|金额|商品清单]
+p) 求代付: [${character.realName}向${character.myName}发起了代付请求:金额|商品清单]`;
+    }
+    if (character.familyCardEnabled) {
+        outputFormats += `
+t) 赠送亲属卡: [${character.realName}赠送亲属卡：额度{金额}元；刷新周期：{每天|每周|每月}]`;
+    }
+
+   const allWorldBookContent = (worldBooksBefore || '') + '\n' + (worldBooksAfter || '');
+   if (allWorldBookContent.includes('<orange>')) {
+       outputFormats += `\n     m) HTML模块: {HTML内容}。这是一种特殊的、用于展示丰富样式的小卡片消息，格式必须为纯HTML+行内CSS，你可以用它来创造更有趣的互动。`;
+   }
+   
+   return outputFormats;
+}
+
+function getOfflineOutputFormats(character) {
+    return `a) 剧情演绎: [剧情：{包含动作、神态、对话的长文本}]\nb) 更新状态(可选): [${character.realName}更新状态为：{新状态}]`;
+}
+
+function getInjectedFormatsPrompt(character, formats) {
+    if (!formats || formats.length === 0) return '';
+    let prompt = '\n【额外允许的线上功能格式】\n你可以在回复中穿插使用以下格式：';
+    formats.forEach(f => {
+        switch(f) {
+            case 'voice': prompt += `\n- 语音消息: [${character.realName}的语音：{语音内容}]`; break;
+            case 'photo': prompt += `\n- 照片/视频: [${character.realName}发来的照片/视频：{描述}]`; break;
+            case 'sticker': prompt += `\n- 表情包: [${character.realName}的表情包：{表情包名称}]`; break;
+            case 'transfer': prompt += `\n- 转账: [${character.realName}的转账：{金额}元；备注：{备注}]`; break;
+            case 'shop': prompt += `\n- 主动下单: [${character.realName}为${character.myName}下单了：配送方式|金额|商品清单]\n- 求代付: [${character.realName}向${character.myName}发起了代付请求:金额|商品清单]`; break;
+            case 'location': prompt += `\n- 发送位置: [${character.realName}的位置：{地点}；距你约 {数字}{单位}]`; break;
+            case 'status': prompt += `\n- 更新状态(此条不显示): [${character.realName}更新状态为：{新状态}]`; break;
+            case 'withdraw': prompt += `\n- 撤回消息: [${character.realName}撤回了一条消息：{被撤回的消息内容}]`; break;
+        }
+    });
+    return prompt + '\n';
+}
+
 function generatePrivateSystemPrompt(character, opts) {
     opts = opts || {};
     const linkedChar = (character.source === 'forum' && character.linkedCharId && db.characters)
@@ -1407,6 +1784,201 @@ function generatePrivateSystemPrompt(character, opts) {
     const worldBooksAfter = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'after')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
     const now = new Date();
     const currentTime = `${now.getFullYear()}年${pad(now.getMonth() + 1)}月${pad(now.getDate())}日 ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    // 节点系统：拦截并返回专属提示词
+    let activeNode = null;
+    if (character.activeNodeId && character.nodes) {
+        activeNode = character.nodes.find(n => n.id === character.activeNodeId);
+    }
+
+    if (activeNode) {
+        let nodePrompt = `当前为剧情节点「${activeNode.name}」，你正在扮演一个角色。请严格遵守以下规则：\n`;
+        nodePrompt += `核心规则：\n`;
+        nodePrompt += `A. 当前时间：现在是 ${currentTime}。\n\n`;
+        
+        nodePrompt += `角色和对话规则：\n`;
+        if (worldBooksBefore) nodePrompt += `${worldBooksBefore}\n`;
+        if (worldBooksMiddle) nodePrompt += `${worldBooksMiddle}\n`;
+        
+        nodePrompt += `<char_settings>\n`;
+        nodePrompt += `1. 你的角色名是：${character.realName}。我的称呼是：${character.myName}。\n`;
+        if (linkedChar) {
+            nodePrompt += `2. 你的角色设定是：${getEffectivePersona(linkedChar)}\n`;
+        } else {
+            nodePrompt += `2. 你的角色设定是：${getEffectivePersona(character)}\n`;
+        }
+        if (worldBooksAfter) nodePrompt += `${worldBooksAfter}\n`;
+        nodePrompt += `</char_settings>\n\n`;
+        
+        nodePrompt += `<user_settings>\n`;
+        if (character.myPersona) {
+            nodePrompt += `3. 关于我的人设：${character.myPersona}\n`;
+        }
+        nodePrompt += `</user_settings>\n\n`;
+        
+        nodePrompt += `<node_directive>\n${activeNode.prompt}\n</node_directive>\n\n`;
+        
+        if (activeNode.readMemory) {
+            nodePrompt += `<memoir>\n`;
+            const favoritedJournals = (character.memoryJournals || [])
+                .filter(j => j.isFavorited)
+                .map(j => `标题：${j.title}\n内容：${j.content}`)
+                .join('\n\n---\n\n');
+            if (favoritedJournals) {
+                nodePrompt += `<journal_memories>\n【共同回忆】\n这是你需要长期记住的、我们之间发生过的往事背景：\n${favoritedJournals}\n</journal_memories>\n\n`;
+            }
+            
+            // 提取过往线上聊天记录
+            let startIndex = -1;
+            for (let i = character.history.length - 1; i >= 0; i--) {
+                const m = character.history[i];
+                if (m.isNodeBoundary && m.nodeAction === 'start' && m.nodeId === character.activeNodeId) {
+                    startIndex = i;
+                    break;
+                }
+            }
+            if (startIndex !== -1) {
+                let pastOnlineMsgs = character.history.slice(0, startIndex);
+                if (typeof filterHistoryForAI === 'function') {
+                    pastOnlineMsgs = filterHistoryForAI(character, pastOnlineMsgs);
+                }
+                pastOnlineMsgs = pastOnlineMsgs.filter(m => !m.isContextDisabled && !m.isThinking);
+                
+                const maxMemory = character.maxMemory || 20;
+                pastOnlineMsgs = pastOnlineMsgs.slice(-maxMemory);
+                
+                if (pastOnlineMsgs.length > 0) {
+                    const pastOnlineText = pastOnlineMsgs.map(m => {
+                        let content = m.content;
+                        if (m.parts && m.parts.length > 0) content = m.parts.map(p => p.text || '[图片]').join('');
+                        const senderName = m.role === 'user' ? character.myName : character.realName;
+                        return `${senderName}: ${content}`;
+                    }).join('\n');
+                    
+                    nodePrompt += `<past_online_chats>\n【过往线上聊天记录】\n以下是进入当前节点前，我们之间的线上聊天记录，作为背景参考：\n${pastOnlineText}\n</past_online_chats>\n\n`;
+                }
+            }
+
+            // 群聊记忆互通功能
+            if (character.syncGroupMemory) {
+                let groupsWithCharacter = db.groups.filter(group => 
+                    group.members && group.members.some(member => member.originalCharId === character.id)
+                );
+                if (character.syncGroupIds && Array.isArray(character.syncGroupIds) && character.syncGroupIds.length > 0) {
+                    groupsWithCharacter = groupsWithCharacter.filter(group => 
+                        character.syncGroupIds.includes(group.id)
+                    );
+                }
+                if (groupsWithCharacter.length > 0) {
+                    let groupMemoryContext = '';
+                    groupsWithCharacter.forEach(group => {
+                        let groupFavoritedJournals = (group.memoryJournals || []).filter(j => j.isFavorited);
+                        const summaryCount = character.groupMemorySummaryCount || 0;
+                        if (summaryCount > 0 && groupFavoritedJournals.length > summaryCount) {
+                            groupFavoritedJournals = groupFavoritedJournals.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, summaryCount);
+                        }
+                        const groupFavoritedJournalsText = groupFavoritedJournals.map(j => `标题：${j.title}\n内容：${j.content}`).join('\n\n---\n\n');
+                        const maxGroupHistory = character.groupMemoryHistoryCount || 20;
+                        let recentGroupHistory = group.history.slice(-maxGroupHistory);
+                        if (typeof filterHistoryForAI === 'function') {
+                            recentGroupHistory = filterHistoryForAI(group, recentGroupHistory);
+                        }
+                        recentGroupHistory = recentGroupHistory.filter(m => !m.isContextDisabled);
+                        if (groupFavoritedJournalsText || recentGroupHistory.length > 0) {
+                            groupMemoryContext += `\n【群聊"${group.name}"的背景信息】\n`;
+                            if (groupFavoritedJournalsText) groupMemoryContext += `群聊总结：\n${groupFavoritedJournalsText}\n`;
+                            if (recentGroupHistory.length > 0) {
+                                const historyText = recentGroupHistory.map(m => {
+                                    let content = m.content;
+                                    if (m.parts && m.parts.length > 0) content = m.parts.map(p => p.text || '[图片]').join('');
+                                    const senderName = m.senderId ? (group.members.find(mem => mem.id === m.senderId)?.groupNickname || '未知') : (m.role === 'user' ? group.me.nickname : '系统');
+                                    return `${senderName}: ${content}`;
+                                }).join('\n');
+                                groupMemoryContext += `最近群聊记录：\n${historyText}\n`;
+                            }
+                        }
+                    });
+                    if (groupMemoryContext) {
+                        nodePrompt += `<group_memories>\n【群聊记忆互通】\n以下是你所在群聊的相关背景信息，这些信息可以帮助你更好地理解我们之间的对话上下文：${groupMemoryContext}\n</group_memories>\n`;
+                    }
+                }
+            }
+            nodePrompt += `</memoir>\n\n`;
+        }
+        
+        let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
+                       (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
+
+        nodePrompt += `<logic_rules>\n`;
+        if (baseMode === 'offline') {
+            nodePrompt += `4. [system: xxx]：这是一条系统指令，用于设定场景或提供上下文，此条信息不应在对话中被直接提及，你只需理解其内容并应用到后续对话中。\n`;
+            nodePrompt += `5. 当前为线下现实互动模式。用户的输入代表其在现实中的动作、神态、话语或推动剧情的指令。请综合理解用户的输入，并进行现实中的互动回应。\n`;
+            nodePrompt += `6. 你的回复必须是长文本剧情，在一条剧情消息内输出，字数若无特殊要求则在800-1000字之内。\n`;
+            nodePrompt += `7. 严禁使用任何网络聊天格式（如发送语音、表情包、转账等）。\n`;
+        } else {
+            nodePrompt += `4. [system: xxx]：这是一条系统指令，用于设定场景或提供上下文，此条信息不应在对话中被直接提及，你只需理解其内容并应用到后续对话中。\n`;
+            nodePrompt += `5. 你的所有回复都必须直接是聊天内容，绝对不允许包含任何如[心理活动]、(动作)、*环境描写*等多余的、在括号或星号里的叙述性文本。\n`;
+            nodePrompt += getOnlineLogicRules(character, 6);
+        }
+        nodePrompt += `</logic_rules>\n\n`;
+
+        if (activeNode.customConfig && activeNode.customConfig.extendedRules) {
+            nodePrompt += `<extended_rules>\n${activeNode.customConfig.extendedRules}\n</extended_rules>\n\n`;
+        }
+
+        if (baseMode === 'offline' && activeNode.customConfig && activeNode.customConfig.styleWorldBookIds && activeNode.customConfig.styleWorldBookIds.length > 0) {
+            const styleWbContents = activeNode.customConfig.styleWorldBookIds
+                .map(id => db.worldBooks.find(wb => wb.id === id))
+                .filter(wb => wb && !wb.disabled)
+                .map(wb => wb.content)
+                .join('\n\n');
+            if (styleWbContents) {
+                nodePrompt += `<writing_style>\n【文风参考】\n请参考以下文风设定进行描写：\n${styleWbContents}\n</writing_style>\n\n`;
+            }
+        }
+
+        if (baseMode === 'online' && character.statusPanel && character.statusPanel.enabled && character.statusPanel.promptSuffix) {
+            nodePrompt += `15. 额外输出要求：${character.statusPanel.promptSuffix}\n`;
+        }
+
+        nodePrompt += `<output_formats>\n`;
+        nodePrompt += `8. 你的基础输出格式必须严格遵循以下格式：\n`;
+        
+        if (baseMode === 'offline') {
+            nodePrompt += getOfflineOutputFormats(character) + '\n';
+        } else {
+            nodePrompt += getOnlineOutputFormats(character, worldBooksBefore, worldBooksAfter) + '\n';
+            if (activeNode.customConfig && activeNode.customConfig.injectedFormats) {
+                nodePrompt += getInjectedFormatsPrompt(character, activeNode.customConfig.injectedFormats);
+            }
+        }
+
+        if (activeNode.customConfig && activeNode.customConfig.customOutputFormat) {
+            let formats = activeNode.customConfig.customOutputFormat;
+            if (Array.isArray(formats)) {
+                formats = formats.map(f => {
+                    if (typeof f === 'object' && f !== null) return f.format || '';
+                    return f;
+                }).filter(f => f.trim() !== '').join('\n');
+            }
+            if (formats) {
+                nodePrompt += `\n【自定义输出格式】\n${formats}\n`;
+                nodePrompt += `(注：对于上述自定义输出格式，请务必使用类似 [动作/角色名：内容] 的中括号包裹形式，否则系统前端将无法正确解析和渲染)\n`;
+            }
+        }
+        nodePrompt += `</output_formats>\n\n`;
+        
+        if (character.bilingualModeEnabled) {
+            nodePrompt += `✨双语模式特别指令✨：当你的角色的母语为中文以外的语言时，则在角色的话语/内心话后面加双语括号翻译，如：“Of course, I'd love to.「当然，我很乐意。」”但正常的动作/环境等描述性文本不用加翻译。当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，这条规则的优先级非常高，请务必遵守。\n`;
+        }
+        
+        if (character.myName) {
+            nodePrompt = nodePrompt.replace(/\{\{user\}\}/gi, character.myName);
+        }
+        
+        return nodePrompt;
+    }
+
     let prompt = `你正在一个名为“404”的线上聊天软件中扮演一个角色。请严格遵守以下规则：\n`;
     prompt += `核心规则：\n`;
     prompt += `A. 当前时间：现在是 ${currentTime}。你应知晓当前时间，但除非对话内容明确相关，否则不要主动提及或评论时间（例如，不要催促我睡觉）。\n`;
@@ -1655,7 +2227,7 @@ function generatePrivateSystemPrompt(character, opts) {
     }
 
     prompt += `<memoir>\n`
-        const favoritedJournals = (character.memoryJournals || [])
+    const favoritedJournals = (character.memoryJournals || [])
         .filter(j => j.isFavorited)
         .map(j => `标题：${j.title}\n内容：${j.content}`)
         .join('\n\n---\n\n');
@@ -1739,147 +2311,21 @@ function generatePrivateSystemPrompt(character, opts) {
         }
     }
     prompt += `</memoir>\n\n`
+
     prompt += `<logic_rules>\n`
-    prompt += `4. 我的消息中可能会出现特殊格式，请根据其内容和你的角色设定进行回应：
-- [${character.myName}发送的表情包：xxx]：我给你发送了一个名为xxx的表情包。你只需要根据表情包的名字理解我的情绪或意图并回应，不需要真的发送图片。
-- [${character.myName}发来了一张图片：]：我给你发送了一张图片，你需要对图片内容做出回应。
-- [${character.myName}送来的礼物：xxx]：我给你送了一个礼物，xxx是礼物的描述。
-- [${character.myName}的语音：xxx]：我给你发送了一段内容为xxx的语音。
-- [${character.myName}发来的照片/视频：xxx]：我给你分享了一个描述为xxx的照片或视频。
-- [${character.myName}给你转账：xxx元；备注：xxx]：我给你转了一笔钱。
-- [我的位置：xxx；距你约 x 千米]：我向你发送了我当前所在的位置。其中“我的位置”后的内容为我目前的地点；“距你约”后的数字和单位（如米、千米）（我选填）表示我与你之间的距离。请根据我所在的位置以及距离信息（如果有距离信息的话）自然地回应，例如关心安全、提议见面、调侃距离远近等。
-- 你也可以主动告诉我你当前所在位置，使用格式 [${character.realName}的位置：xxx；距你约 x 米]（地点必填，距你约为选填），这样我就知道你在哪里，我们之间距离有多少。
-- [${character.myName}向${character.realName}发起了代付请求:金额|商品清单]：我正在向你发起代付请求，希望你为这些商品买单。你需要根据我们当前的关系和你的性格决定是否同意。
-- [${character.myName}为${character.realName}下单了：配送方式|金额|商品清单]：我已经下单购买了商品送给你。
-- [${character.myName}引用“{被引用内容}”并回复：{回复内容}]：我引用了某条历史消息并做出了新的回复。你需要理解我引用的上下文并作出回应。
-- [${character.myName}同意了${character.realName}的代付请求]：我同意了你的代付请求，并为你支付了订单。
-- [${character.myName}拒绝了${character.realName}的代付请求]：我拒绝了你的代付请求。
-- [${character.myName} 撤回了一条消息：xxx]：我撤回了刚刚发送的一条消息，xxx是被我撤回的原文。这可能意味着我发错了、说错了话或者改变了主意。你需要根据你的人设和我们当前对话的氛围对此作出自然的反应。例如，可以装作没看见并等待我的下一句话，或好奇地问一句“怎么撤回啦？”。
-- [system: xxx]：这是一条系统指令，用于设定场景或提供上下文，此条信息不应在对话中被直接提及，你只需理解其内容并应用到后续对话中。
-5. ✨重要✨ 当我给你送礼物时，你必须通过发送一条指令来表示你已接收礼物。格式必须为：[${character.realName}已接收礼物]。这条指令消息本身不会显示给用户，但会触发礼物状态的变化。你可以在发送这条指令后，再附带一条普通的聊天消息来表达你的感谢和想法。
-6. ✨重要✨ 当我给你转账时，你必须对此做出回应。你有两个选择，且必须严格遵循以下格式之一，这条指令消息本身不会显示给用户，但会触发转账状态的变化。你可以选择在发送这条指令后，再附带一条普通的聊天消息来表达你的想法。
-a) 接收转账: [${character.realName}接收${character.myName}的转账]
-b) 退回转账: [${character.realName}退回${character.myName}的转账]
-6b. ✨重要✨ 当我送你亲属卡时，你必须对此做出回应。接收格式：[${character.realName}接收${character.myName}的亲属卡]。退还格式：[${character.realName}退还${character.myName}的亲属卡]。此条不显示，仅触发状态。
-7. ✨重要✨ 当我向你发起代付请求时，你必须对此做出回应。你有两个选择，且必须严格遵循以下格式之一，这条指令消息本身不会显示给用户，但会触发代付订单状态的变化。你可以选择在发送这条指令后，再附带一条普通的聊天消息来表达你的想法。
-a) [${character.realName}同意了${character.myName}的代付请求]
-b) [${character.realName}拒绝了${character.myName}的代付请求]
-`;
-    if (character.shopInteractionEnabled) {
-        prompt += `8. ✨重要✨ **商城互动**：你可以使用商城功能来增加互动乐趣。
-   a) **主动给我买东西**：当你想给我买东西时可以下单。格式：[${character.realName}为${character.myName}下单了：配送方式|金额|商品清单]。
-      - 配送方式可选：“即时配送”、“自提口令”。
-        - “自提口令”：你可以设置一个“自提口令”（用户可见）随订单一同发送，我输入指定的口令才能拿到商品。格式：[${character.realName}为${character.myName}下单了：自提口令: 你的口令|金额|商品清单]。口令不局限于数字，可以是短语/短句，但不超过8个字。
-   b) **求代付**：当你没钱了，或者想撒娇让我买单时，可以发起代付请求。格式：[${character.realName}向${character.myName}发起了代付请求:金额|商品清单]。
-   c) **直接送礼物**：[${character.realName}送来的礼物：xxx]。礼物不是只有特殊意义的时候才适合发送，适合场景：日常生活中的小惊喜、具有特殊意义的礼品、${character.realName}想给${character.myName}送礼物时。
-   d) **转账**：[${character.realName}的转账：xxx元；备注：xxx]。\n`;
-        if (character.familyCardEnabled) {
-            prompt += `   e) **赠送亲属卡**：格式：[${character.realName}赠送亲属卡：额度{金额}元；刷新周期：{每天|每周|每月}]。冻结/解冻/收回：[${character.realName}冻结了亲属卡]、[${character.realName}解冻了亲属卡]、[${character.realName}收回了亲属卡]。调整额度：[${character.realName}调整亲属卡额度为：{金额}元]。\n`;
-        }
-    } else {
-        prompt += `8. ✨重要✨ 你可以主动给我转账或送礼物。转账格式必须为：[${character.realName}的转账：xxx元；备注：xxx]。送礼物格式必须为：[${character.realName}送来的礼物：xxx]。礼物不是只有特殊意义的时候才适合发送，当你只是想给我买什么或是想给日常生活中的小惊喜时都可以送礼物。\n`;
-        if (character.familyCardEnabled) {
-            prompt += `你还可以赠送亲属卡（格式：[${character.realName}赠送亲属卡：额度xxx元；刷新周期：每月]），以及冻结/解冻/收回、调整额度。\n`;
-        }
-    }
-    prompt += `
-9. ✨重要✨ 你可以在对话中更新你的当前状态，但不超过15个字。比如，聊到一半你可能会说“我先去洗个澡”，然后更新你的状态，以反映你当前的行为或心情。这会让互动更真实。格式为：[${character.realName}更新状态为：xxx]。例如：[${character.realName}更新状态为：正在看电影...]。这条指令不会显示为聊天消息，只会更新你在我界面上的状态。
-10. ✨重要✨ 关于撤回消息：你可以撤回你刚刚发送的消息。当你打错了字、说错了话、感到尴尬、反悔、或者只是改变了主意时，都可以这样做。这是一个体现你角色性格的机会。格式为：[${character.realName}撤回了一条消息：{被撤回消息的原文}]。⚠️严禁输出原消息再输出撤回指令！系统会自动处理“先显示原消息再变为撤回状态”的动画效果。你只需要输出这一条撤回指令即可。
-11. ✨重要✨ 你可以选择单独一条消息引用，当你想要对于单独某句话做出回应/反驳/吐槽/补充时，**必须**使用引用格式，格式为：[${character.realName}引用“{某条消息内容}”并回复：{回复内容}]。这能让对话逻辑更清晰。
-12. 你的所有回复都必须直接是聊天内容，绝对不允许包含任何如[心理活动]、(动作)、*环境描写*等多余的、在括号或星号里的叙述性文本。
-`;
-    
-    const groups = (character.stickerGroups || '').split(/[,，]/)
-        .map(s => s.trim())
-        .filter(s => s && s !== '未分类');
-        
-    let stickerInstruction = '';
-    let canUseStickers = false;
-
-    if (groups.length > 0) {
-        const availableStickers = db.myStickers.filter(s => groups.includes(s.group));
-        if (availableStickers.length > 0) {
-            const stickerNames = availableStickers.map(s => s.name).join(', ');
-            stickerInstruction = `13. 你拥有发送表情包的能力。这是一个可选功能，你可以根据对话氛围和内容，自行判断是否需要发送表情包来辅助表达。**必须从以下列表中选择表情包，不允许凭空捏造**：[${stickerNames}]。请使用格式：[表情包：名称]。**不要连续重复发送同一表情，尽量丰富一点，不要每次回复都发送表情**⚠️严格限制：必须完全精确地使用库中的名称，严禁编造中不存在的名称，否则表情包将无法显示。\n`;
-            canUseStickers = true;
-        }
-    }
-    
-    prompt += stickerInstruction;
-
-    if (character.useRealGallery && character.gallery && character.gallery.length > 0) {
-        const photoNames = character.gallery.map(p => p.name).join(', ');
-        prompt += `14. 你的手机相册里存有以下真实照片：[${photoNames}]。你可以根据对话内容发送这些照片。若要发送，请在“照片/视频”指令中准确填入照片名称。\n`;
-    }
+    prompt += getOnlineLogicRules(character, 4);
     prompt += `</logic_rules>\n\n`
-    let photoVideoFormat = '';
-    const _novelAiAutoEnabled = db.novelAiSettings && db.novelAiSettings.enabled && db.novelAiSettings.token;
-    if (character.useRealGallery && character.gallery && character.gallery.length > 0) {
-        if (_novelAiAutoEnabled) {
-            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{相册图片名称} 或 {中文描述}{{english, novelai, tags}}] (优先使用相册名称；若相册无匹配则填写中文描述，并在 {{ }} 内写英文 NovelAI/Danbooru 风格 tag。根据角色性别用1boy或1girl，包含外貌特征、服装、表情、动作、场景，不加质量词，不超过25个tag)`;
-        } else {
-            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{相册图片名称} 或 {文字描述}] (优先使用相册名称，若相册无匹配则填写照片/视频的详细文字描述)`;
-        }
-    } else {
-        if (_novelAiAutoEnabled) {
-            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{中文描述}{{english, novelai, tags}}] (发图时必须在 {{ }} 内写英文 NovelAI/Danbooru 风格 tag。根据角色性别用1boy或1girl，包含外貌特征、服装、表情、动作、场景，不加质量词，不超过25个tag)`;
-        } else {
-            photoVideoFormat = `e) 照片/视频: [${character.realName}发来的照片/视频：{描述}]`;
-        }
-    }
- 
-    let outputFormats = `
-a) 普通消息: [${character.realName}的消息：{消息内容}]
-b) 双语模式下的普通消息（非双语模式请忽略此条）: [${character.realName}的消息：{外语原文}「中文翻译」]
-c) 送我的礼物: [${character.realName}送来的礼物：{礼物描述}]
-d) 语音消息: [${character.realName}的语音：{语音内容}]
-${photoVideoFormat}
-f) 给我的转账: [${character.realName}的转账：{金额}元；备注：{备注}]`;
 
-    if (canUseStickers) {
-        outputFormats += `\ng) 表情包: [${character.realName}的表情包：{表情包名称}]`;
-    }
-
-    outputFormats += `
-h) 对我礼物的回应(此条不显示): [${character.realName}已接收礼物]
-i) 对我转账的回应(此条不显示): [${character.realName}接收${character.myName}的转账] 或 [${character.realName}退回${character.myName}的转账]
-ia) 对我亲属卡的回应(此条不显示): [${character.realName}接收${character.myName}的亲属卡] 或 [${character.realName}退还${character.myName}的亲属卡]
-j) 更新状态(此条不显示): [${character.realName}更新状态为：{新状态}]
-k) 引用我的回复: [${character.realName}引用“{我的某条消息内容}”并回复：{回复内容}]
-l) 发送并撤回消息: [${character.realName}撤回了一条消息：{被撤回的消息内容}]。注意：直接使用此指令系统就会自动模拟“发送后撤回”的效果，请勿先发送原消息。
-m) 同意代付(此条不显示): [${character.realName}同意了${character.myName}的代付请求]
-n) 拒绝代付(此条不显示): [${character.realName}拒绝了${character.myName}的代付请求]
-s) 发送我的位置: [${character.realName}的位置：{地点}；距你约 {数字}{单位}]（必填：地点，即你当前所在位置；选填：距你约的数字和单位，单位可用米/千米/公里，不填则只发地点）`;
-
-    if (character.videoCallEnabled) {
-        outputFormats += `
-q) 发起视频通话: [${character.realName}向${character.myName}发起了视频通话]
-r) 发起语音通话: [${character.realName}向${character.myName}发起了语音通话]`;
-    }
-
-    if (character.shopInteractionEnabled) {
-        outputFormats += `
-o) 主动下单: [${character.realName}为${character.myName}下单了：配送方式|金额|商品清单]
-p) 求代付: [${character.realName}向${character.myName}发起了代付请求:金额|商品清单]`;
-    }
-    if (character.familyCardEnabled) {
-        outputFormats += `
-t) 赠送亲属卡: [${character.realName}赠送亲属卡：额度{金额}元；刷新周期：{每天|每周|每月}]`;
-    }
-
-   const allWorldBookContent = worldBooksBefore + '\n' + worldBooksAfter;
-   if (allWorldBookContent.includes('<orange>')) {
-       outputFormats += `\n     m) HTML模块: {HTML内容}。这是一种特殊的、用于展示丰富样式的小卡片消息，格式必须为纯HTML+行内CSS，你可以用它来创造更有趣的互动。`;
-   }
     if (character.statusPanel && character.statusPanel.enabled && character.statusPanel.promptSuffix) {
         prompt += `15. 额外输出要求：${character.statusPanel.promptSuffix}\n`;
     }
     prompt += `<output_formats>\n`
-    prompt += `16. 你的输出格式必须严格遵循以下格式：${outputFormats}\n`;
+    prompt += `16. 你的输出格式必须严格遵循以下格式：${getOnlineOutputFormats(character, worldBooksBefore, worldBooksAfter)}\n`;
     prompt += `</output_formats>\n`
+
     if (character.bilingualModeEnabled) {
-    prompt += `✨双语模式特别指令✨：当你的角色的母语为中文以外的语言时，你的消息回复**必须**严格遵循双语模式下的普通消息格式：[${character.realName}的消息：{外语原文}「中文翻译」],例如: [${character.realName}的消息：Of course, I'd love to.「当然，我很乐意。」],中文翻译文本视为系统自翻译，不视为角色的原话;当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并使用普通消息的标准格式: [${character.realName}的消息：{中文消息内容}] 。**语音消息**在双语模式下也须使用相同格式：[${character.realName}的语音：{外语原文}「中文翻译」]，例如：[${character.realName}的语音：Of course, I'd love to.「当然，我很乐意。」]。这条规则的优先级非常高，请务必遵守。\n`;
-}
+        prompt += `✨双语模式特别指令✨：当你的角色的母语为中文以外的语言时，你的消息回复**必须**严格遵循双语模式下的普通消息格式：[${character.realName}的消息：{外语原文}「中文翻译」],例如: [${character.realName}的消息：Of course, I'd love to.「当然，我很乐意。」],中文翻译文本视为系统自翻译，不视为角色的原话;当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并使用普通消息的标准格式: [${character.realName}的消息：{中文消息内容}] 。**语音消息**在双语模式下也须使用相同格式：[${character.realName}的语音：{外语原文}「中文翻译」]，例如：[${character.realName}的语音：Of course, I'd love to.「当然，我很乐意。」]。这条规则的优先级非常高，请务必遵守。\n`;
+    }
     const minReply = character.replyCountMin || 3;
     const maxReply = character.replyCountMax || 8;
     if (character.replyCountEnabled) {

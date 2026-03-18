@@ -496,13 +496,13 @@ function setupChatRoom() {
     messageArea.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         if (e.target.id === 'load-more-btn' || e.target.id === 'load-newer-btn' || isInMultiSelectMode) return;
-        const messageWrapper = e.target.closest('.message-wrapper');
+        const messageWrapper = e.target.closest('.message-wrapper, .node-divider-wrapper');
         if (!messageWrapper) return;
         handleMessageLongPress(messageWrapper, e.clientX, e.clientY);
     });
     messageArea.addEventListener('touchstart', (e) => {
         if (e.target.id === 'load-more-btn' || e.target.id === 'load-newer-btn') return;
-        const messageWrapper = e.target.closest('.message-wrapper');
+        const messageWrapper = e.target.closest('.message-wrapper, .node-divider-wrapper');
         if (!messageWrapper) return;
         longPressTimer = setTimeout(() => {
             const touch = e.touches[0];

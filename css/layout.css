@@ -147,6 +147,298 @@
     padding: calc(45px + env(safe-area-inset-top)) 5px 25px;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
+}
+
+/* 顶栏状态栏 */
+.home-top-statusbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: calc(4px + env(safe-area-inset-top)) 16px 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color, #333);
+    background: transparent;
+    pointer-events: none;
+    font-family: var(--font-family);
+}
+
+.home-top-statusbar .htsb-time {
+    font-variant-numeric: tabular-nums;
+}
+
+.home-top-statusbar .htsb-battery {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+}
+
+.home-top-statusbar .htsb-battery-level {
+    font-variant-numeric: tabular-nums;
+}
+
+/* 夜间模式 - 全局纯黑 */
+body.night-mode-active {
+    --bg-color: #121212;
+    --text-color: #e0e0e0;
+    --white-color: #e0e0e0;
+    --primary-color: #1e1e1e;
+    --secondary-color: #666;
+    --accent-color: #1e1e1e;
+    --top-pinned-bg: #1a1a1a;
+    --panel-bg: #181818;
+    --chat-bottom-bar-bg: #181818;
+    --folder-pill-bg: #1e1e1e;
+    --folder-pill-text: #bbb;
+    --folder-pill-active-bg: #333;
+    --folder-pill-active-text: #fff;
+    --global-title-color: #e0e0e0;
+    --nav-icon-color: #777;
+    --nav-active-icon-color: #e0e0e0;
+    --kkt-icon-color: #e0e0e0;
+    --func-icon-color: #e0e0e0;
+}
+
+body.night-mode-active {
+    background: #0e0e0e;
+}
+
+body.night-mode-active .phone-screen {
+    background-color: #121212;
+}
+
+body.night-mode-active .screen {
+    background-color: #121212;
+}
+
+body.night-mode-active .app-header {
+    background-color: #181818;
+    border-bottom-color: #222;
+    color: #e0e0e0;
+}
+
+body.night-mode-active .app-header .title,
+body.night-mode-active .app-header .back-btn {
+    color: #e0e0e0;
+}
+
+body.night-mode-active .content {
+    background-color: #121212;
+}
+
+body.night-mode-active .kkt-group,
+body.night-mode-active .kkt-item,
+body.night-mode-active .collapsible-header {
+    background-color: #181818 !important;
+    color: #e0e0e0;
+    border-color: #222 !important;
+}
+
+body.night-mode-active .kkt-item-label {
+    color: #e0e0e0 !important;
+}
+
+body.night-mode-active input,
+body.night-mode-active textarea,
+body.night-mode-active select {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border-color: #333;
+}
+
+body.night-mode-active .btn {
+    border-color: #333;
+}
+
+body.night-mode-active .settings-sidebar {
+    background-color: #121212;
+}
+
+body.night-mode-active .modal-overlay .modal-window {
+    background-color: #181818;
+    color: #e0e0e0;
+}
+
+/* 夜间模式 - 聊天列表 */
+body.night-mode-active .chat-item,
+body.night-mode-active #chat-list-container .list-item {
+    background-color: #121212 !important;
+    border-bottom-color: #222 !important;
+}
+
+body.night-mode-active .chat-item:active,
+body.night-mode-active #chat-list-container .list-item:hover {
+    background-color: #1a1a1a !important;
+}
+
+body.night-mode-active .chat-item.pinned {
+    background-color: #161616 !important;
+}
+
+body.night-mode-active .chat-item-blocked {
+    background-color: #141414 !important;
+}
+
+body.night-mode-active .item-name,
+body.night-mode-active #chat-list-container .item-name {
+    color: #e0e0e0 !important;
+}
+
+body.night-mode-active .item-preview,
+body.night-mode-active #chat-list-container .item-preview {
+    color: #777 !important;
+}
+
+body.night-mode-active .item-time,
+body.night-mode-active #chat-list-container .item-time {
+    color: #555 !important;
+}
+
+body.night-mode-active .chat-list-header {
+    background-color: #121212 !important;
+    border-bottom-color: #222 !important;
+}
+
+body.night-mode-active .chat-list-header .title {
+    color: #e0e0e0 !important;
+}
+
+/* 夜间模式 - 文件夹标签栏 */
+body.night-mode-active .folder-tabs,
+body.night-mode-active .tab-bar,
+body.night-mode-active .chat-category-tabs {
+    background-color: #121212 !important;
+    border-bottom-color: #222 !important;
+}
+
+body.night-mode-active .tab-item {
+    background-color: #1e1e1e !important;
+    color: #bbb !important;
+    border-color: #333 !important;
+}
+
+body.night-mode-active .tab-item.active,
+body.night-mode-active .tab-item.active.pill-black {
+    background-color: #333 !important;
+    color: #fff !important;
+    border-color: #333 !important;
+}
+
+body.night-mode-active .tab-item.pill-white,
+body.night-mode-active .tab-item.tab-manage {
+    background-color: #1e1e1e !important;
+    border-color: #333 !important;
+    color: #999 !important;
+}
+
+/* 夜间模式 - 聊天详情页 */
+body.night-mode-active #chat-room-screen {
+    background-color: #0e0e0e !important;
+}
+
+body.night-mode-active #chat-room-screen .content {
+    background-color: #0e0e0e !important;
+}
+
+body.night-mode-active .message-bubble {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+}
+
+body.night-mode-active .message-wrapper.sent .message-bubble {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+}
+
+body.night-mode-active .message-input-area,
+body.night-mode-active .bottom-input-area,
+body.night-mode-active .chat-input-wrapper {
+    background-color: #181818 !important;
+    border-top-color: #222 !important;
+}
+
+body.night-mode-active .message-input-area textarea,
+body.night-mode-active .message-input-area input[type="text"] {
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
+    border-color: #333 !important;
+}
+
+body.night-mode-active .message-input-area .icon-btn.circle-bg {
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
+}
+
+body.night-mode-active .message-info .sender-name {
+    color: #aaa;
+}
+
+body.night-mode-active .message-info .message-time {
+    color: #666;
+}
+
+/* 夜间模式 - 底部导航 */
+body.night-mode-active .bottom-nav {
+    background-color: #121212 !important;
+    border-top-color: #222 !important;
+}
+
+/* 夜间模式 - 搜索栏 */
+body.night-mode-active .search-bar,
+body.night-mode-active .search-input {
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
+    border-color: #333 !important;
+}
+
+/* 夜间模式 - 表情包面板 */
+body.night-mode-active #panel-sticker-area,
+body.night-mode-active #panel-sticker-area .header,
+body.night-mode-active #sticker-manage-bar {
+    background-color: #181818 !important;
+}
+
+body.night-mode-active .sticker-category-bar {
+    background-color: #181818 !important;
+    border-bottom-color: #222 !important;
+}
+
+/* 夜间模式 - 设置侧边栏 */
+body.night-mode-active .settings-sidebar {
+    background-color: #121212 !important;
+}
+
+body.night-mode-active .settings-sidebar .header {
+    background-color: #181818 !important;
+    border-bottom-color: #222 !important;
+}
+
+/* 夜间模式 - 通用卡片和面板 */
+body.night-mode-active .modal-overlay .modal-window {
+    background-color: #181818 !important;
+    color: #e0e0e0;
+}
+
+body.night-mode-active .collapsible-content {
+    background-color: #181818 !important;
+}
+
+/* 夜间模式 - 各功能页面 */
+body.night-mode-active .wallpaper-preview {
+    border-color: #333;
+}
+
+body.night-mode-active pre,
+body.night-mode-active code {
+    background-color: #1a1a1a !important;
+    color: #ddd;
 }
 
 .home-screen-swiper {

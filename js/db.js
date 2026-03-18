@@ -172,12 +172,31 @@ const globalSettingKeys = [
     'theaterHtmlScenarios', 'theaterHtmlPromptPresets', 'theaterMode',
     'theaterApiSettings', 'theaterFontSize', 'theaterFontPreset',
     'novelAiSettings', 'avatarRecognitionDetailLevel',
-    'phoneControlRecycleBin'
+    'phoneControlRecycleBin', 'nodeTemplates', 'nodeSummaryText',
+    'nightModeSettings', 'homeStatusBarSettings'
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
-const appVersion = "3.16";
+const appVersion = "3.18";
 const updateLog = [
+    {
+        version: "3.18",
+        date: "2026-03-18",
+        notes: [
+            "3.18更新：",
+            "1.新增节点系统，可以线下、真心话、番外等等，所有人具体的去看1900DC的视频教程！",
+            "2.新增思维链可以导入酒馆思维链",
+            "3.修复新增CHAR消息后续报错的BUG",
+            "4.新增下载语音TTS，在TTS开启情况下会出现在长按菜单里",
+            "5.新增中途意外挂断通话的保护，会自动保存在通话记录并且总结",
+            "6.新增10楼外仅发送摘要的数字变量自定义（1900提供想法）",
+            "7.自定义输出消息格式时，勾选上第三方的话选项那条消息在被渲染的时候就以系统消息的样式显示，如没勾选会默认以char的气泡显示",
+            "8.配置的导出导入文件（1900的想法）",
+            "9.新增可以保存重说消息，可以切换",
+            "10.新增可以单独ROLL生图",
+            "11.新增夜间模式和顶栏电量和时间"
+        ]
+    },
     {
         version: "3.16",
         date: "2026-03-16",
@@ -864,7 +883,9 @@ const loadData = async () => {
             theaterApiSettings: { useTheaterApi: false, url: '', key: '', model: '' },
             theaterFontSize: 15,
             theaterFontPreset: null,
-            avatarRecognitionDetailLevel: 'detailed'
+            avatarRecognitionDetailLevel: 'detailed',
+            nodeTemplates: [],
+            nodeSummaryText: '摘要'
         };
         db[key] = settings[key] !== undefined ? settings[key] : (defaultValue[key] !== undefined ? JSON.parse(JSON.stringify(defaultValue[key])) : undefined);
     });
@@ -946,6 +967,10 @@ const loadData = async () => {
         if (c.blockedByCharReason === undefined) c.blockedByCharReason = '';
         if (!c.charBlockHistory || !Array.isArray(c.charBlockHistory)) c.charBlockHistory = [];
         if (!c.userFriendRequests || !Array.isArray(c.userFriendRequests)) c.userFriendRequests = [];
+        // 节点系统
+        if (!c.nodes) c.nodes = [];
+        if (c.activeNodeId === undefined) c.activeNodeId = null;
+
         // 用户头像库迁移：旧数据只有 name（实为描述），拆分为 name（简短名称）+ description（描述）
         c.userAvatarLibrary.forEach(function (item) {
             if (item.description === undefined && item.name) {

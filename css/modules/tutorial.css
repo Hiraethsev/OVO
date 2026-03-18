@@ -566,6 +566,22 @@
     padding: 24px;
     box-shadow: 0 10px 40px rgba(0,0,0,0.05);
     border: 1px solid #f5f0f1;
+    position: relative;
+}
+
+.rabbit-update-close-x {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    font-size: 22px;
+    color: #aaa;
+    cursor: pointer;
+    line-height: 1;
+    z-index: 1;
+}
+
+.rabbit-update-close-x:active {
+    color: #888;
 }
 
 .rabbit-update-close {

@@ -485,6 +485,11 @@ function renderJournalList() {
         const date = new Date(journal.createdAt);
         const formattedDate = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
+        let nodeTagHtml = '';
+        if (journal.isNodeSummary) {
+            nodeTagHtml = `<span style="font-size: 10px; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; color: #888; margin-left: 8px;">节点总结</span>`;
+        }
+
         card.innerHTML = `
             <div class="journal-checkbox"></div>
             <div class="journal-card-header">
@@ -501,9 +506,9 @@ function renderJournalList() {
                     <svg viewBox="0 0 24 24"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" /></svg>
                 </button>
             </div>
-            <div class="journal-card-footer" style="justify-content: space-between; height: auto; opacity: 1; margin-top: 10px;">
-                <span class="journal-card-date">${formattedDate}</span>
-                <span class="journal-card-range">范围: ${journal.range.start}-${journal.range.end}</span>
+            <div class="journal-card-footer" style="justify-content: space-between; height: auto; opacity: 1; margin-top: 10px; align-items: center;">
+                <span class="journal-card-date">${formattedDate}${nodeTagHtml}</span>
+                <span class="journal-card-range">范围: ${journal.range ? `${journal.range.start}-${journal.range.end}` : '节点'}</span>
             </div>
         `;
 
@@ -515,7 +520,7 @@ function renderJournalList() {
     });
 }
 
-async function generateJournal(start, end, includeFavorited = false, silent = false) {
+async function generateJournal(start, end, includeFavorited = false, silent = false, nodeInfo = null) {
     if (!silent) {
         showToast('正在生成日记，请稍候...');
     }
@@ -798,13 +803,53 @@ Strictly output in JSON format only. Do not speak outside the JSON object.
             isFavorited: false 
         };
 
+        // 如果是节点总结，附加节点信息
+        if (nodeInfo && nodeInfo.isNodeSummary) {
+            newJournal.isNodeSummary = true;
+            newJournal.nodeId = nodeInfo.nodeId;
+            if (nodeInfo.nodeName) {
+                newJournal.title = `节点总结：${nodeInfo.nodeName}`;
+            }
+        }
+
         if (!chat.memoryJournals) {
             chat.memoryJournals = [];
         }
-        chat.memoryJournals.push(newJournal);
+
+        // 如果是重新总结，查找并替换旧的总结
+        if (nodeInfo && nodeInfo.isResummarize) {
+            const existingIndex = chat.memoryJournals.findIndex(j => j.isNodeSummary && j.nodeId === nodeInfo.nodeId);
+            if (existingIndex !== -1) {
+                // 保留原有的 id 和 createdAt，只更新内容和标题
+                chat.memoryJournals[existingIndex].content = newJournal.content;
+                chat.memoryJournals[existingIndex].title = newJournal.title;
+                chat.memoryJournals[existingIndex].range = newJournal.range;
+            } else {
+                chat.memoryJournals.push(newJournal);
+            }
+        } else {
+            chat.memoryJournals.push(newJournal);
+        }
+
+        // 如果是节点总结，同时更新节点对象中的 summaryContent
+        if (nodeInfo && nodeInfo.nodeId && chat.nodes) {
+            const node = chat.nodes.find(n => n.id === nodeInfo.nodeId);
+            if (node) {
+                node.summaryContent = newJournal.content;
+            }
+        }
+
         await saveData();
 
         renderJournalList();
+        
+        // 如果是重新总结且在节点大厅，刷新列表
+        if (nodeInfo && nodeInfo.isResummarize && document.getElementById('node-system-screen').classList.contains('active')) {
+            if (typeof NodeSystem !== 'undefined' && typeof NodeSystem.renderArchiveList === 'function') {
+                NodeSystem.renderArchiveList();
+            }
+        }
+
         showToast(silent ? `日记总结已生成 (第${start}-${end}条)` : '新日记已生成！');
 
     } catch (error) {

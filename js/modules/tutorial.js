@@ -38,6 +38,7 @@ function renderUpdateLog(container) {
         modal.className = 'rabbit-update-modal';
         modal.innerHTML = `
             <div class="rabbit-update-content">
+                <span class="rabbit-update-close-x">&times;</span>
                 <h3 style="text-align:center; color:#555; margin-top:0;">更新日志</h3>
                 ${notesHtml}
                 <button class="rabbit-update-close">关闭</button>
@@ -47,6 +48,7 @@ function renderUpdateLog(container) {
 
         btn.onclick = () => modal.classList.add('show');
         modal.querySelector('.rabbit-update-close').onclick = () => modal.classList.remove('show');
+        modal.querySelector('.rabbit-update-close-x').onclick = () => modal.classList.remove('show');
         
         tutorialContent.appendChild(btn);
         return;

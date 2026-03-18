@@ -7,18 +7,30 @@ const DEFAULT_COT_ITEMS = [
     { id: 'cot_item_4', name: '当个人吧。', content: '### Phase2: Verisimilitude\n2.**真实聊天**\n   - 是否根据以下两点要求采用了真人聊天思路？\n    - 正常人的注意力是有限的，不会每句话都非得逐句回复。\n    - 不对已有信息进行重复反问。\n    - 断点处理：若与上一条消息间隔较久，默认双方只是自然忙碌后重新拿起手机或默认期间以其他方式保持联系，自然接续话题。', enabled: true },
     { id: 'cot_item_5', name: '有特殊格式吗？', content: '### Phase3: chat role\n3. **逻辑检索 (Ref: <logic_rules>)**\n   - 当前是否为双语对话情境？若无，跳过此条\n   - 是否需要输出状态栏？若无相关要求，则跳过此条', enabled: true },
     { id: 'cot_item_6', name: '最后确认一下。', content: '## 【最后确认】\n\n4. 整合<Chatting Guidelines>，是否合理自然回复且不偏离人设？回顾<output_formats>，输出消息格式是否正确？', enabled: true },
-    { id: 'cot_item_7', name: '尾声', content: '每轮输出前，必须先严格按照<thinking>…</thinking>内的步骤进行逐条思考，无需重复其中的条目，但思考内容需精简准确、清晰、可执行，不得跳步骤。\n<thinking>中的所有分析必须在输出中完全落实，不得偏离、删减或弱化。\n\n格式：\n<thinking>\n...思考过程...\n</thinking>', enabled: true, locked: true }
+    { id: 'cot_item_7', name: '闭合标签', content: '## 【闭合标签】\n\n5.当前是否需要闭合<thinking>的xml标签？若是，在思考结束后谨记闭合标签，切勿忘记。', enabled: true },
+    { id: 'cot_item_8', name: '尾声', content: '每轮输出前，必须先严格按照<thinking>…</thinking>内的步骤进行逐条思考，无需重复其中的条目，但思考内容需精简准确、清晰、可执行，不得跳步骤。\n<thinking>中的所有分析必须在输出中完全落实，不得偏离、删减或弱化。\n\n格式：\n<thinking>\n...思考过程...\n</thinking>', enabled: true, locked: true }
 ];
 
 const DEFAULT_CALL_COT_ITEMS = [
     { id: 'cot_call_item_1', name: '引子', content: '[System Directive]:\n你必须严格遵守 [incipere] 协议。在回复前，请先进入 <thinking> 标签进行深度推演。\n请按以下步骤查阅 System Prompt 中的模块并思考：', enabled: true, locked: true },
     { id: 'cot_call_item_2', name: '给我读设定！', content: '---\n## 【行为校准】\n基于<char_settings>和<角色活人运转>构建角色人格\n### Phase1: person\n1. **自我意识校验 (Ref: <char_settings>和<角色活人运转>)**\n   - 是否塑造鲜活真实人格？\n   - 你（角色）是否具有自己的说话习惯/风格？\n   - 你想如何回应我？', enabled: true },
     { id: 'cot_call_item_3', name: '通话情境感知', content: '---\n## 【情境感知】\n1. **实时性检查**：这是一个实时视频/语音通话。你的反应必须即时、自然、口语化。\n2. **环境与画面**：\n   - 如果是视频通话，你需要意识到摄像头捕捉到的画面（你的表情、动作、背景）。\n   - 如果是语音通话，你需要意识到声音传递的情绪和背景音。', enabled: true },
-    { id: 'cot_call_item_5', name: '输出检查', content: '## 【输出检查】\n1. **格式确认**：是否严格遵守了 `[画面/环境音：...]` 和 `[声音：...]` 的格式？\n2. **内容净化**：确保没有输出任何不属于通话内容的心理活动或旁白（除非放在画面描述中）。\n', enabled: true },
+    { id: 'cot_call_item_4', name: '输出检查', content: '## 【输出检查】\n1. **格式确认**：是否严格遵守了 `[画面/环境音：...]` 和 `[声音：...]` 的格式？\n2. **内容净化**：确保没有输出任何不属于通话内容的心理活动或旁白（除非放在画面描述中）。\n', enabled: true },
+    { id: 'cot_call_item_5', name: '闭合标签', content: '## 【闭合标签】\n\n5.当前是否需要闭合<thinking>的xml标签？若是，在思考结束后谨记闭合标签，切勿忘记。', enabled: true },
     { id: 'cot_call_item_6', name: '尾声', content: '每轮输出前，必须先严格按照<thinking>…</thinking>内的步骤进行逐条思考。\n<thinking>中的所有分析必须在输出中完全落实。\n\n格式：\n<thinking>\n...思考过程...\n</thinking>', enabled: true, locked: true }
 ];
 
-let currentCotMode = 'chat'; // 'chat' or 'call'
+const DEFAULT_OFFLINE_COT_ITEMS = [
+    { id: 'cot_offline_item_1', name: '引子', content: '[System Directive]:\n你必须严格遵守 [incipere] 协议。在回复前，请先进入 <thinking> 标签进行深度推演。\n请按以下步骤查阅 System Prompt 中的模块并思考：', enabled: true, locked: true },
+    { id: 'cot_offline_item_2', name: '准备动脑了吗？', content: '---\n## 【前置规则】\n### **必须**读取所有<logic_rules>和<output_formats>：了解**所有**需要遵守的规则，然后进行以下步骤精简准确的思考', enabled: true },
+    { id: 'cot_offline_item_3', name: '给我读设定！', content: '---\n## 【行为校准】\n基于<char_settings>和<角色活人运转>构建角色人格\n### Phase1: person\n1. **自我意识校验 (Ref: <char_settings>和<角色活人运转>)**\n   - 是否塑造鲜活真实人格？\n   - 你（角色）是否具有自己的聊天习惯/风格？\n   - 你想如何回应我？', enabled: true },
+    { id: 'cot_offline_item_4', name: '有特殊格式吗？', content: '### Phase3: chat role\n3. **逻辑检索 (Ref: <logic_rules>)**\n   - 当前是否为双语对话情境？若无，跳过此条\n   - 是否需要输出状态栏？若无相关要求，则跳过此条', enabled: true },
+    { id: 'cot_offline_item_5', name: '最后确认一下。', content: '## 【最后确认】\n\n4. 整合<Chatting Guidelines>，是否合理自然回复且不偏离人设？回顾<output_formats>，输出消息格式是否正确？', enabled: true },
+    { id: 'cot_offline_item_6', name: '闭合标签', content: '## 【闭合标签】\n\n5.当前是否需要闭合<thinking>的xml标签？若是，在思考结束后谨记闭合标签，切勿忘记。', enabled: true },
+    { id: 'cot_offline_item_7', name: '尾声', content: '每轮输出前，必须先严格按照<thinking>…</thinking>内的步骤进行逐条思考，无需重复其中的条目，但思考内容需精简准确、清晰、可执行，不得跳步骤。\n<thinking>中的所有分析必须在输出中完全落实，不得偏离、删减或弱化。\n\n格式：\n<thinking>\n...思考过程...\n</thinking>', enabled: true, locked: true }
+];
+
+let currentCotMode = 'chat'; // 'chat', 'call', or 'offline'
 
 // 初始化 CoT 设置
 function initCotSettings() {
@@ -50,8 +62,10 @@ function initCotSettings() {
             
             if (currentCotMode === 'chat') {
                 db.cotSettings.enabled = e.target.checked;
-            } else {
+            } else if (currentCotMode === 'call') {
                 db.cotSettings.callEnabled = e.target.checked;
+            } else if (currentCotMode === 'offline') {
+                db.cotSettings.offlineEnabled = e.target.checked;
             }
             
             await saveData();
@@ -78,8 +92,10 @@ function initCotSettings() {
             if (presetId) {
                 if (currentCotMode === 'chat') {
                     db.cotSettings.activePresetId = presetId;
-                } else {
+                } else if (currentCotMode === 'call') {
                     db.cotSettings.activeCallPresetId = presetId;
+                } else if (currentCotMode === 'offline') {
+                    db.cotSettings.activeOfflinePresetId = presetId;
                 }
                 await saveData();
                 renderCotItems();
@@ -118,6 +134,12 @@ function initCotSettings() {
         document.getElementById('cot-import-file').click();
     });
     document.getElementById('cot-import-file').addEventListener('change', importCotPreset);
+
+    // 绑定酒馆思维链导入按钮
+    document.getElementById('cot-import-tavern-btn').addEventListener('click', () => {
+        document.getElementById('cot-import-tavern-file').click();
+    });
+    document.getElementById('cot-import-tavern-file').addEventListener('change', importTavernCotPreset);
 
     // 初始化 XML 说明功能
     initXmlHelpFeature();
@@ -248,12 +270,32 @@ function loadCotSettings() {
         saveData();
     }
 
+    // 确保线下预设存在
+    let offlinePreset = db.cotPresets.find(p => p.id === 'default_offline');
+    if (!offlinePreset) {
+        offlinePreset = {
+            id: 'default_offline',
+            name: '默认线下思维链',
+            items: JSON.parse(JSON.stringify(DEFAULT_OFFLINE_COT_ITEMS))
+        };
+        db.cotPresets.push(offlinePreset);
+        saveData();
+    }
+
+    // 确保 activeOfflinePresetId 存在
+    if (!db.cotSettings.activeOfflinePresetId) {
+        db.cotSettings.activeOfflinePresetId = 'default_offline';
+        saveData();
+    }
+
     // 根据当前模式设置开关状态
     const enabledSwitch = document.getElementById('cot-enabled-switch');
     if (currentCotMode === 'chat') {
         enabledSwitch.checked = db.cotSettings.enabled;
-    } else {
+    } else if (currentCotMode === 'call') {
         enabledSwitch.checked = db.cotSettings.callEnabled || false;
+    } else if (currentCotMode === 'offline') {
+        enabledSwitch.checked = db.cotSettings.offlineEnabled || false;
     }
     
     // 加载角色活人运转开关状态 (默认为 false)
@@ -282,8 +324,10 @@ function renderCotPresetSelect() {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
 
     if (activeId) {
@@ -293,8 +337,10 @@ function renderCotPresetSelect() {
             activeId = db.cotPresets[0].id;
             if (currentCotMode === 'chat') {
                 db.cotSettings.activePresetId = activeId;
-            } else {
+            } else if (currentCotMode === 'call') {
                 db.cotSettings.activeCallPresetId = activeId;
+            } else if (currentCotMode === 'offline') {
+                db.cotSettings.activeOfflinePresetId = activeId;
             }
             saveData();
         }
@@ -311,8 +357,10 @@ function renderCotItems() {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
 
     const activePreset = db.cotPresets.find(p => p.id === activeId);
@@ -415,8 +463,10 @@ async function moveCotItem(index, direction) {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
     const activePreset = db.cotPresets.find(p => p.id === activeId);
     if (!activePreset) return;
@@ -443,8 +493,10 @@ async function deleteCotItem(index) {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
     const activePreset = db.cotPresets.find(p => p.id === activeId);
     if (!activePreset) return;
@@ -531,8 +583,10 @@ async function saveCotItem(e) {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
     const activePreset = db.cotPresets.find(p => p.id === activeId);
     if (!activePreset) return;
@@ -580,8 +634,10 @@ async function createNewCotPreset() {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
     const activePreset = db.cotPresets.find(p => p.id === activeId);
     // 复制当前预设的条目
@@ -597,8 +653,10 @@ async function createNewCotPreset() {
     
     if (currentCotMode === 'chat') {
         db.cotSettings.activePresetId = newPreset.id;
-    } else {
+    } else if (currentCotMode === 'call') {
         db.cotSettings.activeCallPresetId = newPreset.id;
+    } else if (currentCotMode === 'offline') {
+        db.cotSettings.activeOfflinePresetId = newPreset.id;
     }
     await saveData();
     
@@ -611,8 +669,10 @@ async function resetCotPreset() {
     let activeId;
     if (currentCotMode === 'chat') {
         activeId = db.cotSettings.activePresetId;
-    } else {
+    } else if (currentCotMode === 'call') {
         activeId = db.cotSettings.activeCallPresetId;
+    } else if (currentCotMode === 'offline') {
+        activeId = db.cotSettings.activeOfflinePresetId;
     }
     const activePreset = db.cotPresets.find(p => p.id === activeId);
     if (!activePreset) return;
@@ -622,8 +682,10 @@ async function resetCotPreset() {
     // 深度复制默认条目
     if (currentCotMode === 'chat') {
         activePreset.items = JSON.parse(JSON.stringify(DEFAULT_COT_ITEMS));
-    } else {
+    } else if (currentCotMode === 'call') {
         activePreset.items = JSON.parse(JSON.stringify(DEFAULT_CALL_COT_ITEMS));
+    } else if (currentCotMode === 'offline') {
+        activePreset.items = JSON.parse(JSON.stringify(DEFAULT_OFFLINE_COT_ITEMS));
     }
     
     await saveData();
@@ -644,6 +706,7 @@ function openCotPresetManageModal() {
         let isActive = false;
         if (currentCotMode === 'chat' && preset.id === db.cotSettings.activePresetId) isActive = true;
         if (currentCotMode === 'call' && preset.id === db.cotSettings.activeCallPresetId) isActive = true;
+        if (currentCotMode === 'offline' && preset.id === db.cotSettings.activeOfflinePresetId) isActive = true;
 
         const nameDiv = document.createElement('div');
         nameDiv.textContent = preset.name + (isActive ? ' (当前)' : '');
@@ -688,6 +751,9 @@ function openCotPresetManageModal() {
             if (preset.id === db.cotSettings.activeCallPresetId) {
                 db.cotSettings.activeCallPresetId = db.cotPresets[0].id;
             }
+            if (preset.id === db.cotSettings.activeOfflinePresetId) {
+                db.cotSettings.activeOfflinePresetId = db.cotPresets[0].id;
+            }
 
             await saveData();
             openCotPresetManageModal();
@@ -726,14 +792,77 @@ async function importCotPreset(e) {
         
         if (currentCotMode === 'chat') {
             db.cotSettings.activePresetId = preset.id;
-        } else {
+        } else if (currentCotMode === 'call') {
             db.cotSettings.activeCallPresetId = preset.id;
+        } else if (currentCotMode === 'offline') {
+            db.cotSettings.activeOfflinePresetId = preset.id;
         }
         await saveData();
         
         document.getElementById('cot-preset-manage-modal').classList.remove('visible');
         loadCotSettings();
         showToast('预设导入成功');
+    } catch (err) {
+        console.error(err);
+        showToast('导入失败：' + err.message);
+    } finally {
+        e.target.value = '';
+    }
+}
+
+// 导入酒馆(SillyTavern)思维链
+async function importTavernCotPreset(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const tavernData = JSON.parse(text);
+
+        // 验证酒馆格式：必须有 prompts 数组
+        if (!tavernData.prompts || !Array.isArray(tavernData.prompts)) {
+            throw new Error('格式错误：不是有效的酒馆(SillyTavern)思维链文件，缺少 prompts 数组');
+        }
+
+        // 过滤掉 marker 条目（占位符，如 chatHistory、charDescription 等）
+        const validPrompts = tavernData.prompts.filter(p => !p.marker && p.content);
+
+        if (validPrompts.length === 0) {
+            throw new Error('未找到有效的 prompt 条目（所有条目均为占位符或无内容）');
+        }
+
+        // 转换酒馆 prompts 为 CoT items
+        const items = validPrompts.map((p, index) => ({
+            id: `cot_tavern_${Date.now()}_${index}`,
+            name: p.name || `条目 ${index + 1}`,
+            content: p.content,
+            enabled: p.enabled !== undefined ? p.enabled : true,
+            locked: false
+        }));
+
+        // 从文件名提取预设名称
+        const baseName = file.name.replace(/\.json$/i, '');
+
+        const newPreset = {
+            id: `cot_preset_${Date.now()}`,
+            name: `${baseName} (酒馆导入)`,
+            items: items
+        };
+
+        db.cotPresets.push(newPreset);
+
+        if (currentCotMode === 'chat') {
+            db.cotSettings.activePresetId = newPreset.id;
+        } else if (currentCotMode === 'call') {
+            db.cotSettings.activeCallPresetId = newPreset.id;
+        } else if (currentCotMode === 'offline') {
+            db.cotSettings.activeOfflinePresetId = newPreset.id;
+        }
+        await saveData();
+
+        document.getElementById('cot-preset-manage-modal').classList.remove('visible');
+        loadCotSettings();
+        showToast(`酒馆思维链导入成功，共 ${items.length} 个条目`);
     } catch (err) {
         console.error(err);
         showToast('导入失败：' + err.message);
