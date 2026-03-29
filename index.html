@@ -64,139 +64,11 @@
     <!-- <link rel="stylesheet" href="style.css"> (Deprecated) -->
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <style>
-        /* 角色拉黑用户时输入区覆盖层（不修改输入框，避免跨角色污染） */
-        #chat-room-screen { position: relative; }
-        .char-blocked-overlay {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            min-height: 56px;
-            z-index: 8;
-            background: var(--bg-color, #f5f5f5);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 12px;
-            border-top: 1px solid rgba(0,0,0,0.06);
-        }
-        .char-blocked-overlay-hint {
-            margin: 0;
-            font-size: 13px;
-            color: #666;
-        }
-        .char-blocked-overlay-btns {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .chat-item-blocked-by-char-badge {
-            font-size: 11px;
-            color: #8e6bbf;
-            margin-left: 4px;
-        }
 
-        /* 仅「导入文档」进入创建时：弹窗限高 + 滚动条 */
-        #add-char-modal.import-mode .modal-window {
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-
-        /* === TTS 语音选择器样式 === */
-        .voice-lang-filter {
-            transition: all 0.2s;
-        }
-        
-        .voice-lang-filter.active {
-            background: var(--primary-color) !important;
-            color: white !important;
-            border-color: var(--primary-color) !important;
-        }
-        
-        .voice-item {
-            transition: all 0.2s;
-        }
-        
-        .voice-item:hover {
-            background: #f5f5f5 !important;
-            border-color: var(--primary-color) !important;
-        }
-        
-        .voice-item.selected {
-            background: #e3f2fd !important;
-            border-color: var(--primary-color) !important;
-        }
-        
-        #voice-list-container {
-            scrollbar-width: thin;
-            scrollbar-color: #ccc transparent;
-        }
-        
-        #voice-list-container::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        #voice-list-container::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        
-        #voice-list-container::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 3px;
-        }
-        
-        #voice-list-container::-webkit-scrollbar-thumb:hover {
-            background: #999;
-        }
-
-        /* 导入确认弹窗 - 导入开场白选项 */
-        #import-confirm-modal .import-greeting-option {
-            margin-top: 16px;
-            margin-bottom: 4px;
-        }
-        #import-confirm-modal .import-greeting-card {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 14px 16px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        #import-confirm-modal .import-greeting-card:focus-within {
-            border-color: var(--primary-color, #6C8CD5);
-            box-shadow: 0 0 0 2px rgba(108, 140, 213, 0.15);
-        }
-        #import-confirm-modal .import-greeting-label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
-            margin: 0;
-        }
-        #import-confirm-modal .import-greeting-checkbox {
-            width: 18px;
-            height: 18px;
-            margin: 0;
-            accent-color: var(--primary-color, #6C8CD5);
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        #import-confirm-modal .import-greeting-label-text {
-            font-size: 15px;
-            font-weight: 500;
-            color: #334155;
-            white-space: nowrap;
-        }
-        #import-confirm-modal .import-greeting-hint {
-            font-size: 12px;
-            color: #64748b;
-            margin: 10px 0 0 28px;
-            line-height: 1.45;
-        }
-    </style>
+    <!-- CSS Split: Extracted from inline <style> -->
+    <link rel="stylesheet" href="css/modules/block_system.css">
+    <link rel="stylesheet" href="css/modules/voice_selector.css">
+    <link rel="stylesheet" href="css/modules/character_import.css">
 </head>
 
 <body>
@@ -1666,6 +1538,15 @@
 
                         <!-- 高级设置 -->
                         <div class="kkt-group" style="margin-top: 15px;">
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">线上角色限制<p style="font-size:12px;color:#999;margin:4px 0 0;">开启后角色将严格保持线上身份，禁止提及线下见面</p></div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="online-role-switch" checked>
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
                             <div class="kkt-item">
                                 <div class="kkt-item-label">时间感知加强</div>
                                 <div class="kkt-item-control">

@@ -1845,6 +1845,7 @@ function setupApiSettingsApp() {
             gemini: 'https://generativelanguage.googleapis.com'
         };
     db.apiSettings && (n.value = db.apiSettings.provider || 'newapi', r.value = db.apiSettings.url || '', s.value = db.apiSettings.key || '', db.apiSettings.model && (a.innerHTML = `<option value="${db.apiSettings.model}">${db.apiSettings.model}</option>`));
+    if (db.apiSettings && typeof db.apiSettings.onlineRoleEnabled !== 'undefined') { document.getElementById('online-role-switch').checked = db.apiSettings.onlineRoleEnabled; } else { document.getElementById('online-role-switch').checked = true; }
     if (db.apiSettings && typeof db.apiSettings.timePerceptionEnabled !== 'undefined') { document.getElementById('time-perception-switch').checked = db.apiSettings.timePerceptionEnabled; }
     if (db.apiSettings && typeof db.apiSettings.streamEnabled !== 'undefined') { document.getElementById('stream-switch').checked = db.apiSettings.streamEnabled; } else { document.getElementById('stream-switch').checked = true; }
     if (db.apiSettings && typeof db.apiSettings.quickReplyEnabled !== 'undefined') { document.getElementById('quick-reply-switch').checked = db.apiSettings.quickReplyEnabled; } else { document.getElementById('quick-reply-switch').checked = false; }
@@ -1964,6 +1965,7 @@ function setupApiSettingsApp() {
             url: r.value,
             key: s.value,
             model: a.value,
+            onlineRoleEnabled: document.getElementById('online-role-switch').checked,
             timePerceptionEnabled: document.getElementById('time-perception-switch').checked,
             streamEnabled: document.getElementById('stream-switch').checked,
             quickReplyEnabled: document.getElementById('quick-reply-switch').checked,
