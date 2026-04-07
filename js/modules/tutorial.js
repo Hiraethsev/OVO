@@ -1435,11 +1435,15 @@ function renderTutorialContent() {
     }
 
     // 反馈许愿 (Between Us) - 放在云端备份下面
-    const feedbackSection = document.createElement('a');
-    feedbackSection.href = 'https://betweenus.today/creator/yuanyuan';
-    feedbackSection.target = '_blank';
-    feedbackSection.rel = 'noopener noreferrer';
+    const feedbackSection = document.createElement('div');
+    feedbackSection.style.cursor = 'pointer';
     const iconMessage = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+    
+    // 点击时弹窗提示
+    feedbackSection.addEventListener('click', (e) => {
+        e.preventDefault();
+        showWishClosedModal();
+    });
 
     if (isModern) {
         feedbackSection.className = 'tutorial-modern-link-card';
@@ -1495,11 +1499,15 @@ function renderTutorialContent() {
     }
 
     // 公开许愿 - 链接到金山文档
-    const publicWishSection = document.createElement('a');
-    publicWishSection.href = 'https://www.kdocs.cn/l/csKWtfIfdwDy';
-    publicWishSection.target = '_blank';
-    publicWishSection.rel = 'noopener noreferrer';
+    const publicWishSection = document.createElement('div');
+    publicWishSection.style.cursor = 'pointer';
     const iconStar = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
+    
+    // 点击时弹窗提示
+    publicWishSection.addEventListener('click', (e) => {
+        e.preventDefault();
+        showWishClosedModal();
+    });
 
     if (isModern) {
         publicWishSection.className = 'tutorial-modern-link-card';
@@ -2290,3 +2298,26 @@ const GitHubMgr = {
     }
 };
 window.GitHubMgr = GitHubMgr;
+
+// 显示许愿功能关闭提示弹窗
+function showWishClosedModal() {
+    const oldModal = document.getElementById('wish-closed-modal-overlay');
+    if (oldModal) oldModal.remove();
+
+    const modalHtml = `
+    <div id="wish-closed-modal-overlay" class="modal-overlay visible" style="z-index: 9999; align-items: center; justify-content: center; display: flex;">
+        <div class="modal-window" style="max-width: 90%; width: 320px; padding: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: 16px; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+            <div style="padding: 30px 20px 20px; text-align: center; flex-shrink: 0;">
+                <div style="font-size: 48px; margin-bottom: 15px;">💤</div>
+                <div style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 8px;">功能暂时关闭</div>
+                <div style="font-size: 14px; color: #888; line-height: 1.5;">该功能暂时不可用</div>
+            </div>
+            <div style="padding: 15px 20px 20px; border-top: none; text-align: center; background: #fff; flex-shrink: 0;">
+                <button class="btn btn-primary" style="width: 100%; border-radius: 12px; font-weight: 600; font-size: 16px; padding: 12px;" onclick="document.getElementById('wish-closed-modal-overlay').remove()">知道了</button>
+            </div>
+        </div>
+    </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
