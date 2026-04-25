@@ -1915,7 +1915,8 @@ async function saveSettingsFromSidebar() {
         e.stickerGroups = selectedGroups;
 
         // 头像系统：有头像变动则识别（含缓存）并系统通知
-        const _newMyAvatar = document.getElementById('setting-my-avatar-preview').src;
+        const myAvatarPreviewEl = document.getElementById('setting-my-avatar-preview');
+        const _newMyAvatar = myAvatarPreviewEl ? myAvatarPreviewEl.src : e.myAvatar;
         if (window.AvatarSystem && e.charSenseAvatarChangeEnabled && e.myAvatar && _newMyAvatar !== e.myAvatar) {
             await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(currentChatId, e.myAvatar, _newMyAvatar);
         }
