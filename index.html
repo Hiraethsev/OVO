@@ -3583,6 +3583,22 @@
                                     </div>
                                 </div>
                                 <div class="kkt-item">
+                                    <div class="kkt-item-label">角色生日</div>
+                                    <div class="kkt-item-control">
+                                        <input type="date" id="setting-char-birthday" autocomplete="off"
+                                            style="text-align:right; border:none; background:transparent;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">开启动态年龄<p style="font-size:12px;color:#999;margin:4px 0 0;">根据当前系统时间自动计算岁数并注入提示词</p></div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-enable-dynamic-age">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
                                     <div class="kkt-item-label">备注名</div>
                                     <div class="kkt-item-control">
                                         <input type="text" id="setting-char-remark" autocomplete="off"
@@ -3647,32 +3663,14 @@
                             <!-- 我的信息分组 -->
                             <div class="kkt-group" style="margin-top:15px;">
                                 <div class="kkt-item">
-                                    <div class="kkt-item-label">
-                                        <div class="kkt-item-title">真名</div>
+                                    <div class="kkt-item-label">我的头像</div>
+                                    <div class="kkt-item-control"
+                                        onclick="document.getElementById('setting-my-avatar-upload').click()">
+                                        <img src="" id="setting-my-avatar-preview" class="kkt-small-avatar">
+                                        <span class="kkt-arrow">›</span>
                                     </div>
-                                    <div class="kkt-item-control">
-                                        <input type="text" id="setting-char-real-name" autocomplete="off"
-                                            style="text-align:right; border:none; background:transparent;"
-                                            placeholder="角色真名">
-                                    </div>
-                                </div>
-                                <div class="kkt-item">
-                                    <div class="kkt-item-label">
-                                        <div class="kkt-item-title">生日</div>
-                                    </div>
-                                    <div class="kkt-item-control">
-                                        <input type="date" id="setting-char-birthday" autocomplete="off"
-                                            style="text-align:right; border:none; background:transparent;">
-                                    </div>
-                                </div>
-                                <div class="kkt-item">
-                                    <div class="kkt-item-label">开启动态年龄<p style="font-size:12px;color:#999;margin:4px 0 0;">根据当前系统时间自动计算岁数并注入提示词</p></div>
-                                    <div class="kkt-item-control">
-                                        <label class="kkt-switch">
-                                            <input type="checkbox" id="setting-char-enable-dynamic-age">
-                                            <span class="kkt-slider"></span>
-                                        </label>
-                                    </div>
+                                    <input type="file" id="setting-my-avatar-upload" accept="image/*"
+                                        style="display:none;">
                                 </div>
                                 <div class="kkt-item">
                                     <div class="kkt-item-label">我的名字</div>
