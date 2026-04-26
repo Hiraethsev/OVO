@@ -154,6 +154,7 @@ function setupStorageAnalysisScreen() {
         var panel = document.getElementById('storage-console-panel');
         var listEl = document.getElementById('storage-console-list');
         var clearBtn = document.getElementById('storage-console-clear-btn');
+        var exportBtn = document.getElementById('storage-console-export-btn');
         var countLog = document.getElementById('storage-console-count-log');
         var countWarn = document.getElementById('storage-console-count-warn');
         var countError = document.getElementById('storage-console-count-error');
@@ -222,6 +223,30 @@ function setupStorageAnalysisScreen() {
             clearBtn.addEventListener('click', function () {
                 window.__storageConsoleLogs = [];
                 renderConsole();
+            });
+        }
+
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function () {
+                var logs = window.__storageConsoleLogs || [];
+                if (logs.length === 0) {
+                    showToast('暂无日志可导出');
+                    return;
+                }
+                var logText = logs.map(function(e) {
+                    return '[' + e.time + '] [' + e.type.toUpperCase() + '] ' + e.text;
+                }).join('\n');
+                
+                var blob = new Blob([logText], { type: 'text/plain;charset=utf-8' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'console_logs_' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast('日志导出成功');
             });
         }
 

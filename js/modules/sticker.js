@@ -1,5 +1,8 @@
 // --- 表情包管理 (js/modules/sticker.js) ---
 
+let currentLongPressCategory = null;
+let categoryLongPressTimer = null;
+
 /**
  * 宽泛格式解析单行：支持 名称:URL、名称：URL、名称 URL、名称URL 等
  * 通过识别 http(s):// 提取 URL，其前为名称（自动去除末尾分隔符）
@@ -48,6 +51,13 @@ async function setupStickerSystem() {
     const menuAddNewBtn = document.getElementById('menu-add-new-btn');
     const menuCategoryManageBtn = document.getElementById('menu-category-manage-btn');
     const menuCancelBtn = document.getElementById('menu-cancel-btn');
+    
+    const batchRecognizeBtn = document.getElementById('batch-recognize-stickers-btn');
+    const batchRecognizeModal = document.getElementById('batch-recognize-progress-modal');
+    const batchRecognizeText = document.getElementById('batch-recognize-progress-text');
+    const cancelBatchRecognizeBtn = document.getElementById('cancel-batch-recognize-btn');
+    let isBatchRecognizing = false;
+    let cancelBatchRecognizeFlag = false;
 
     const stickerCategoryManageModal = document.getElementById('sticker-category-manage-modal');
     const newStickerCategoryInput = document.getElementById('new-sticker-category-input');
@@ -68,9 +78,6 @@ async function setupStickerSystem() {
     const scRenameConfirmBtn = document.getElementById('sc-rename-confirm-btn');
     const scRenameCancelBtn = document.getElementById('sc-rename-cancel-btn');
 
-    let currentLongPressCategory = null;
-    let categoryLongPressTimer = null;
-
     const deleteSelectedStickersBtn = document.getElementById('delete-selected-stickers-btn');
     const moveStickerGroupBtn = document.getElementById('move-sticker-group-btn');
     const stickerManageBar = document.getElementById('sticker-manage-bar');
@@ -90,11 +97,14 @@ async function setupStickerSystem() {
     const addStickerForm = document.getElementById('add-sticker-form');
     const stickerNameInput = document.getElementById('sticker-name');
     const stickerGroupInput = document.getElementById('sticker-group');
+    const stickerDescInput = document.getElementById('sticker-description');
     const stickerEditIdInput = document.getElementById('sticker-edit-id');
     const stickerPreview = document.getElementById('sticker-preview');
     const stickerUrlInput = document.getElementById('sticker-url-input');
     const stickerFileUpload = document.getElementById('sticker-file-upload');
     const addStickerModalTitle = document.getElementById('add-sticker-modal-title');
+    const stickerAiRecognizeBtn = document.getElementById('sticker-ai-recognize-btn');
+    const cancelStickerEditBtn = document.getElementById('cancel-sticker-edit-btn');
 
     stickerMenuBtn.addEventListener('click', () => {
         if (isStickerManageMode) {
@@ -157,10 +167,237 @@ async function setupStickerSystem() {
         addStickerModalTitle.textContent = '添加新表情';
         addStickerForm.reset();
         stickerEditIdInput.value = '';
+        stickerDescInput.value = '';
         stickerPreview.innerHTML = '<span>预览</span>';
         stickerUrlInput.disabled = false;
         addStickerModal.classList.add('visible');
     });
+
+    cancelStickerEditBtn.addEventListener('click', () => {
+        addStickerModal.classList.remove('visible');
+    });
+
+    // 单张智能识别
+    stickerAiRecognizeBtn.addEventListener('click', async () => {
+        const previewImg = stickerPreview.querySelector('img');
+        if (!previewImg || !previewImg.src) {
+            showToast('请先输入图片 URL 或上传图片');
+            return;
+        }
+        
+        let apiConfig = db.apiSettings;
+        
+        const {url, key, model, provider} = apiConfig;
+        if (!url || !key || !model) {
+            showToast('请先配置 API');
+            return;
+        }
+        
+        stickerAiRecognizeBtn.disabled = true;
+        stickerAiRecognizeBtn.textContent = '识别中...';
+        
+        try {
+            const description = await recognizeImageContent(previewImg.src, apiConfig);
+            if (description) {
+                stickerDescInput.value = description;
+                showToast('识别成功');
+            } else {
+                showToast('未能生成有效描述');
+            }
+        } catch (error) {
+            console.error('识别失败:', error);
+            showToast('识别失败，请检查控制台或 API 设置');
+        } finally {
+            stickerAiRecognizeBtn.disabled = false;
+            stickerAiRecognizeBtn.textContent = '识别画面描述';
+        }
+    });
+
+    // 批量智能识别
+    batchRecognizeBtn.addEventListener('click', async () => {
+        if (selectedStickerIds.size === 0) return;
+        
+        let apiConfig = db.apiSettings;
+        
+        const {url, key, model, provider} = apiConfig;
+        if (!url || !key || !model) {
+            showToast('请先配置 API');
+            return;
+        }
+
+        const idsArray = Array.from(selectedStickerIds);
+        
+        if (!confirm(`准备对选中的 ${idsArray.length} 个表情包进行画面识别。\n这会调用视觉大模型并消耗 Token。\n识别过程中请勿刷新页面，确定要继续吗？`)) {
+            return;
+        }
+
+        isBatchRecognizing = true;
+        cancelBatchRecognizeFlag = false;
+        batchRecognizeModal.classList.add('visible');
+        batchRecognizeText.textContent = `准备开始 (0/${idsArray.length})`;
+        
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < idsArray.length; i++) {
+            if (cancelBatchRecognizeFlag) {
+                break;
+            }
+            
+            batchRecognizeText.textContent = `处理中: 第 ${i+1} 个 / 共 ${idsArray.length} 个`;
+            
+            const stickerId = idsArray[i];
+            const sticker = db.myStickers.find(s => s.id === stickerId);
+            
+            if (!sticker || !sticker.data) {
+                failCount++;
+                continue;
+            }
+
+            // 如果已经有描述且不是空，则跳过（防止误覆盖用户自己写的）
+            if (sticker.description && sticker.description.trim() !== '') {
+                // 如果想要强制覆盖，可以在这里修改逻辑，但稳妥起见，有内容就不覆盖
+                successCount++; // 算作成功，因为已经有描述了
+                continue;
+            }
+
+            try {
+                const description = await recognizeImageContent(sticker.data, apiConfig);
+                if (description) {
+                    sticker.description = description;
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+                
+                // 每处理一个就保存一次，防止刷新丢失进度
+                await saveData(); 
+            } catch (error) {
+                console.error(`表情 ${sticker.name} 识别失败:`, error);
+                failCount++;
+            }
+            
+            // 稍微停顿一下，防止并发太高被 API 限制
+            if (i < idsArray.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+        }
+        
+        isBatchRecognizing = false;
+        batchRecognizeModal.classList.remove('visible');
+        
+        if (cancelBatchRecognizeFlag) {
+            showToast(`已中止。成功: ${successCount}, 失败或跳过: ${failCount}`);
+        } else {
+            showToast(`批量识别完成。成功: ${successCount}, 失败或跳过: ${failCount}`);
+            // 退出管理模式
+            exitStickerManageMode();
+        }
+    });
+
+    cancelBatchRecognizeBtn.addEventListener('click', () => {
+        if (isBatchRecognizing) {
+            cancelBatchRecognizeFlag = true;
+            cancelBatchRecognizeBtn.textContent = '正在中止...';
+            cancelBatchRecognizeBtn.disabled = true;
+        }
+    });
+
+    // 通用的调用 API 识别图片的函数
+    async function recognizeImageContent(imageData, apiConfig) {
+        let {url, key, model, provider} = apiConfig;
+        if (url.endsWith('/')) url = url.slice(0, -1);
+
+        // 如果是 HTTP 链接，为了兼容更多 API，尝试将其转换为 base64（对齐聊天里发图的效果）
+        let processedImageData = imageData;
+        if (imageData.startsWith('http')) {
+            try {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                processedImageData = await new Promise((resolve, reject) => {
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        // 控制分辨率，防止 base64 过长导致请求体积过大
+                        let w = img.naturalWidth;
+                        let h = img.naturalHeight;
+                        const max_size = 512;
+                        if (w > max_size || h > max_size) {
+                            const ratio = Math.min(max_size / w, max_size / h);
+                            w = Math.floor(w * ratio);
+                            h = Math.floor(h * ratio);
+                        }
+                        canvas.width = w;
+                        canvas.height = h;
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    };
+                    img.onerror = () => reject(new Error('跨域或加载失败'));
+                    img.src = imageData;
+                });
+            } catch (e) {
+                console.warn('[sticker recognize] 图片转base64失败，将退回使用原始URL:', e);
+            }
+        }
+
+        const prompt = "请用一句话简短地描述这张表情包图片的画面内容，包括人物动作、表情和任何带有的文字。请将描述内容包裹在 <image_description> 和 </image_description> 标签内，不要输出其他废话。";
+        
+        let requestBody;
+        if (provider === 'gemini') {
+            const parts = [{text: prompt}];
+            const match = processedImageData.match(/^data:(image\/(.+));base64,(.*)$/);
+            if (match) {
+                parts.push({inline_data: {mime_type: match[1], data: match[3]}});
+            } else if (processedImageData.startsWith('http')) {
+                // 如果转 base64 失败，依然是 http 链接，由于 Gemini 可能不认 URL 参数，只能拼入文本
+                parts.push({text: `图片地址: ${processedImageData}`});
+            }
+            requestBody = {
+                contents: [{role: 'user', parts: parts}],
+                generationConfig: { temperature: 0.2 }
+            };
+        } else {
+            const content = [{type: 'text', text: prompt}];
+            content.push({type: 'image_url', image_url: {url: processedImageData}});
+            requestBody = {
+                model: model,
+                messages: [{role: 'user', content: content}],
+                temperature: 0.2
+            };
+        }
+
+        const endpoint = (provider === 'gemini') ? `${url}/v1beta/models/${model}:generateContent?key=${getRandomValue(key)}` : `${url}/v1/chat/completions`;
+        const headers = (provider === 'gemini') ? {'Content-Type': 'application/json'} : {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${key}`
+        };
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        
+        const result = await response.json();
+        let description = "";
+        if (provider === 'gemini') {
+            description = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } else {
+            description = result.choices[0].message.content;
+        }
+
+        if (description) {
+            const match = description.match(/<image_description>([\s\S]*?)<\/image_description>/);
+            if (match) {
+                return match[1].trim();
+            } else {
+                return description.trim();
+            }
+        }
+        return null;
+    }
 
     // 分类管理功能
     menuCategoryManageBtn.addEventListener('click', () => {
@@ -539,12 +776,13 @@ async function setupStickerSystem() {
         e.preventDefault();
         const name = stickerNameInput.value.trim();
         const group = stickerGroupInput.value.trim();
+        const description = stickerDescInput.value.trim();
         const id = stickerEditIdInput.value;
         const previewImg = stickerPreview.querySelector('img');
         const data = previewImg ? previewImg.src : null;
         if (!name || !data) return showToast('请填写完整');
         
-        const stickerData = { name, data, group, lastUsedTime: Date.now() };
+        const stickerData = { name, data, group, description, lastUsedTime: Date.now() };
         
         if (id) {
             const index = db.myStickers.findIndex(s => s.id === id);
@@ -631,7 +869,7 @@ async function setupStickerSystem() {
             const item = document.createElement('div');
             item.className = 'sticker-smart-match-item';
             item.title = sticker.name;
-            item.innerHTML = `<img src="${sticker.data}" alt="${sticker.name}">`;
+            item.innerHTML = `<img src="${sticker.data}" alt="${sticker.name}"><span class="sticker-smart-match-name">${sticker.name}</span>`;
             item.addEventListener('click', () => {
                 sendSticker(sticker);
                 smartMatchBar.style.display = 'none';
@@ -857,6 +1095,29 @@ function renderStickerGrid(searchQuery = '') {
         
         item.innerHTML = `<img src="${sticker.data}" alt="${sticker.name}"><span style="font-size:10px; margin-top:4px; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; text-align:center;">${sticker.name}</span>`;
 
+        // 长按触发编辑
+        let touchTimer = null;
+        const startPress = () => {
+            if (isStickerManageMode) return;
+            touchTimer = setTimeout(() => {
+                openEditStickerModal(sticker);
+            }, 500); // 500ms 长按
+        };
+        const cancelPress = () => {
+            if (touchTimer) clearTimeout(touchTimer);
+        };
+        
+        item.addEventListener('touchstart', startPress, {passive: true});
+        item.addEventListener('touchend', cancelPress);
+        item.addEventListener('touchmove', cancelPress);
+        
+        item.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // 仅响应左键
+            startPress();
+        });
+        item.addEventListener('mouseup', cancelPress);
+        item.addEventListener('mouseleave', cancelPress);
+
         item.addEventListener('click', () => {
             if (isStickerManageMode) {
                 if (selectedStickerIds.has(sticker.id)) {
@@ -879,11 +1140,68 @@ function renderStickerGrid(searchQuery = '') {
     });
 }
 
+// 供内部调用打开编辑弹窗
+function openEditStickerModal(sticker) {
+    const addStickerModal = document.getElementById('add-sticker-modal');
+    const addStickerModalTitle = document.getElementById('add-sticker-modal-title');
+    const stickerNameInput = document.getElementById('sticker-name');
+    const stickerGroupInput = document.getElementById('sticker-group');
+    const stickerDescInput = document.getElementById('sticker-description');
+    const stickerEditIdInput = document.getElementById('sticker-edit-id');
+    const stickerPreview = document.getElementById('sticker-preview');
+    const stickerUrlInput = document.getElementById('sticker-url-input');
+
+    addStickerModalTitle.textContent = '编辑表情包';
+    stickerEditIdInput.value = sticker.id;
+    stickerNameInput.value = sticker.name;
+    stickerGroupInput.value = sticker.group || '';
+    stickerDescInput.value = sticker.description || '';
+    stickerPreview.innerHTML = `<img src="${sticker.data}" alt="预览">`;
+    stickerUrlInput.value = '';
+    stickerUrlInput.disabled = true; // 编辑时通常不改 URL
+    
+    // 如果在面板里点击，就收起面板
+    const stickerMenuActionSheet = document.getElementById('sticker-menu-actionsheet');
+    if(stickerMenuActionSheet) stickerMenuActionSheet.classList.remove('visible');
+    
+    addStickerModal.classList.add('visible');
+}
+
 function handleStickerLongPress(stickerId) {
     if (isStickerManageMode) return;
     clearTimeout(longPressTimer);
     currentStickerActionTarget = stickerId;
     document.getElementById('sticker-actionsheet').classList.add('visible');
+}
+
+// （废弃）原长按菜单里的编辑按钮监听器，保留以防有别的地方调用
+const editStickerBtn = document.getElementById('edit-sticker-btn');
+if (editStickerBtn) {
+    editStickerBtn.addEventListener('click', () => {
+        document.getElementById('sticker-actionsheet').classList.remove('visible');
+        if (!currentStickerActionTarget) return;
+        const sticker = db.myStickers.find(s => s.id === currentStickerActionTarget);
+        if (sticker) {
+            openEditStickerModal(sticker);
+        }
+    });
+}
+
+// （废弃）原长按菜单里的删除按钮监听器
+const deleteStickerBtn = document.getElementById('delete-sticker-btn');
+if (deleteStickerBtn) {
+    deleteStickerBtn.addEventListener('click', async () => {
+        document.getElementById('sticker-actionsheet').classList.remove('visible');
+        if (!currentStickerActionTarget) return;
+        if (confirm('确定要彻底删除该表情吗？')) {
+            await dexieDB.myStickers.delete(currentStickerActionTarget);
+            db.myStickers = db.myStickers.filter(s => s.id !== currentStickerActionTarget);
+            await saveData();
+            renderStickerCategories();
+            renderStickerGrid();
+            showToast('表情已删除');
+        }
+    });
 }
 
 async function sendSticker(sticker) {
@@ -896,11 +1214,17 @@ async function sendSticker(sticker) {
     const myName = (currentChatType === 'private') ? chat.myName : chat.me.nickname;
     
     const messageContentForAI = `[${myName}发送的表情包：${sticker.name}]`;
+    const parts = [{type: 'text', text: messageContentForAI}];
+    
+    if (chat && chat.stickerImageRecognitionEnabled && sticker.data) {
+        parts.push({type: 'image', data: sticker.data});
+    }
+
     const message = {
         id: `msg_${Date.now()}`,
         role: 'user',
         content: messageContentForAI,
-        parts: [{type: 'text', text: messageContentForAI}],
+        parts: parts,
         timestamp: Date.now(),
         stickerData: sticker.data 
     };

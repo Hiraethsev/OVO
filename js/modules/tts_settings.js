@@ -42,82 +42,162 @@ const TTSSettings = {
         }
     },
 
-    // 加载 TTS 全局配置（角色 + 用户）
-    loadSettings: function() {
-        try {
-            const config = MinimaxTTSService.config;
-            const enabledInput = document.getElementById('minimax-tts-enabled');
-            const groupIdInput = document.getElementById('minimax-group-id');
-            const apiKeyInput = document.getElementById('minimax-api-key');
-            const domainSelect = document.getElementById('minimax-domain');
-            const modelSelect = document.getElementById('minimax-tts-model');
-            if (enabledInput) enabledInput.checked = config.enabled || false;
-            if (groupIdInput) groupIdInput.value = config.groupId || '';
-            if (apiKeyInput) apiKeyInput.value = config.apiKey || '';
-            if (domainSelect) domainSelect.value = config.domain || 'api.minimaxi.chat';
-            if (modelSelect) modelSelect.value = config.model || 'speech-2.8-hd';
+        // 加载 TTS 全局配置（角色 + 用户）
+        loadSettings: function() {
+            try {
+                const config = MinimaxTTSService.config;
+                const enabledInput = document.getElementById('minimax-tts-enabled');
+                const providerSelect = document.getElementById('tts-provider');
+                const groupIdInput = document.getElementById('minimax-group-id');
+                const apiKeyInput = document.getElementById('minimax-api-key');
+                const domainSelect = document.getElementById('minimax-domain');
+                const modelSelect = document.getElementById('minimax-tts-model');
+                
+                const volcengineAppIdInput = document.getElementById('volcengine-app-id');
+                const volcengineAccessTokenInput = document.getElementById('volcengine-access-token');
+                const volcengineClusterInput = document.getElementById('volcengine-cluster');
 
-            const userConfig = MinimaxTTSService.userConfig;
-            const userEnabledInput = document.getElementById('minimax-user-tts-enabled');
-            const userGroupIdInput = document.getElementById('minimax-user-group-id');
-            const userApiKeyInput = document.getElementById('minimax-user-api-key');
-            const userDomainSelect = document.getElementById('minimax-user-domain');
-            const userModelSelect = document.getElementById('minimax-user-tts-model');
-            if (userEnabledInput) userEnabledInput.checked = userConfig.enabled || false;
-            if (userGroupIdInput) userGroupIdInput.value = userConfig.groupId || '';
-            if (userApiKeyInput) userApiKeyInput.value = userConfig.apiKey || '';
-            if (userDomainSelect) userDomainSelect.value = userConfig.domain || 'api.minimaxi.chat';
-            if (userModelSelect) userModelSelect.value = userConfig.model || 'speech-2.8-hd';
-        } catch (err) {
-            console.error('[TTSSettings] 加载设置失败:', err);
-        }
-    },
+                if (enabledInput) enabledInput.checked = config.enabled || false;
+                if (providerSelect) {
+                    providerSelect.value = config.provider || 'minimax';
+                    this.toggleProviderConfig('char', config.provider || 'minimax');
+                    providerSelect.addEventListener('change', (e) => this.toggleProviderConfig('char', e.target.value));
+                }
 
-    // 保存 TTS 全局配置（角色 + 用户）
-    saveTTSConfig: function() {
-        try {
-            const enabledInput = document.getElementById('minimax-tts-enabled');
-            const groupIdInput = document.getElementById('minimax-group-id');
-            const apiKeyInput = document.getElementById('minimax-api-key');
-            const domainSelect = document.getElementById('minimax-domain');
-            const modelSelect = document.getElementById('minimax-tts-model');
-            const config = {
-                enabled: enabledInput?.checked || false,
-                groupId: groupIdInput?.value?.trim() || '',
-                apiKey: apiKeyInput?.value?.trim() || '',
-                domain: domainSelect?.value || 'api.minimaxi.chat',
-                model: modelSelect?.value || 'speech-2.8-hd'
-            };
-            if (config.enabled && (!config.groupId || !config.apiKey)) {
-                showToast('请填写完整的角色 TTS GroupId 和 API Key');
-                return;
+                if (groupIdInput) groupIdInput.value = config.groupId || '';
+                if (apiKeyInput) apiKeyInput.value = config.apiKey || '';
+                if (domainSelect) domainSelect.value = config.domain || 'api.minimaxi.chat';
+                if (modelSelect) modelSelect.value = config.model || 'speech-2.8-hd';
+
+                if (volcengineAppIdInput) volcengineAppIdInput.value = config.volcengineAppId || '';
+                if (volcengineAccessTokenInput) volcengineAccessTokenInput.value = config.volcengineAccessToken || '';
+                if (volcengineClusterInput) volcengineClusterInput.value = config.volcengineCluster || 'volcano_tts';
+
+                const userConfig = MinimaxTTSService.userConfig;
+                const userEnabledInput = document.getElementById('minimax-user-tts-enabled');
+                const userProviderSelect = document.getElementById('user-tts-provider');
+                const userGroupIdInput = document.getElementById('minimax-user-group-id');
+                const userApiKeyInput = document.getElementById('minimax-user-api-key');
+                const userDomainSelect = document.getElementById('minimax-user-domain');
+                const userModelSelect = document.getElementById('minimax-user-tts-model');
+
+                const volcengineUserAppIdInput = document.getElementById('volcengine-user-app-id');
+                const volcengineUserAccessTokenInput = document.getElementById('volcengine-user-access-token');
+                const volcengineUserClusterInput = document.getElementById('volcengine-user-cluster');
+
+                if (userEnabledInput) userEnabledInput.checked = userConfig.enabled || false;
+                if (userProviderSelect) {
+                    userProviderSelect.value = userConfig.provider || 'minimax';
+                    this.toggleProviderConfig('user', userConfig.provider || 'minimax');
+                    userProviderSelect.addEventListener('change', (e) => this.toggleProviderConfig('user', e.target.value));
+                }
+
+                if (userGroupIdInput) userGroupIdInput.value = userConfig.groupId || '';
+                if (userApiKeyInput) userApiKeyInput.value = userConfig.apiKey || '';
+                if (userDomainSelect) userDomainSelect.value = userConfig.domain || 'api.minimaxi.chat';
+                if (userModelSelect) userModelSelect.value = userConfig.model || 'speech-2.8-hd';
+
+                if (volcengineUserAppIdInput) volcengineUserAppIdInput.value = userConfig.volcengineAppId || '';
+                if (volcengineUserAccessTokenInput) volcengineUserAccessTokenInput.value = userConfig.volcengineAccessToken || '';
+                if (volcengineUserClusterInput) volcengineUserClusterInput.value = userConfig.volcengineCluster || 'volcano_tts';
+            } catch (err) {
+                console.error('[TTSSettings] 加载设置失败:', err);
             }
-            MinimaxTTSService.saveConfig(config);
+        },
 
-            const userEnabledInput = document.getElementById('minimax-user-tts-enabled');
-            const userGroupIdInput = document.getElementById('minimax-user-group-id');
-            const userApiKeyInput = document.getElementById('minimax-user-api-key');
-            const userDomainSelect = document.getElementById('minimax-user-domain');
-            const userModelSelect = document.getElementById('minimax-user-tts-model');
-            const userConfig = {
-                enabled: userEnabledInput?.checked || false,
-                groupId: userGroupIdInput?.value?.trim() || '',
-                apiKey: userApiKeyInput?.value?.trim() || '',
-                domain: userDomainSelect?.value || 'api.minimaxi.chat',
-                model: userModelSelect?.value || 'speech-2.8-hd'
-            };
-            if (userConfig.enabled && (!userConfig.groupId || !userConfig.apiKey)) {
-                showToast('请填写完整的用户 TTS GroupId 和 API Key');
-                return;
+        toggleProviderConfig: function(type, provider) {
+            const prefix = type === 'user' ? 'minimax-user-' : 'minimax-';
+            const volcPrefix = type === 'user' ? 'volcengine-user-' : 'volcengine-';
+            
+            const minimaxWrap = document.getElementById(`${prefix}tts-config-wrap`);
+            const volcengineWrap = document.getElementById(`${volcPrefix}tts-config-wrap`);
+
+            if (provider === 'volcengine') {
+                if (minimaxWrap) minimaxWrap.style.display = 'none';
+                if (volcengineWrap) volcengineWrap.style.display = 'block';
+            } else {
+                if (minimaxWrap) minimaxWrap.style.display = 'block';
+                if (volcengineWrap) volcengineWrap.style.display = 'none';
             }
-            MinimaxTTSService.saveUserConfig(userConfig);
+        },
 
-            showToast('TTS 配置已保存');
-        } catch (err) {
-            console.error('[TTSSettings] 保存配置失败:', err);
-            showToast('保存失败');
-        }
-    },
+        // 保存 TTS 全局配置（角色 + 用户）
+        saveTTSConfig: function() {
+            try {
+                const enabledInput = document.getElementById('minimax-tts-enabled');
+                const providerSelect = document.getElementById('tts-provider');
+                const groupIdInput = document.getElementById('minimax-group-id');
+                const apiKeyInput = document.getElementById('minimax-api-key');
+                const domainSelect = document.getElementById('minimax-domain');
+                const modelSelect = document.getElementById('minimax-tts-model');
+                
+                const volcengineAppIdInput = document.getElementById('volcengine-app-id');
+                const volcengineAccessTokenInput = document.getElementById('volcengine-access-token');
+                const volcengineClusterInput = document.getElementById('volcengine-cluster');
+
+                const config = {
+                    enabled: enabledInput?.checked || false,
+                    provider: providerSelect?.value || 'minimax',
+                    groupId: groupIdInput?.value?.trim() || '',
+                    apiKey: apiKeyInput?.value?.trim() || '',
+                    domain: domainSelect?.value || 'api.minimaxi.chat',
+                    model: modelSelect?.value || 'speech-2.8-hd',
+                    volcengineAppId: volcengineAppIdInput?.value?.trim() || '',
+                    volcengineAccessToken: volcengineAccessTokenInput?.value?.trim() || '',
+                    volcengineCluster: volcengineClusterInput?.value?.trim() || 'volcano_tts'
+                };
+                
+                if (config.enabled) {
+                    if (config.provider === 'volcengine' && (!config.volcengineAppId || !config.volcengineAccessToken)) {
+                        showToast('请填写完整的角色 Volcengine TTS 配置');
+                        return;
+                    } else if (config.provider === 'minimax' && (!config.groupId || !config.apiKey)) {
+                        showToast('请填写完整的角色 Minimax TTS GroupId 和 API Key');
+                        return;
+                    }
+                }
+                MinimaxTTSService.saveConfig(config);
+    
+                const userEnabledInput = document.getElementById('minimax-user-tts-enabled');
+                const userProviderSelect = document.getElementById('user-tts-provider');
+                const userGroupIdInput = document.getElementById('minimax-user-group-id');
+                const userApiKeyInput = document.getElementById('minimax-user-api-key');
+                const userDomainSelect = document.getElementById('minimax-user-domain');
+                const userModelSelect = document.getElementById('minimax-user-tts-model');
+                
+                const volcengineUserAppIdInput = document.getElementById('volcengine-user-app-id');
+                const volcengineUserAccessTokenInput = document.getElementById('volcengine-user-access-token');
+                const volcengineUserClusterInput = document.getElementById('volcengine-user-cluster');
+
+                const userConfig = {
+                    enabled: userEnabledInput?.checked || false,
+                    provider: userProviderSelect?.value || 'minimax',
+                    groupId: userGroupIdInput?.value?.trim() || '',
+                    apiKey: userApiKeyInput?.value?.trim() || '',
+                    domain: userDomainSelect?.value || 'api.minimaxi.chat',
+                    model: userModelSelect?.value || 'speech-2.8-hd',
+                    volcengineAppId: volcengineUserAppIdInput?.value?.trim() || '',
+                    volcengineAccessToken: volcengineUserAccessTokenInput?.value?.trim() || '',
+                    volcengineCluster: volcengineUserClusterInput?.value?.trim() || 'volcano_tts'
+                };
+
+                if (userConfig.enabled) {
+                    if (userConfig.provider === 'volcengine' && (!userConfig.volcengineAppId || !userConfig.volcengineAccessToken)) {
+                        showToast('请填写完整的用户 Volcengine TTS 配置');
+                        return;
+                    } else if (userConfig.provider === 'minimax' && (!userConfig.groupId || !userConfig.apiKey)) {
+                        showToast('请填写完整的用户 Minimax TTS GroupId 和 API Key');
+                        return;
+                    }
+                }
+                MinimaxTTSService.saveUserConfig(userConfig);
+    
+                showToast('TTS 配置已保存');
+            } catch (err) {
+                console.error('[TTSSettings] 保存配置失败:', err);
+                showToast('保存失败');
+            }
+        },
 
     // 测试 TTS 播放
     testTTS: async function() {
@@ -137,7 +217,8 @@ const TTSSettings = {
             showToast('🔊 正在测试 TTS...');
 
             const testText = '你好，这是一个语音合成测试。Hello, this is a text-to-speech test.';
-            const testVoiceId = 'female-shaonv'; // 默认测试音色
+            const isVolc = MinimaxTTSService.config.provider === 'volcengine';
+            const testVoiceId = isVolc ? 'BV001_streaming' : 'female-shaonv'; // 默认测试音色
 
             await MinimaxTTSService.synthesizeAndPlay(testText, testVoiceId, 'auto');
             showToast('✅ TTS 测试成功！');

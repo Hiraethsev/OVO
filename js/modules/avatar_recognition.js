@@ -106,12 +106,11 @@
                 var y2 = Math.round(h * Math.max(0, Math.min(100, y2Pct)) / 100);
                 var sw = Math.max(1, x2 - x1);
                 var sh = Math.max(1, y2 - y1);
-                var size = Math.max(sw, sh, 64);
                 var canvas = document.createElement('canvas');
-                canvas.width = size;
-                canvas.height = size;
+                canvas.width = sw;
+                canvas.height = sh;
                 var ctx = canvas.getContext('2d');
-                ctx.drawImage(img, x1, y1, sw, sh, 0, 0, size, size);
+                ctx.drawImage(img, x1, y1, sw, sh, 0, 0, sw, sh);
                 try {
                     resolve(canvas.toDataURL('image/jpeg', 0.85));
                 } catch (e) {
@@ -286,8 +285,8 @@
                 body += '已收藏情头: ' + coupleLib.slice(0, 8).map(function (c) { return c.name + (c.description ? '（' + (c.description.length > 15 ? c.description.slice(0, 15) + '…' : c.description) + '）' : ''); }).join('、') + '\n';
             }
             body += '当用户发来图片时，你可判断是否适合作为情头收藏。请区分：用 [avatar-collect] 是收藏为你的个人头像；用下面指令是收藏为情头（成对）。\n';
-            body += '1) 用户发来两张图（已裁好或单人图）：直接配对。格式: [couple-avatar-collect: 情头名称 | 描述 | user:1 char:2]\n';
-            body += '   表示第1张给用户用、第2张给你用；也可写 user:2 char:1 等，按图片内容决定谁用哪张。\n';
+            body += '1) 用户发来两张图（已裁好或单人图）：直接配对，【绝对不要使用裁剪指令】。格式: [couple-avatar-collect: 情头名称 | 描述 | user:1 char:2]\n';
+            body += '   表示第1张给用户用、第2张给你用。收集后若想立即换上，请紧跟着写 [couple-avatar-apply: 情头名称]。\n';
             body += '2) 用户发来一张图且图中有两人：可裁剪为重叠式情头。格式: [couple-avatar-crop: 情头名称 | 描述 | mode:overlap | user:0,0,55,100 char:45,0,100,100]\n';
             body += '   坐标为占整图宽高的百分比：左,上,右,下(0-100)。用户那张以左半为主稍带一点右，你的那张以右半为主稍带一点左，这样能看出关联。使用 [couple-avatar-crop] 后系统会自动换上这对情头，无需再写 [couple-avatar-apply]。\n';
             body += '3) 用户发来一张图适合边角料情头（如一人抱玩偶）：用户用原图，你用局部。格式: [couple-avatar-crop: 情头名称 | 描述 | mode:corner | user:0,0,100,100 char:30,40,80,90]\n';

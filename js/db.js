@@ -177,8 +177,26 @@ const globalSettingKeys = [
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
-const appVersion = "4.25";
+const appVersion = "4.26";
 const updateLog = [
+    {
+        version: "4.26",
+        date: "2026-04-26",
+        notes: [
+            "4.26更新：",
+            "1.新增用动态户生日",
+            "2.新增角色可以识别用户的表情包",
+            "3.新增角色在发送的时候也可以识别表情包的样子",
+            "4.回退之前的聊天模式，失忆应该好了吧！",
+            "5.新增联网按钮，这样模型就可以自己上网去了，如果你要问我为什么不能直接用联网模型，因为我喜欢做点无厘头的HHH",
+            "6.新增现在线下也可以更新状态栏了",
+            "7.新增接入豆包语音，不过我没试过能不能用，有问题明天再修复吧",
+            "8.新增群聊可以移除成员",
+            "9.新增群聊双语可以选择生效",
+            "",
+            "优化了一些其他部分。太细了我不写了"
+        ]
+    },
     {
         version: "4.25",
         date: "2026-04-25",

@@ -28,19 +28,31 @@ const MinimaxTTSService = {
     // 角色 TTS 配置（从 localStorage 加载）
     config: {
         enabled: false,
+        provider: 'minimax', // 'minimax' or 'volcengine'
+        // Minimax
         groupId: '',
         apiKey: '',
         domain: 'api.minimaxi.chat',
-        model: 'speech-2.8-hd'
+        model: 'speech-2.8-hd',
+        // Volcengine
+        volcengineAppId: '',
+        volcengineAccessToken: '',
+        volcengineCluster: 'volcano_tts'
     },
 
     // 用户 TTS 配置（独立存储）
     userConfig: {
         enabled: false,
+        provider: 'minimax',
+        // Minimax
         groupId: '',
         apiKey: '',
         domain: 'api.minimaxi.chat',
-        model: 'speech-2.8-hd'
+        model: 'speech-2.8-hd',
+        // Volcengine
+        volcengineAppId: '',
+        volcengineAccessToken: '',
+        volcengineCluster: 'volcano_tts'
     },
 
     // 音频缓存 (文本+音色ID作为key，用户缓存加 user_ 前缀)
@@ -158,16 +170,20 @@ const MinimaxTTSService = {
 
     // 检查角色 TTS 配置是否完整
     isConfigured: function() {
-        return this.config.enabled &&
-               this.config.groupId &&
-               this.config.apiKey;
+        if (!this.config.enabled) return false;
+        if (this.config.provider === 'volcengine') {
+            return !!(this.config.volcengineAppId && this.config.volcengineAccessToken);
+        }
+        return !!(this.config.groupId && this.config.apiKey);
     },
 
-    // 检查用户 TTS 配置是否完整（仅当启用时要求 groupId/apiKey）
+    // 检查用户 TTS 配置是否完整（仅当启用时要求配置）
     isUserConfigured: function() {
-        return this.userConfig.enabled &&
-               this.userConfig.groupId &&
-               this.userConfig.apiKey;
+        if (!this.userConfig.enabled) return false;
+        if (this.userConfig.provider === 'volcengine') {
+            return !!(this.userConfig.volcengineAppId && this.userConfig.volcengineAccessToken);
+        }
+        return !!(this.userConfig.groupId && this.userConfig.apiKey);
     },
 
     // 合成语音。options.forUser === true 时使用用户 TTS 配置
@@ -192,74 +208,88 @@ const MinimaxTTSService = {
         }
 
         const speed = Math.min(2, Math.max(0.5, Number(options.speed) || 1));
+        const provider = cfg.provider || 'minimax';
 
-        // 检查缓存（用户与角色分开，语速参与 key）
-        const cacheKey = (forUser ? 'user_' : '') + `${cleanText}_${voiceId}_${language}_${speed}`;
+        // 检查缓存（提供商也作为 key 的一部分）
+        const cacheKey = (forUser ? 'user_' : '') + `${provider}_${cleanText}_${voiceId}_${language}_${speed}`;
         if (this.audioCache.has(cacheKey)) {
             console.log('[TTS] 使用缓存:', cacheKey);
             return this.audioCache.get(cacheKey);
         }
 
-        console.log('[TTS] 开始合成:', { forUser, text: cleanText, voiceId, language });
+        console.log('[TTS] 开始合成:', { forUser, provider, text: cleanText, voiceId, language });
 
         try {
-            const url = `https://${cfg.domain}/v1/t2a_v2?GroupId=${encodeURIComponent(cfg.groupId)}`;
-            const requestBody = {
-                model: cfg.model,
-                text: cleanText,
-                stream: false,
-                voice_setting: {
-                    voice_id: voiceId,
-                    speed: speed,
-                    vol: 1,
-                    pitch: 0
-                },
-                audio_setting: {
-                    sample_rate: 32000,
-                    bitrate: 128000,
-                    format: 'mp3',
-                    channel: 1
-                }
-            };
-
-            if (language && language !== 'auto') {
-                const apiValue = LANGUAGE_BOOST_MAP[language] || language;
-                requestBody.language_boost = apiValue;
-            }
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${cfg.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[TTS] API 错误:', response.status, errorText);
-                throw new Error(`API 请求失败: ${response.status}`);
-            }
-
-            const result = await response.json();
+            let audioUrl;
             
-            // ✅ 先检查 base_resp 状态码
-            if (result.base_resp && result.base_resp.status_code !== 0) {
-                console.error('[TTS] API 返回错误:', result.base_resp);
-                throw new Error(`API 错误: ${result.base_resp.status_msg || '未知错误'}`);
-            }
+            if (provider === 'volcengine') {
+                // 调用豆包 TTS 服务
+                if (typeof window.VolcengineTTSService === 'undefined') {
+                    throw new Error('Volcengine TTS 服务未加载');
+                }
+                const volcengineConfig = {
+                    appId: cfg.volcengineAppId,
+                    accessToken: cfg.volcengineAccessToken,
+                    cluster: cfg.volcengineCluster
+                };
+                audioUrl = await window.VolcengineTTSService.synthesize(text, voiceId, volcengineConfig, { speed });
+            } else {
+                // 默认使用 Minimax TTS 服务
+                const url = `https://${cfg.domain}/v1/t2a_v2?GroupId=${encodeURIComponent(cfg.groupId)}`;
+                const requestBody = {
+                    model: cfg.model,
+                    text: cleanText,
+                    stream: false,
+                    voice_setting: {
+                        voice_id: voiceId,
+                        speed: speed,
+                        vol: 1,
+                        pitch: 0
+                    },
+                    audio_setting: {
+                        sample_rate: 32000,
+                        bitrate: 128000,
+                        format: 'mp3',
+                        channel: 1
+                    }
+                };
 
-            // ✅ 再检查 data.audio
-            if (!result || !result.data || !result.data.audio) {
-                console.error('[TTS] 返回格式错误:', result);
-                throw new Error('API 返回格式错误');
-            }
+                if (language && language !== 'auto') {
+                    const apiValue = LANGUAGE_BOOST_MAP[language] || language;
+                    requestBody.language_boost = apiValue;
+                }
 
-            // ✅ 将 HEX 音频数据转为 Blob（官方返回的是 hex 编码，不是 base64）
-            const audioData = result.data.audio;
-            const blob = this.hexToBlob(audioData, 'audio/mpeg');
-            const audioUrl = URL.createObjectURL(blob);
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${cfg.apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[TTS] API 错误:', response.status, errorText);
+                    throw new Error(`API 请求失败: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.base_resp && result.base_resp.status_code !== 0) {
+                    console.error('[TTS] API 返回错误:', result.base_resp);
+                    throw new Error(`API 错误: ${result.base_resp.status_msg || '未知错误'}`);
+                }
+
+                if (!result || !result.data || !result.data.audio) {
+                    console.error('[TTS] 返回格式错误:', result);
+                    throw new Error('API 返回格式错误');
+                }
+
+                const audioData = result.data.audio;
+                const blob = this.hexToBlob(audioData, 'audio/mpeg');
+                audioUrl = URL.createObjectURL(blob);
+            }
 
             // 存入缓存
             this.audioCache.set(cacheKey, audioUrl);

@@ -637,7 +637,8 @@
                                 <span id="sticker-select-count" style="font-size: 14px; color: #666;">已选 0 项</span>
                             </div>
                             <div style="display: flex; gap: 10px;">
-                                <button class="btn btn-neutral btn-small" id="move-sticker-group-btn">移动分组</button>
+                                <button class="btn btn-secondary btn-small" id="batch-recognize-stickers-btn" title="批量 AI 识别">✨ 识别</button>
+                                <button class="btn btn-neutral btn-small" id="move-sticker-group-btn">移动</button>
                                 <button class="btn btn-danger btn-small" id="delete-selected-stickers-btn">删除</button>
                             </div>
                         </div>
@@ -1681,13 +1682,17 @@
                     </form>
 
                     <!-- 副API 1: 总结专用 -->
-                    <div class="kkt-group" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
-                        <div style="margin-bottom: 15px;">
-                            <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">总结专用 API（可选）</h3>
-                            <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后总结功能优先使用此配置</p>
+                    <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
+                        <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">总结专用 API（可选）</h3>
+                                <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后总结功能优先使用此配置</p>
+                            </div>
+                            <span class="collapsible-arrow">▼</span>
                         </div>
                         
-                        <div class="kkt-item">
+                        <div class="collapsible-content">
+                            <div class="kkt-item">
                             <div class="kkt-item-label">服务商</div>
                             <div class="kkt-item-control">
                                 <select id="summary-api-provider"
@@ -1785,16 +1790,21 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
                     </div>
 
                     <!-- 副API 2: 后台活动专用 -->
-                    <div class="kkt-group" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
-                        <div style="margin-bottom: 15px;">
-                            <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">后台活动专用 API（可选）</h3>
-                            <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后后台活动优先使用此配置</p>
+                    <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
+                        <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">后台活动专用 API（可选）</h3>
+                                <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后后台活动优先使用此配置</p>
+                            </div>
+                            <span class="collapsible-arrow">▼</span>
                         </div>
                         
-                        <div class="kkt-item">
+                        <div class="collapsible-content">
+                            <div class="kkt-item">
                             <div class="kkt-item-label">服务商</div>
                             <div class="kkt-item-control">
                                 <select id="background-api-provider"
@@ -1892,16 +1902,21 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
                     </div>
 
                     <!-- 副API 3: 补齐人设专用 -->
-                    <div class="kkt-group" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
-                        <div style="margin-bottom: 15px;">
-                            <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">补齐人设专用 API（可选）</h3>
-                            <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API。论坛好友开启「AI 补齐人设」后，优先使用此配置从对话中提取角色人设</p>
+                    <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
+                        <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">补齐人设专用 API（可选）</h3>
+                                <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API。论坛好友开启「AI 补齐人设」后，优先使用此配置从对话中提取角色人设</p>
+                            </div>
+                            <span class="collapsible-arrow">▼</span>
                         </div>
                         
-                        <div class="kkt-item">
+                        <div class="collapsible-content">
+                            <div class="kkt-item">
                             <div class="kkt-item-label">服务商</div>
                             <div class="kkt-item-control">
                                 <select id="supplementPersona-api-provider"
@@ -1998,16 +2013,21 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
                     </div>
 
                     <!-- 副API 4: 偷看手机专用 -->
-                    <div class="kkt-group" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
-                        <div style="margin-bottom: 15px;">
-                            <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">偷看手机专用 API（可选）</h3>
-                            <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后偷看手机功能优先使用此配置</p>
+                    <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
+                        <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">偷看手机专用 API（可选）</h3>
+                                <p style="font-size: 12px; color: #999; margin: 5px 0 0;">留空则使用主API，填写后偷看手机功能优先使用此配置</p>
+                            </div>
+                            <span class="collapsible-arrow">▼</span>
                         </div>
                         
-                        <div class="kkt-item">
+                        <div class="collapsible-content">
+                            <div class="kkt-item">
                             <div class="kkt-item-label">服务商</div>
                             <div class="kkt-item-control">
                                 <select id="peek-api-provider"
@@ -2104,6 +2124,7 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
                     </div>
 
                     <!-- NovelAI 生图 API 配置 -->
@@ -2129,22 +2150,6 @@
                                 <input type="password" id="novelai-token" autocomplete="new-password"
                                     placeholder="pst-..."
                                     style="text-align:right; border:none; background:transparent; width: 100%;">
-                            </div>
-                        </div>
-
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">采样器</div>
-                            <div class="kkt-item-control">
-                                <select id="novelai-sampler"
-                                    style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
-                                    <option value="k_euler">Euler</option>
-                                    <option value="k_euler_ancestral">Euler Ancestral</option>
-                                    <option value="k_dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
-                                    <option value="k_dpmpp_2m">DPM++ 2M</option>
-                                    <option value="k_dpmpp_sde">DPM++ SDE</option>
-                                    <option value="ddim_v3">DDIM</option>
-                                </select>
-                                <span class="kkt-arrow">›</span>
                             </div>
                         </div>
 
@@ -2222,50 +2227,95 @@
                         </div>
                         
                         <div class="kkt-item">
-                            <div class="kkt-item-label">Group ID</div>
+                            <div class="kkt-item-label">TTS 提供商</div>
                             <div class="kkt-item-control">
-                                <input type="text" id="minimax-group-id" autocomplete="off"
-                                    placeholder="输入 GroupId"
-                                    style="text-align:right; border:none; background:transparent; width: 100%;">
-                            </div>
-                        </div>
-                        
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">API Key</div>
-                            <div class="kkt-item-control">
-                                <input type="password" id="minimax-api-key" autocomplete="new-password"
-                                    placeholder="输入 API Key"
-                                    style="text-align:right; border:none; background:transparent; width: 100%;">
-                            </div>
-                        </div>
-                        
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">域名选择</div>
-                            <div class="kkt-item-control">
-                                <select id="minimax-domain"
+                                <select id="tts-provider"
                                     style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
-                                    <option value="api.minimaxi.chat">国际 (api.minimaxi.chat)</option>
-                                    <option value="api.minimaxi.com">国际 (api.minimaxi.com)</option>
-                                    <option value="api.minimax.chat">国内 (api.minimax.chat)</option>
+                                    <option value="minimax" selected>Minimax (海螺)</option>
+                                    <option value="volcengine">Volcengine (豆包)</option>
                                 </select>
                                 <span class="kkt-arrow">›</span>
                             </div>
                         </div>
-                        
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">TTS 模型</div>
-                            <div class="kkt-item-control">
-                                <select id="minimax-tts-model"
-                                    style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
-                                    <option value="speech-01">speech-01</option>
-                                    <option value="speech-02-turbo">speech-02-turbo</option>
-                                    <option value="speech-02-hd">speech-02-hd</option>
-                                    <option value="speech-2.6-turbo">speech-2.6-turbo</option>
-                                    <option value="speech-2.6-hd">speech-2.6-hd</option>
-                                    <option value="speech-2.8-turbo">speech-2.8-turbo</option>
-                                    <option value="speech-2.8-hd" selected>speech-2.8-hd (推荐)</option>
-                                </select>
-                                <span class="kkt-arrow">›</span>
+
+                        <!-- Minimax TTS 专属配置 -->
+                        <div id="minimax-tts-config-wrap">
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">Group ID</div>
+                                <div class="kkt-item-control">
+                                    <input type="text" id="minimax-group-id" autocomplete="off"
+                                        placeholder="输入 GroupId"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+                            
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">API Key</div>
+                                <div class="kkt-item-control">
+                                    <input type="password" id="minimax-api-key" autocomplete="new-password"
+                                        placeholder="输入 API Key"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+                            
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">域名选择</div>
+                                <div class="kkt-item-control">
+                                    <select id="minimax-domain"
+                                        style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                        <option value="api.minimaxi.chat">国际 (api.minimaxi.chat)</option>
+                                        <option value="api.minimaxi.com">国际 (api.minimaxi.com)</option>
+                                        <option value="api.minimax.chat">国内 (api.minimax.chat)</option>
+                                    </select>
+                                    <span class="kkt-arrow">›</span>
+                                </div>
+                            </div>
+                            
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">TTS 模型</div>
+                                <div class="kkt-item-control">
+                                    <select id="minimax-tts-model"
+                                        style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                        <option value="speech-01">speech-01</option>
+                                        <option value="speech-02-turbo">speech-02-turbo</option>
+                                        <option value="speech-02-hd">speech-02-hd</option>
+                                        <option value="speech-2.6-turbo">speech-2.6-turbo</option>
+                                        <option value="speech-2.6-hd">speech-2.6-hd</option>
+                                        <option value="speech-2.8-turbo">speech-2.8-turbo</option>
+                                        <option value="speech-2.8-hd" selected>speech-2.8-hd (推荐)</option>
+                                    </select>
+                                    <span class="kkt-arrow">›</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Volcengine TTS 专属配置 -->
+                        <div id="volcengine-tts-config-wrap" style="display: none;">
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">App ID</div>
+                                <div class="kkt-item-control">
+                                    <input type="text" id="volcengine-app-id" autocomplete="off"
+                                        placeholder="输入 App ID"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+                            
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">Access Token</div>
+                                <div class="kkt-item-control">
+                                    <input type="password" id="volcengine-access-token" autocomplete="new-password"
+                                        placeholder="输入 Access Token (Bearer)"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+                            
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">Cluster (集群)</div>
+                                <div class="kkt-item-control">
+                                    <input type="text" id="volcengine-cluster" autocomplete="off"
+                                        placeholder="如 volcano_tts" value="volcano_tts"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
                             </div>
                         </div>
                         
@@ -2331,50 +2381,93 @@
                                 </label>
                             </div>
                         </div>
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">Group ID</div>
-                            <div class="kkt-item-control">
-                                <input type="text" id="minimax-user-group-id" autocomplete="off"
-                                    placeholder="输入 GroupId"
-                                    style="text-align:right; border:none; background:transparent; width: 100%;">
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">用户 TTS 提供商</div>
+                                <div class="kkt-item-control">
+                                    <select id="user-tts-provider"
+                                        style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                        <option value="minimax" selected>Minimax (海螺)</option>
+                                        <option value="volcengine">Volcengine (豆包)</option>
+                                    </select>
+                                    <span class="kkt-arrow">›</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">API Key</div>
-                            <div class="kkt-item-control">
-                                <input type="password" id="minimax-user-api-key" autocomplete="new-password"
-                                    placeholder="输入 API Key"
-                                    style="text-align:right; border:none; background:transparent; width: 100%;">
+
+                            <div id="minimax-user-tts-config-wrap">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">Group ID</div>
+                                    <div class="kkt-item-control">
+                                        <input type="text" id="minimax-user-group-id" autocomplete="off"
+                                            placeholder="输入 GroupId"
+                                            style="text-align:right; border:none; background:transparent; width: 100%;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">API Key</div>
+                                    <div class="kkt-item-control">
+                                        <input type="password" id="minimax-user-api-key" autocomplete="new-password"
+                                            placeholder="输入 API Key"
+                                            style="text-align:right; border:none; background:transparent; width: 100%;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">域名选择</div>
+                                    <div class="kkt-item-control">
+                                        <select id="minimax-user-domain"
+                                            style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                            <option value="api.minimaxi.chat">国际 (api.minimaxi.chat)</option>
+                                            <option value="api.minimaxi.com">国际 (api.minimaxi.com)</option>
+                                            <option value="api.minimax.chat">国内 (api.minimax.chat)</option>
+                                        </select>
+                                        <span class="kkt-arrow">›</span>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">TTS 模型</div>
+                                    <div class="kkt-item-control">
+                                        <select id="minimax-user-tts-model"
+                                            style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                            <option value="speech-01">speech-01</option>
+                                            <option value="speech-02-turbo">speech-02-turbo</option>
+                                            <option value="speech-02-hd">speech-02-hd</option>
+                                            <option value="speech-2.6-turbo">speech-2.6-turbo</option>
+                                            <option value="speech-2.6-hd">speech-2.6-hd</option>
+                                            <option value="speech-2.8-turbo">speech-2.8-turbo</option>
+                                            <option value="speech-2.8-hd" selected>speech-2.8-hd (推荐)</option>
+                                        </select>
+                                        <span class="kkt-arrow">›</span>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">域名选择</div>
-                            <div class="kkt-item-control">
-                                <select id="minimax-user-domain"
-                                    style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
-                                    <option value="api.minimaxi.chat">国际 (api.minimaxi.chat)</option>
-                                    <option value="api.minimaxi.com">国际 (api.minimaxi.com)</option>
-                                    <option value="api.minimax.chat">国内 (api.minimax.chat)</option>
-                                </select>
-                                <span class="kkt-arrow">›</span>
+                            
+                            <div id="volcengine-user-tts-config-wrap" style="display: none;">
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">App ID</div>
+                                    <div class="kkt-item-control">
+                                        <input type="text" id="volcengine-user-app-id" autocomplete="off"
+                                            placeholder="输入 App ID"
+                                            style="text-align:right; border:none; background:transparent; width: 100%;">
+                                    </div>
+                                </div>
+                                
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">Access Token</div>
+                                    <div class="kkt-item-control">
+                                        <input type="password" id="volcengine-user-access-token" autocomplete="new-password"
+                                            placeholder="输入 Access Token (Bearer)"
+                                            style="text-align:right; border:none; background:transparent; width: 100%;">
+                                    </div>
+                                </div>
+                                
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">Cluster (集群)</div>
+                                    <div class="kkt-item-control">
+                                        <input type="text" id="volcengine-user-cluster" autocomplete="off"
+                                            placeholder="如 volcano_tts" value="volcano_tts"
+                                            style="text-align:right; border:none; background:transparent; width: 100%;">
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="kkt-item">
-                            <div class="kkt-item-label">TTS 模型</div>
-                            <div class="kkt-item-control">
-                                <select id="minimax-user-tts-model"
-                                    style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
-                                    <option value="speech-01">speech-01</option>
-                                    <option value="speech-02-turbo">speech-02-turbo</option>
-                                    <option value="speech-02-hd">speech-02-hd</option>
-                                    <option value="speech-2.6-turbo">speech-2.6-turbo</option>
-                                    <option value="speech-2.6-hd">speech-2.6-hd</option>
-                                    <option value="speech-2.8-turbo">speech-2.8-turbo</option>
-                                    <option value="speech-2.8-hd" selected>speech-2.8-hd (推荐)</option>
-                                </select>
-                                <span class="kkt-arrow">›</span>
-                            </div>
-                        </div>
                         <p style="font-size: 12px; color: #999; margin-top: 10px;">保存请点击上方「保存 TTS 配置」按钮</p>
                     </div>
                 </div>
@@ -3299,17 +3392,34 @@
             </div>
         </div>
 
+        <!-- Batch Recognize Progress Modal -->
+        <div id="batch-recognize-progress-modal" class="modal-overlay" style="z-index: 10005;">
+            <div class="modal-window" style="text-align: center; max-width: 300px;">
+                <h3>正在批量识别表情包</h3>
+                <div style="margin: 15px 0;">
+                    <div class="spinner" style="display: inline-block; border-top-color: var(--primary-color);"></div>
+                </div>
+                <div id="batch-recognize-progress-text" style="font-size: 14px; color: #666;">处理中... (0/0)</div>
+                <div style="margin-top: 20px;">
+                    <button id="cancel-batch-recognize-btn" class="btn btn-neutral" style="width: 100%;">终止</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Add Character Modal with Persona prefill support -->
         <div id="add-sticker-modal" class="modal-overlay">
-            <div class="modal-window">
+            <div class="modal-window" style="max-height: 85vh; overflow-y: auto;">
                 <h3 id="add-sticker-modal-title">添加新表情</h3>
                 <form id="add-sticker-form"><input type="hidden" id="sticker-edit-id">
                     <div id="sticker-preview"><span>预览</span></div>
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                        <button type="button" id="sticker-ai-recognize-btn" class="btn btn-small btn-secondary" style="padding: 4px 8px;">识别画面描述</button>
+                    </div>
                     <div class="form-group"><label for="sticker-name">表情名称</label><input type="text" id="sticker-name"
                             placeholder="如：开心" required></div>
                     <div class="form-group"><label for="sticker-group">分组名称</label><input type="text" id="sticker-group"
                             placeholder="如：猫猫组 (选填)"></div>
-
+                    <div class="form-group"><label for="sticker-description">画面描述 (发给AI看，选填)</label><textarea id="sticker-description" rows="2" placeholder="如：一个猫猫在哭泣"></textarea></div>
 
                     <div class="form-group"><label for="sticker-url-input">表情URL</label><input type="url"
                             id="sticker-url-input" placeholder="粘贴图片URL">
@@ -3317,7 +3427,10 @@
                     <p style="text-align:center; color:#888; margin: -10px 0 15px;">或</p><input type="file"
                         id="sticker-file-upload" accept="image/*" style="display:none;"><label for="sticker-file-upload"
                         class="btn btn-secondary" style="width:100%; margin-bottom: 20px;">从本地上传</label>
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-neutral" id="cancel-sticker-edit-btn" style="flex: 1;">取消</button>
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">保存</button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -3646,6 +3759,15 @@
                                         <!-- JS populate -->
                                     </div>
                                 </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">将表情包画面描述发给 AI<p style="font-size:12px;color:#999;margin:4px 0 0;">消耗 Token 提升 AI 发图准确率</p></div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-sticker-description-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 关联世界书 (移到我的信息前) -->
@@ -3678,6 +3800,22 @@
                                         <input type="text" id="setting-my-name" autocomplete="off"
                                             style="text-align:right; border:none; background:transparent;"
                                             placeholder="点击修改">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">我的生日</div>
+                                    <div class="kkt-item-control">
+                                        <input type="date" id="setting-my-birthday" autocomplete="off"
+                                            style="text-align:right; border:none; background:transparent;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">开启动态年龄<p style="font-size:12px;color:#999;margin:4px 0 0;">让角色知道你的年龄和生日</p></div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-my-enable-dynamic-age">
+                                            <span class="kkt-slider"></span>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="kkt-item" style="flex-direction:column; align-items:flex-start;">
@@ -3778,6 +3916,15 @@
                                     <div class="kkt-item-control">
                                         <label class="kkt-switch">
                                             <input type="checkbox" id="setting-sticker-smart-match">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">用户发送表情包识图</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-sticker-image-recognition-enabled">
                                             <span class="kkt-slider"></span>
                                         </label>
                                     </div>
@@ -4771,6 +4918,36 @@
 
                         <!-- 【拓展】Tab 内容 -->
                         <div id="setting-tab-ext" class="settings-tab-content">
+                            <!-- 联网搜索设置 -->
+                            <div class="kkt-group" style="margin-bottom:15px;">
+                                <div style="margin-bottom: 15px; padding-top: 5px; padding-left: 8px;">
+                                    <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">联网搜索</div>
+                                    <p style="font-size: 11px; color: #999; margin: 5px 0 0;">允许模型在回复时获取最新网络资讯</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">允许角色联网搜索</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-web-search-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item-hint" style="padding: 0 16px 12px; font-size: 12px; color: #8e8e93; line-height: 1.4;">
+                                    注意：此功能依赖您的 API 服务商是否支持网络搜索工具调用（如 Gemini 原生支持，部分第三方接口可能支持 <code>web_search</code> 工具）。
+                                </div>
+                                <div class="kkt-item" id="setting-char-web-search-payload-container" style="flex-direction: column; align-items: stretch; display: none;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                        <div class="kkt-item-label">自定义联网参数 (JSON 格式)</div>
+                                    </div>
+                                    <textarea id="setting-char-web-search-payload" rows="3" placeholder='例如: {"tools": [{"type": "web_search"}]}&#10;留空则使用内置兼容参数'
+                                        style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 8px; resize: vertical; font-size: 13px; box-sizing: border-box; font-family: monospace;"></textarea>
+                                    <p style="font-size: 12px; color: #999; margin-top: 5px; margin-bottom: 0;">
+                                        该内容将在请求大模型时直接合并到 Request Body 中。如果不清楚如何配置，请留空。
+                                    </p>
+                                </div>
+                            </div>
+
                             <!-- TTS 语音配置 -->
                             <div class="kkt-group">
                                 <div style="margin-bottom: 15px; padding-top: 5px; padding-left: 8px;">
@@ -5429,6 +5606,22 @@
                                         placeholder="点击修改">
                                 </div>
                             </div>
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">我的生日</div>
+                                <div class="kkt-item-control">
+                                    <input type="date" id="setting-group-my-birthday" autocomplete="off"
+                                        style="text-align:right; border:none; background:transparent;">
+                                </div>
+                            </div>
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">开启动态年龄<p style="font-size:12px;color:#999;margin:4px 0 0;">让群成员知道你的年龄和生日</p></div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="setting-group-my-enable-dynamic-age">
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
                             <div class="kkt-item" style="flex-direction:column; align-items:flex-start;">
                                 <div class="kkt-item-label" style="margin-bottom:8px;">我的人设</div>
                                 <textarea id="setting-group-my-persona"
@@ -5528,6 +5721,32 @@
                                     <span class="kkt-arrow">›</span>
                                 </div>
                             </div>
+                            <div class="kkt-item" id="setting-group-bilingual-members-container" style="display: none;">
+                                <div class="kkt-item-label">针对成员</div>
+                                <div class="kkt-item-control">
+                                    <button type="button" class="btn btn-small btn-secondary" id="setting-group-bilingual-members-btn">选择角色</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 针对双语成员选择弹窗 -->
+                        <div id="bilingual-char-select-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10001;align-items:center;justify-content:center;padding:20px;">
+                            <div style="background:#fff;border-radius:12px;width:90%;max-width:400px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+                                <div style="padding:16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="font-weight:600;font-size:16px;">选择针对角色</span>
+                                    <label style="font-size:14px;color:#333;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0;">
+                                        <input type="checkbox" id="bilingual-char-select-all" style="margin:0;"> 全选
+                                    </label>
+                                </div>
+                                <p style="font-size:12px;color:#888;padding:8px 16px 0;margin:0;">*如果不选任何角色，则对群内全员生效。</p>
+                                <div id="bilingual-char-list" style="flex:1;overflow-y:auto;padding:10px;min-height:200px;">
+                                    <!-- JS populated -->
+                                </div>
+                                <div style="padding:16px;border-top:1px solid #eee;display:flex;gap:10px;">
+                                    <button type="button" class="btn btn-neutral" id="bilingual-char-cancel-btn" style="flex:1;">取消</button>
+                                    <button type="button" class="btn btn-primary" id="bilingual-char-confirm-btn" style="flex:1;">确认</button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- 表情包设置分组 -->
@@ -5537,6 +5756,15 @@
                                 <div id="setting-group-sticker-groups-container"
                                     style="width:100%; max-height: 120px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 8px;">
                                     <!-- JS populate -->
+                                </div>
+                            </div>
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">将表情包画面描述发给 AI<p style="font-size:12px;color:#999;margin:4px 0 0;">消耗 Token 提升 AI 发图准确率</p></div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="setting-group-sticker-description-enabled">
+                                        <span class="kkt-slider"></span>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -5713,10 +5941,10 @@
                             </div>
                         </div>
 
+                        <button type="button" class="kkt-danger-btn" id="clear-group-chat-history-btn">清空聊天记录</button>
                         <button type="submit" class="btn btn-primary" style="margin-top:20px;">保存所有更改</button>
                     </form>
 
-                    <button type="button" class="kkt-danger-btn" id="clear-group-chat-history-btn">清空聊天记录</button>
                 </div>
             </main>
         </div>
@@ -5743,7 +5971,10 @@
                         <label for="edit-member-persona">人设</label>
                         <textarea id="edit-member-persona" placeholder="详细描述角色的性格、背景等。"></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button type="button" id="remove-group-member-btn" class="btn btn-danger" style="flex: 1;">移出群聊</button>
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">保存</button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -6261,13 +6492,13 @@
                         <div class="kkt-item">
                             <div class="kkt-item-label">个人资料</div>
                             <div class="kkt-item-control">
-                                <button type="button" class="btn btn-primary" id="forum-goto-profile-btn" style="padding:6px 12px;">编辑</button>
+                                <button type="button" class="btn btn-secondary" id="forum-goto-profile-btn" style="padding:6px 12px;">编辑</button>
                             </div>
                         </div>
                         <div class="kkt-item">
                             <div class="kkt-item-label">小号管理</div>
                             <div class="kkt-item-control">
-                                <button type="button" class="btn btn-primary" id="forum-goto-alt-accounts-btn" style="padding:6px 12px;">管理</button>
+                                <button type="button" class="btn btn-secondary" id="forum-goto-alt-accounts-btn" style="padding:6px 12px;">管理</button>
                             </div>
                         </div>
                         <div class="kkt-item">
@@ -6583,7 +6814,10 @@
                         </div>
                         <div class="storage-console-panel-header">
                             <span class="storage-console-filter-label">全部</span>
-                            <button type="button" id="storage-console-clear-btn" class="storage-console-clear-btn">清空</button>
+                            <div style="display: flex; gap: 5px;">
+                                <button type="button" id="storage-console-export-btn" class="storage-console-clear-btn">导出</button>
+                                <button type="button" id="storage-console-clear-btn" class="storage-console-clear-btn">清空</button>
+                            </div>
                         </div>
                         <div id="storage-console-list" class="storage-console-list"></div>
                     </div>
@@ -8745,7 +8979,8 @@
     <script src="js/modules/live.js"></script> <!-- 直播间模块 -->
     <script src="js/modules/shop.js"></script> <!-- 商城模块 -->
     <script src="js/modules/cot_settings.js"></script> <!-- 思维链设置模块 -->
-    <script src="js/modules/tts_service.js"></script> <!-- TTS 语音合成服务 -->
+    <script src="js/modules/volcengine_tts_service.js"></script> <!-- 豆包/火山 TTS 语音合成服务 -->
+    <script src="js/modules/tts_service.js"></script> <!-- TTS 语音合成代理服务 -->
     <script src="js/modules/voice_selector.js"></script> <!-- 音色选择器 -->
     <script src="js/modules/tts_settings.js"></script> <!-- TTS 设置管理 -->
     <script src="js/modules/video_call.js"></script> <!-- 视频通话模块 -->

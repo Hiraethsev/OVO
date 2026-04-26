@@ -654,7 +654,26 @@ function getMixedContent(responseData) {
         if (responseData[i] === '[') {
             const endBracket = responseData.indexOf(']', i);
             if (endBracket !== -1) {
-                const text = responseData.substring(i, endBracket + 1);
+                let text = responseData.substring(i, endBracket + 1);
+                
+                // --- 兼容：在渲染时过滤掉表情包的 (画面:xxx) 后缀 ---
+                const stickerRegex = /^\[(?:.*?的)?表情包：(.+?)\]$/i;
+                const match = text.match(stickerRegex);
+                if (match) {
+                    let stickerName = match[1];
+                    const descIndex = stickerName.indexOf('(画面:');
+                    if (descIndex !== -1) stickerName = stickerName.substring(0, descIndex).trim();
+                    const descIndex2 = stickerName.indexOf('（画面:');
+                    if (descIndex2 !== -1) stickerName = stickerName.substring(0, descIndex2).trim();
+                    const descIndex3 = stickerName.indexOf('（画面：');
+                    if (descIndex3 !== -1) stickerName = stickerName.substring(0, descIndex3).trim();
+                    const descIndex4 = stickerName.indexOf('(画面：');
+                    if (descIndex4 !== -1) stickerName = stickerName.substring(0, descIndex4).trim();
+                    
+                    // 重新拼装备用于前端渲染的纯净文本
+                    text = text.replace(match[1], stickerName);
+                }
+                
                 results.push({ type: 'text', content: text });
                 i = endBracket + 1;
                 continue;

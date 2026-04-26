@@ -56,7 +56,9 @@ function setupGroupChatSystem() {
                 me: {
                     nickname: (firstChar && firstChar.myName) ? firstChar.myName : 'user',
                     persona: firstChar ? firstChar.myPersona : '',
-                    avatar: firstChar ? firstChar.myAvatar : 'https://i.postimg.cc/GtbTnxhP/o-o-1.jpg'
+                    avatar: firstChar ? firstChar.myAvatar : 'https://i.postimg.cc/GtbTnxhP/o-o-1.jpg',
+                    birthday: firstChar ? (firstChar.myBirthday || '') : '',
+                    enableDynamicAge: firstChar ? (firstChar.myEnableDynamicAge || false) : false
                 },
                 members: selectedMemberIds.map(charId => {
                     const char = db.characters.find(c => c.id === charId);
@@ -293,6 +295,41 @@ function setupGroupChatSystem() {
                 showToast('成员信息已更新');
             }
             editGroupMemberModal.classList.remove('visible');
+        });
+    }
+
+    const removeGroupMemberBtn = document.getElementById('remove-group-member-btn');
+    if (removeGroupMemberBtn) {
+        removeGroupMemberBtn.addEventListener('click', async () => {
+            const memberId = document.getElementById('editing-member-id').value;
+            const group = db.groups.find(g => g.id === currentChatId);
+            if (!group) return;
+            const memberIndex = group.members.findIndex(m => m.id === memberId);
+            if (memberIndex !== -1) {
+                const member = group.members[memberIndex];
+                if (confirm(`确定要将“${member.groupNickname}”移出群聊吗？`)) {
+                    group.members.splice(memberIndex, 1);
+                    
+                    // 添加移出群聊的系统消息
+                    const myName = group.me.nickname || '我';
+                    const messageContent = `[${myName}已将${member.realName}移出群聊]`;
+                    const message = {
+                        id: `msg_${Date.now()}`,
+                        role: 'user',
+                        content: messageContent,
+                        parts: [{type: 'text', text: messageContent}],
+                        timestamp: Date.now(),
+                        senderId: 'user_me'
+                    };
+                    group.history.push(message);
+
+                    await saveData();
+                    renderGroupMembersInSettings(group);
+                    renderMessages(false, true);
+                    showToast(`已将 ${member.groupNickname} 移出群聊`);
+                    editGroupMemberModal.classList.remove('visible');
+                }
+            }
         });
     }
 
@@ -931,6 +968,12 @@ function loadGroupSettingsToSidebar() {
     document.getElementById('setting-group-my-avatar-preview').src = group.me.avatar;
     document.getElementById('setting-group-my-nickname').value = group.me.nickname;
     document.getElementById('setting-group-my-persona').value = group.me.persona;
+    
+    const myGroupBirthdayEl = document.getElementById('setting-group-my-birthday');
+    if (myGroupBirthdayEl) myGroupBirthdayEl.value = group.me.birthday || '';
+    const myGroupEnableDynamicAgeEl = document.getElementById('setting-group-my-enable-dynamic-age');
+    if (myGroupEnableDynamicAgeEl) myGroupEnableDynamicAgeEl.checked = group.me.enableDynamicAge || false;
+    
     themeSelect.value = group.theme || 'white_pink';
     document.getElementById('setting-group-max-memory').value = group.maxMemory;
 
@@ -992,7 +1035,28 @@ function loadGroupSettingsToSidebar() {
     const bilingualModeCheckbox = document.getElementById('setting-group-bilingual-mode');
     const bilingualStyleSelect = document.getElementById('setting-group-bilingual-style');
     const bilingualStyleContainer = document.getElementById('setting-group-bilingual-style-container');
+    const bilingualMembersContainer = document.getElementById('setting-group-bilingual-members-container');
+    const bilingualMembersBtn = document.getElementById('setting-group-bilingual-members-btn');
+    const bilingualCharSelectModal = document.getElementById('bilingual-char-select-modal');
+    const bilingualCharList = document.getElementById('bilingual-char-list');
+    const bilingualCharSelectAll = document.getElementById('bilingual-char-select-all');
+    const bilingualCharCancelBtn = document.getElementById('bilingual-char-cancel-btn');
+    const bilingualCharConfirmBtn = document.getElementById('bilingual-char-confirm-btn');
     
+    // 更新按钮文字
+    const updateBilingualBtnText = (group) => {
+        if (!bilingualMembersBtn) return;
+        if (!group.bilingualMembers || group.bilingualMembers.length === 0) {
+            bilingualMembersBtn.textContent = '选择角色';
+            bilingualMembersBtn.classList.add('btn-secondary');
+            bilingualMembersBtn.classList.remove('btn-primary');
+        } else {
+            bilingualMembersBtn.textContent = `已选 ${group.bilingualMembers.length} 名成员`;
+            bilingualMembersBtn.classList.add('btn-primary');
+            bilingualMembersBtn.classList.remove('btn-secondary');
+        }
+    };
+
     if (bilingualModeCheckbox && bilingualStyleSelect) {
         bilingualModeCheckbox.checked = group.bilingualModeEnabled || false;
         bilingualStyleSelect.value = group.bilingualBubbleStyle || 'under';
@@ -1000,8 +1064,12 @@ function loadGroupSettingsToSidebar() {
         if (bilingualStyleContainer) {
             bilingualStyleContainer.style.display = group.bilingualModeEnabled ? 'flex' : 'none';
         }
+        if (bilingualMembersContainer) {
+            bilingualMembersContainer.style.display = group.bilingualModeEnabled ? 'flex' : 'none';
+            updateBilingualBtnText(group);
+        }
         
-        // 移除旧的监听器以防重复绑定 (虽然 loadGroupSettingsToSidebar 通常每次打开都会调用，但最好保持干净)
+        // 移除旧的监听器以防重复绑定
         const newCheckbox = bilingualModeCheckbox.cloneNode(true);
         bilingualModeCheckbox.parentNode.replaceChild(newCheckbox, bilingualModeCheckbox);
         
@@ -1009,8 +1077,118 @@ function loadGroupSettingsToSidebar() {
             if (bilingualStyleContainer) {
                 bilingualStyleContainer.style.display = e.target.checked ? 'flex' : 'none';
             }
+            if (bilingualMembersContainer) {
+                bilingualMembersContainer.style.display = e.target.checked ? 'flex' : 'none';
+            }
             saveGroupSettingsFromSidebar(false);
         });
+
+        // 弹窗相关逻辑
+        if (bilingualMembersBtn) {
+            // 防止重复绑定
+            const newMembersBtn = bilingualMembersBtn.cloneNode(true);
+            bilingualMembersBtn.parentNode.replaceChild(newMembersBtn, bilingualMembersBtn);
+
+            newMembersBtn.addEventListener('click', () => {
+                const currentGroup = db.groups.find(g => g.id === currentChatId);
+                if (!currentGroup || !bilingualCharList) return;
+
+                // 渲染弹窗列表
+                bilingualCharList.innerHTML = '';
+                const selectedMembers = currentGroup.bilingualMembers || [];
+                
+                currentGroup.members.forEach(member => {
+                    const div = document.createElement('div');
+                    div.style.display = 'flex';
+                    div.style.alignItems = 'center';
+                    div.style.justifyContent = 'space-between';
+                    div.style.padding = '10px 0';
+                    div.style.borderBottom = '1px solid #f0f0f0';
+
+                    const leftArea = document.createElement('div');
+                    leftArea.style.display = 'flex';
+                    leftArea.style.alignItems = 'center';
+                    leftArea.style.gap = '10px';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = member.id;
+                    checkbox.className = 'bilingual-char-checkbox';
+                    checkbox.checked = selectedMembers.includes(member.id);
+                    checkbox.style.margin = '0';
+
+                    const img = document.createElement('img');
+                    img.src = member.avatar;
+                    img.style.width = '36px';
+                    img.style.height = '36px';
+                    img.style.borderRadius = '50%';
+                    img.style.objectFit = 'cover';
+
+                    const name = document.createElement('span');
+                    name.textContent = member.groupNickname;
+                    name.style.fontSize = '14px';
+                    name.style.color = '#333';
+
+                    leftArea.appendChild(checkbox);
+                    leftArea.appendChild(img);
+                    leftArea.appendChild(name);
+
+                    // 点击整行也能切换复选框
+                    div.style.cursor = 'pointer';
+                    div.onclick = (e) => {
+                        if(e.target !== checkbox) {
+                            checkbox.checked = !checkbox.checked;
+                        }
+                    };
+
+                    div.appendChild(leftArea);
+                    bilingualCharList.appendChild(div);
+                });
+
+                let currentSelectAll = document.getElementById('bilingual-char-select-all');
+                if (currentSelectAll) {
+                    currentSelectAll.checked = currentGroup.members.length > 0 && selectedMembers.length === currentGroup.members.length;
+                    
+                    // 解绑旧事件再绑新事件
+                    const newSelectAll = currentSelectAll.cloneNode(true);
+                    currentSelectAll.parentNode.replaceChild(newSelectAll, currentSelectAll);
+                    
+                    newSelectAll.addEventListener('change', (e) => {
+                        const checkboxes = bilingualCharList.querySelectorAll('.bilingual-char-checkbox');
+                        checkboxes.forEach(cb => cb.checked = e.target.checked);
+                    });
+                }
+
+                if (bilingualCharSelectModal) {
+                    bilingualCharSelectModal.style.display = 'flex';
+                }
+            });
+        }
+
+        if (bilingualCharCancelBtn) {
+            bilingualCharCancelBtn.onclick = () => {
+                if (bilingualCharSelectModal) bilingualCharSelectModal.style.display = 'none';
+            };
+        }
+
+        if (bilingualCharConfirmBtn) {
+            bilingualCharConfirmBtn.onclick = () => {
+                if (!bilingualCharList) return;
+                const checkboxes = bilingualCharList.querySelectorAll('.bilingual-char-checkbox');
+                const currentGroup = db.groups.find(g => g.id === currentChatId);
+                
+                if (currentGroup) {
+                    currentGroup.bilingualMembers = Array.from(checkboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+                    
+                    updateBilingualBtnText(currentGroup);
+                    saveData(); // 立即保存到数据库，不再调用 saveGroupSettingsFromSidebar 以免互相覆盖
+                }
+                
+                if (bilingualCharSelectModal) bilingualCharSelectModal.style.display = 'none';
+            };
+        }
     }
 
     const avatarRadius = group.avatarRadius !== undefined ? group.avatarRadius : 50;
@@ -1040,6 +1218,11 @@ function loadGroupSettingsToSidebar() {
         stickerGroupsContainer.innerHTML = '';
         const allGroups = [...new Set(db.myStickers.map(s => s.group || '未分类'))].filter(g => g);
         const groupStickerGroups = (group.stickerGroups || '').split(/[,，]/).map(s => s.trim());
+
+        const stickerDescEnabledEl = document.getElementById('setting-group-sticker-description-enabled');
+        if (stickerDescEnabledEl) {
+            stickerDescEnabledEl.checked = group.stickerDescriptionEnabled || false;
+        }
 
         if (allGroups.length === 0) {
             stickerGroupsContainer.innerHTML = '<span style="color:#999; font-size:12px;">暂无表情包分组，请先在表情包管理中添加。</span>';
@@ -1133,10 +1316,20 @@ async function saveGroupSettingsFromSidebar(showToastFlag = true) {
     group.me.nickname = document.getElementById('setting-group-my-nickname').value;
     group.me.persona = document.getElementById('setting-group-my-persona').value;
 
+    const myGroupBirthdayInput = document.getElementById('setting-group-my-birthday');
+    if (myGroupBirthdayInput) group.me.birthday = (myGroupBirthdayInput.value || '').trim();
+    const myGroupEnableDynamicAgeInput = document.getElementById('setting-group-my-enable-dynamic-age');
+    if (myGroupEnableDynamicAgeInput) group.me.enableDynamicAge = myGroupEnableDynamicAgeInput.checked;
+
     const selectedGroups = Array.from(document.querySelectorAll('#setting-group-sticker-groups-container .sticker-group-tag.selected'))
         .map(tag => tag.dataset.group)
         .join(',');
     group.stickerGroups = selectedGroups;
+
+    const stickerDescEnabledEl = document.getElementById('setting-group-sticker-description-enabled');
+    if (stickerDescEnabledEl) {
+        group.stickerDescriptionEnabled = stickerDescEnabledEl.checked;
+    }
 
     group.theme = document.getElementById('setting-group-theme-color').value;
     group.maxMemory = document.getElementById('setting-group-max-memory').value;
@@ -1194,6 +1387,8 @@ async function saveGroupSettingsFromSidebar(showToastFlag = true) {
     
     group.bilingualModeEnabled = document.getElementById('setting-group-bilingual-mode').checked;
     group.bilingualBubbleStyle = document.getElementById('setting-group-bilingual-style').value;
+    
+    // bilingualMembers 现在由弹窗确认按钮直接保存，这里不需要再处理了
 
     // --- 保存群公告 ---
     group.showNotice = document.getElementById('setting-group-show-notice').checked;
@@ -1405,7 +1600,24 @@ function generateGroupSystemPrompt(group, opts) {
 
     prompt += `1. **核心任务**: 你需要同时扮演这个群聊中的 **所有** AI 成员。我会作为唯一的人类用户（“我”，昵称：${group.me.nickname}）与你们互动。\n\n`;
     prompt += `2. **群聊成员列表**: 以下是你要扮演的所有角色以及我的信息：\n`;
-    prompt += `   - **我 (用户)**: \n     - 群内昵称: ${group.me.nickname}\n     - 我的人设: ${group.me.persona || '无特定人设'}\n`;
+    
+    let userAgeInfo = "";
+    if (group.me.enableDynamicAge && group.me.birthday) {
+        const today = new Date();
+        const birthDate = new Date(group.me.birthday);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        if (m === 0 && today.getDate() === birthDate.getDate()) {
+            userAgeInfo = `\n     - 年龄状态: [System Notice] ✨重要✨ 与你对话的用户（称呼：${group.me.nickname}）出生于${birthDate.getFullYear()}年${birthDate.getMonth() + 1}月${birthDate.getDate()}日，今天正是他/她的${age}岁生日！请在对话中自然地表现出你对这一点的知晓和关心。`;
+        } else {
+            userAgeInfo = `\n     - 年龄状态: [System Notice] 与你对话的用户（称呼：${group.me.nickname}）出生于${birthDate.getFullYear()}年${birthDate.getMonth() + 1}月${birthDate.getDate()}日，现在的年龄是${age}岁。`;
+        }
+    }
+    
+    prompt += `   - **我 (用户)**: \n     - 群内昵称: ${group.me.nickname}${userAgeInfo}\n     - 我的人设: ${group.me.persona || '无特定人设'}\n`;
     group.members.forEach(member => {
         prompt += `   - **角色: ${member.realName} (AI)**\n`;
         
@@ -1488,7 +1700,17 @@ function generateGroupSystemPrompt(group, opts) {
     prompt += `4. **你的输出格式 (极其重要)**: 你生成的每一条消息都 **必须** 严格遵循以下格式之一。每条消息占一行。请用成员的 **真名** 填充格式中的 \`{成员真名}\`。\n${outputFormats}\n\n`;
     
     if (group.bilingualModeEnabled) {
-        prompt += `✨双语模式特别指令✨：当群成员的母语为中文以外的语言时，其消息回复**必须**严格遵循双语模式下的普通消息格式：\`[{成员真名}的消息：{外语原文}「中文翻译」]\`。例如: \`[Alice的消息：Of course, I'd love to.「当然，我很乐意。」]\`。中文翻译文本视为系统自翻译，不视为角色的原话。当角色想要说中文时，请使用标准格式：\`[{成员真名}的消息：{中文消息内容}]\`。这条规则的优先级非常高，请务必遵守。\n\n`;
+        let bilingualTargetText = "群成员";
+        if (group.bilingualMembers && group.bilingualMembers.length > 0) {
+            const targetNames = group.bilingualMembers.map(memberId => {
+                const member = group.members.find(m => m.id === memberId);
+                return member ? member.realName : null;
+            }).filter(name => name);
+            if (targetNames.length > 0) {
+                bilingualTargetText = `群成员（特别指定：${targetNames.join('、')}）`;
+            }
+        }
+        prompt += `✨双语模式特别指令✨：当${bilingualTargetText}的母语为中文以外的语言时，其消息回复**必须**严格遵循双语模式下的普通消息格式：\`[{成员真名}的消息：{外语原文}「中文翻译」]\`。例如: \`[Alice的消息：Of course, I'd love to.「当然，我很乐意。」]\`。中文翻译文本视为系统自翻译，不视为角色的原话。当角色想要说中文时，请使用标准格式：\`[{成员真名}的消息：{中文消息内容}]\`。这条规则的优先级非常高，请务必遵守。\n\n`;
     }
 
     prompt += `   - **重要**: 群聊不支持AI成员接收礼物的特殊指令（即你不能发送[已接收礼物]指令，但可以用语言表达感谢），也不支持更新状态。你只需要通过普通消息来回应我发送的礼物即可。\n`;

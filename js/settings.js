@@ -1288,6 +1288,11 @@ function loadSettingsToSidebar() {
         const allGroups = [...new Set(db.myStickers.map(s => s.group || '未分类'))].filter(g => g);
         const charGroups = (e.stickerGroups || '').split(/[,，]/).map(s => s.trim());
 
+        const stickerDescEnabledEl = document.getElementById('setting-char-sticker-description-enabled');
+        if (stickerDescEnabledEl) {
+            stickerDescEnabledEl.checked = e.stickerDescriptionEnabled || false;
+        }
+
         if (allGroups.length === 0) {
             stickerGroupsContainer.innerHTML = '<span style="color:#999; font-size:12px;">暂无表情包分组，请先在表情包管理中添加。</span>';
         } else {
@@ -1315,6 +1320,11 @@ function loadSettingsToSidebar() {
             if (myNameEl) myNameEl.value = e.myName || '';
             const myPersonaEl = document.getElementById('setting-my-persona');
             if (myPersonaEl) myPersonaEl.value = e.myPersona || '';
+            
+            const myBirthdayEl = document.getElementById('setting-my-birthday');
+            if (myBirthdayEl) myBirthdayEl.value = e.myBirthday || '';
+            const myEnableDynamicAgeEl = document.getElementById('setting-my-enable-dynamic-age');
+            if (myEnableDynamicAgeEl) myEnableDynamicAgeEl.checked = e.myEnableDynamicAge || false;
         }
         const themeColorEl = document.getElementById('setting-theme-color');
         if (themeColorEl) themeColorEl.value = e.theme || 'white_pink';
@@ -1362,6 +1372,9 @@ function loadSettingsToSidebar() {
 
         const stickerSmartMatchEl = document.getElementById('setting-sticker-smart-match');
         if (stickerSmartMatchEl) stickerSmartMatchEl.checked = e.stickerSmartMatchEnabled || false;
+
+        const stickerImageRecognitionEl = document.getElementById('setting-sticker-image-recognition-enabled');
+        if (stickerImageRecognitionEl) stickerImageRecognitionEl.checked = e.stickerImageRecognitionEnabled || false;
 
         document.getElementById('setting-auto-journal-enabled').checked = e.autoJournalEnabled || false;
         const autoJournalIntervalContainer = document.getElementById('setting-auto-journal-interval-container');
@@ -1760,6 +1773,24 @@ function loadSettingsToSidebar() {
         }
         if (typeof populateRegexFilterPresetSelect === 'function') populateRegexFilterPresetSelect();
 
+        const webSearchEnabledEl = document.getElementById('setting-char-web-search-enabled');
+        const webSearchPayloadEl = document.getElementById('setting-char-web-search-payload');
+        const webSearchPayloadCont = document.getElementById('setting-char-web-search-payload-container');
+        if (webSearchEnabledEl) {
+            webSearchEnabledEl.checked = !!e.webSearchEnabled;
+            if (webSearchPayloadCont) {
+                webSearchPayloadCont.style.display = e.webSearchEnabled ? 'flex' : 'none';
+            }
+            webSearchEnabledEl.onchange = function() {
+                if (webSearchPayloadCont) {
+                    webSearchPayloadCont.style.display = this.checked ? 'flex' : 'none';
+                }
+            };
+        }
+        if (webSearchPayloadEl) {
+            webSearchPayloadEl.value = e.webSearchPayload || '';
+        }
+
         document.getElementById('setting-shop-interaction-enabled').checked = e.shopInteractionEnabled !== false;
 
         const familyCardEnabledEl = document.getElementById('setting-family-card-enabled');
@@ -1914,6 +1945,11 @@ async function saveSettingsFromSidebar() {
             .join(',');
         e.stickerGroups = selectedGroups;
 
+        const stickerDescEnabledEl = document.getElementById('setting-char-sticker-description-enabled');
+        if (stickerDescEnabledEl) {
+            e.stickerDescriptionEnabled = stickerDescEnabledEl.checked;
+        }
+
         // 头像系统：有头像变动则识别（含缓存）并系统通知
         const myAvatarPreviewEl = document.getElementById('setting-my-avatar-preview');
         const _newMyAvatar = myAvatarPreviewEl ? myAvatarPreviewEl.src : e.myAvatar;
@@ -1923,6 +1959,12 @@ async function saveSettingsFromSidebar() {
         e.myAvatar = _newMyAvatar;
         e.myName = document.getElementById('setting-my-name').value;
         e.myPersona = document.getElementById('setting-my-persona').value;
+        
+        const myBirthdayInput = document.getElementById('setting-my-birthday');
+        if (myBirthdayInput) e.myBirthday = (myBirthdayInput.value || '').trim();
+        const myEnableDynamicAgeInput = document.getElementById('setting-my-enable-dynamic-age');
+        if (myEnableDynamicAgeInput) e.myEnableDynamicAge = myEnableDynamicAgeInput.checked;
+        
         e.theme = document.getElementById('setting-theme-color').value;
         e.maxMemory = document.getElementById('setting-max-memory').value;
         e.syncGroupMemory = document.getElementById('setting-sync-group-memory').checked;
@@ -1943,6 +1985,10 @@ async function saveSettingsFromSidebar() {
         e.replyCountMax = parseInt(document.getElementById('setting-reply-count-max').value, 10) || 8;
         const stickerSmartMatchCb = document.getElementById('setting-sticker-smart-match');
         e.stickerSmartMatchEnabled = stickerSmartMatchCb ? stickerSmartMatchCb.checked : false;
+        
+        const stickerImageRecognitionCb = document.getElementById('setting-sticker-image-recognition-enabled');
+        e.stickerImageRecognitionEnabled = stickerImageRecognitionCb ? stickerImageRecognitionCb.checked : false;
+
         e.autoJournalEnabled = document.getElementById('setting-auto-journal-enabled').checked;
         const autoJournalIntervalInput = parseInt(document.getElementById('setting-auto-journal-interval').value, 10);
         e.autoJournalInterval = (isNaN(autoJournalIntervalInput) || autoJournalIntervalInput < 10) ? 100 : autoJournalIntervalInput;
@@ -2089,6 +2135,11 @@ async function saveSettingsFromSidebar() {
         const rfRulesText = document.getElementById('setting-regex-filter-rules').value;
         e.regexFilter.rules = (typeof parseRegexFilterRulesText === 'function') ? parseRegexFilterRulesText(rfRulesText) : [];
 
+        const webSearchEnabledElSave = document.getElementById('setting-char-web-search-enabled');
+        const webSearchPayloadElSave = document.getElementById('setting-char-web-search-payload');
+        e.webSearchEnabled = webSearchEnabledElSave ? webSearchEnabledElSave.checked : false;
+        e.webSearchPayload = webSearchPayloadElSave ? webSearchPayloadElSave.value.trim() : '';
+        
         e.shopInteractionEnabled = document.getElementById('setting-shop-interaction-enabled').checked;
         const familyCardEnabledEl = document.getElementById('setting-family-card-enabled');
         if (familyCardEnabledEl) e.familyCardEnabled = familyCardEnabledEl.checked;
