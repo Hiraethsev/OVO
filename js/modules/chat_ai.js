@@ -347,7 +347,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                 
                 return content;
             });
-            historyText = `<chat_history>\n【近期聊天记录】\n以下是我们刚刚的聊天记录，作为背景查看：\n${historyLines.join('\n')}\n</chat_history>\n\n`;
+            historyText = `<chat_history>\n【近期聊天记录】\n以下是我们近期的聊天记录，作为背景查看：\n${historyLines.join('\n')}\n</chat_history>\n\n`;
         }
         // ==========================================
 
