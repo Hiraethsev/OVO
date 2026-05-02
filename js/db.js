@@ -162,6 +162,7 @@ const DEFAULT_COT_PRESETS = [
 
 const globalSettingKeys = [
     'apiSettings', 'summaryApiSettings', 'backgroundApiSettings', 'supplementPersonaApiSettings', 'peekApiSettings', 'imageRecognitionEnabled', 'imageRecognitionApiSettings', 'stickerRecognitionApiSettings', 'wallpaper', 'homeScreenMode', 'fontUrl', 'localFontName', 'customIcons', 'customAppNames', 'namePresets',
+    'embeddingSettings',
     'apiPresets', 'summaryApiPresets', 'backgroundApiPresets', 'supplementPersonaApiPresets', 'peekApiPresets', 'imageRecognitionApiPresets', 'stickerRecognitionApiPresets', 'bubbleCssPresets', 'myPersonaPresets', 'globalCss',
     'globalCssPresets', 'fontPresets', 'homeSignature', 'forumPosts', 'forumBindings', 'forumUserProfile', 'forumSettings', 'forumApiSettings', 'forumMessages', 'forumStrangerProfiles', 'forumFriendRequests', 'forumPendingRequestFromUser', 'forumAltAccounts', 'forumActiveAccountId', 'pomodoroTasks', 'pomodoroSettings', 'insWidgetSettings', 'homeWidgetSettings',
     'chatFolders', 'fontSizeScale', 'activePersonaId', 'moreProfileCardBg', 'statusBarPresets', 'regexFilterPresets', 'themeSettings', 'themePresets', 'savedKeyboardHeight',
@@ -176,6 +177,37 @@ const globalSettingKeys = [
     'nightModeSettings', 'homeStatusBarSettings', 'stickerCategories'
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
+
+function createDefaultEmbeddingSettings() {
+    return {
+        enabled: false,
+        provider: 'openai',
+        apiUrl: '',
+        apiKey: '',
+        model: '',
+        batchSize: 10,
+        defaultTopK: 3,
+        defaultMinSimilarity: 0.3
+    };
+}
+
+function normalizeMemoryChunk(chunk) {
+    const now = Date.now();
+    const safeChunk = chunk && typeof chunk === 'object' ? chunk : {};
+    return {
+        id: safeChunk.id || `memory_chunk_${now}_${Math.random().toString(36).slice(2, 8)}`,
+        chatId: safeChunk.chatId || '',
+        sourceType: safeChunk.sourceType === 'group' ? 'group' : 'private',
+        startIndex: Number.isInteger(safeChunk.startIndex) ? safeChunk.startIndex : 0,
+        endIndex: Number.isInteger(safeChunk.endIndex) ? safeChunk.endIndex : 0,
+        text: typeof safeChunk.text === 'string' ? safeChunk.text : '',
+        embedding: Array.isArray(safeChunk.embedding) ? safeChunk.embedding : [],
+        createdAt: typeof safeChunk.createdAt === 'number' ? safeChunk.createdAt : now,
+        updatedAt: typeof safeChunk.updatedAt === 'number' ? safeChunk.updatedAt : now,
+        hitCount: typeof safeChunk.hitCount === 'number' ? safeChunk.hitCount : 0,
+        lastHitAt: typeof safeChunk.lastHitAt === 'number' ? safeChunk.lastHitAt : 0
+    };
+}
 
 const appVersion = "4.26";
 const updateLog = [
@@ -638,8 +670,10 @@ var db = {
     backgroundApiSettings: {},
     supplementPersonaApiSettings: {},
     peekApiSettings: {},
+    embeddingSettings: createDefaultEmbeddingSettings(),
     wallpaper: 'https://i.postimg.cc/W4Z9R9x4/ins-1.jpg',
     myStickers: [],
+    memoryChunks: [],
     homeScreenMode: 'night',
     worldBooks: [],
     fontUrl: '',
@@ -844,6 +878,17 @@ function initDatabase() {
         globalSettings: 'key',
         archives: '&id,characterId,timestamp'
     });
+    dexieDB.version(4).stores({
+        characters: '&id',
+        groups: '&id',
+        worldBooks: '&id',
+        myStickers: '&id',
+        globalSettings: 'key',
+        archives: '&id,characterId,timestamp',
+        memoryChunks: '&id,chatId,sourceType,updatedAt,lastHitAt'
+    }).upgrade(async () => {
+        console.log("Upgrading database to version 4 (memoryChunks table added)...");
+    });
 }
 
 // 数据保存与加载
@@ -855,6 +900,9 @@ const saveData = async () => {
             await dexieDB.worldBooks.bulkPut(db.worldBooks);
             await dexieDB.myStickers.bulkPut(db.myStickers);
             if (dexieDB.archives) await dexieDB.archives.bulkPut(db.archives || []);
+            if (dexieDB.memoryChunks && Array.isArray(db.memoryChunks) && db.memoryChunks.length > 0) {
+                await dexieDB.memoryChunks.bulkPut(db.memoryChunks.map(normalizeMemoryChunk));
+            }
 
             const settingsPromises = globalSettingKeys.map(key => {
                 if (db[key] !== undefined) {
@@ -881,6 +929,7 @@ const loadData = async () => {
         dexieDB.globalSettings.toArray()
     ];
     if (dexieDB.archives) tables.push(dexieDB.archives.toArray());
+    if (dexieDB.memoryChunks) tables.push(dexieDB.memoryChunks.toArray());
     const results = await Promise.all(tables);
     const characters = results[0];
     const groups = results[1];
@@ -888,12 +937,14 @@ const loadData = async () => {
     const myStickers = results[3];
     const settingsArray = results[4];
     const archives = results[5];
+    const memoryChunks = results[6];
 
     db.characters = characters;
     db.groups = groups;
     db.worldBooks = worldBooks;
     db.myStickers = myStickers;
     db.archives = archives || [];
+    db.memoryChunks = Array.isArray(memoryChunks) ? memoryChunks.map(normalizeMemoryChunk) : [];
 
     const settings = settingsArray.reduce((acc, { key, value }) => {
         acc[key] = value;
@@ -907,6 +958,7 @@ const loadData = async () => {
             backgroundApiSettings: {},
             supplementPersonaApiSettings: {},
             peekApiSettings: {},
+            embeddingSettings: createDefaultEmbeddingSettings(),
             imageRecognitionEnabled: false,
             imageRecognitionApiSettings: {},
             stickerRecognitionApiSettings: {},
@@ -975,6 +1027,15 @@ const loadData = async () => {
         };
         db[key] = settings[key] !== undefined ? settings[key] : (defaultValue[key] !== undefined ? JSON.parse(JSON.stringify(defaultValue[key])) : undefined);
     });
+
+    if (!db.embeddingSettings || typeof db.embeddingSettings !== 'object') {
+        db.embeddingSettings = createDefaultEmbeddingSettings();
+    } else {
+        db.embeddingSettings = {
+            ...createDefaultEmbeddingSettings(),
+            ...db.embeddingSettings
+        };
+    }
 
     if (!Array.isArray(db.stickerCategories)) db.stickerCategories = [];
     if (!db.piggyBank) db.piggyBank = { balance: 520, transactions: [], familyCards: [], receivedFamilyCards: [] };
