@@ -32,6 +32,79 @@ function getEffectivePersona(character) {
 
 const HUMAN_RUN_PROMPT = `<角色活人运转>\n## [PSYCHOLOGY: HEXACO-SCHEMA-ACT]\n> Personality: HEXACO-driven, dynamic traits, inner conflicts required \n> Filter: schema-bias drives emotion; no pure reaction allowed \n> Attachment: secure/insecure logic must govern intimacy  \n> If-Then Behavior: situation-dependent activation of traits only  \n---\n    ## [VITALITY]\n+inconsistency +emoflux +splitmotifs +microreact +minddrift\n---\n## [TRAJECTORY-COHERENCE]\n> Role maintains an identity narrative = coherent over time  \n> No mood/goal switch without contradiction resolution \n> Every action must protect or challenge self-concept  \n> Interrupts = inner conflict or narrative clash  \n> Output = filtered through “who I am” logic\n</角色活人运转>`;
 
+function formatPromptRichTextContent(content) {
+    if (!content || typeof content !== 'string') return '';
+
+    const normalizedContent = content.trim();
+    if (!normalizedContent) return '';
+
+    if (!/<[a-z][\s\S]*>/i.test(normalizedContent)) {
+        return normalizedContent;
+    }
+
+    try {
+        const container = document.createElement('div');
+        container.innerHTML = normalizedContent;
+
+        const blockTags = new Set(['DETAILS', 'SUMMARY', 'DIV', 'P', 'LI', 'UL', 'OL', 'SECTION', 'ARTICLE']);
+        const lines = [];
+        let currentLineParts = [];
+
+        const flushLine = () => {
+            const line = currentLineParts.join(' ').replace(/\s+/g, ' ').trim();
+            if (line) {
+                lines.push(line);
+            }
+            currentLineParts = [];
+        };
+
+        const appendText = (text) => {
+            const cleanText = (text || '').replace(/\s+/g, ' ').trim();
+            if (cleanText) {
+                currentLineParts.push(cleanText);
+            }
+        };
+
+        const walk = (node) => {
+            if (node.nodeType === 3) {
+                appendText(node.nodeValue);
+                return;
+            }
+
+            if (node.nodeType !== 1) return;
+
+            if (node.tagName === 'BR') {
+                flushLine();
+                return;
+            }
+
+            Array.from(node.childNodes).forEach(walk);
+
+            if (blockTags.has(node.tagName)) {
+                flushLine();
+            }
+        };
+
+        Array.from(container.childNodes).forEach(walk);
+        flushLine();
+
+        const plainText = lines.join('\n').trim();
+        if (plainText) {
+            return plainText;
+        }
+    } catch (error) {
+        console.warn('formatPromptRichTextContent failed, falling back to regex cleanup:', error);
+    }
+
+    return normalizedContent
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(details|summary|div|p|li|ul|ol|section|article)>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 // 后台异步生成图片描述
 async function generateImageDescription(msg, chat, apiConfig) {
     if (!msg || !msg.parts || !msg.parts.some(p => p.type === 'image' && !p.description)) return;
@@ -434,7 +507,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                 } else if (msg.parts && msg.parts.length > 0) {
                     parts = msg.parts.map(p => {
                         if (p.type === 'text' || p.type === 'html') {
-                            return {text: p.text};
+                            return {text: formatPromptRichTextContent(p.text)};
                         } else if (p.type === 'image') {
                             if (p.description) {
                                 return {text: `[图片描述：${p.description}]`};
@@ -457,7 +530,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                         return null;
                     }).filter(p => p);
                 } else {
-                    let content = msg.content || '';
+                    let content = formatPromptRichTextContent(msg.content || '');
                     // 展开小剧场分享卡片
                     const theaterShareMatch = content.match(/\[小剧场分享[：:](.+?)\]/);
                     if (theaterShareMatch) {
@@ -585,7 +658,8 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                        let prefixAdded = false;
                        content = msg.parts.map(p => {
                            if (p.type === 'text' || p.type === 'html') {
-                               const textContent = (!prefixAdded) ? (prefix + p.text) : p.text;
+                               const plainText = formatPromptRichTextContent(p.text);
+                               const textContent = (!prefixAdded) ? (prefix + plainText) : plainText;
                                prefixAdded = true;
                                return {type: 'text', text: textContent};
                            } else if (p.type === 'image') {
@@ -614,7 +688,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                            return null;
                        }).flat().filter(p => p);
                    } else {
-                       content = prefix + msg.content;
+                       content = prefix + formatPromptRichTextContent(msg.content || '');
                        const theaterShareMatch = content.match(/\[小剧场分享[：:](.+?)\]/);
                        if (theaterShareMatch) {
                            const scenarioId = theaterShareMatch[1];
@@ -2245,8 +2319,13 @@ function generatePrivateSystemPrompt(character, opts) {
                 
                 if (pastOnlineMsgs.length > 0) {
                     const pastOnlineText = pastOnlineMsgs.map(m => {
-                        let content = m.content;
-                        if (m.parts && m.parts.length > 0) content = m.parts.map(p => p.text || '[图片]').join('');
+                        let content = formatPromptRichTextContent(m.content || '');
+                        if (m.parts && m.parts.length > 0) {
+                            content = m.parts.map(p => {
+                                if (p.type === 'text' || p.type === 'html') return formatPromptRichTextContent(p.text);
+                                return '[图片]';
+                            }).join('');
+                        }
                         const senderName = m.role === 'user' ? character.myName : character.realName;
                         return `${senderName}: ${content}`;
                     }).join('\n');
@@ -2285,8 +2364,13 @@ function generatePrivateSystemPrompt(character, opts) {
                             if (groupFavoritedJournalsText) groupMemoryContext += `群聊总结：\n${groupFavoritedJournalsText}\n`;
                             if (recentGroupHistory.length > 0) {
                                 const historyText = recentGroupHistory.map(m => {
-                                    let content = m.content;
-                                    if (m.parts && m.parts.length > 0) content = m.parts.map(p => p.text || '[图片]').join('');
+                                    let content = formatPromptRichTextContent(m.content || '');
+                                    if (m.parts && m.parts.length > 0) {
+                                        content = m.parts.map(p => {
+                                            if (p.type === 'text' || p.type === 'html') return formatPromptRichTextContent(p.text);
+                                            return '[图片]';
+                                        }).join('');
+                                    }
                                     const senderName = m.senderId ? (group.members.find(mem => mem.id === m.senderId)?.groupNickname || '未知') : (m.role === 'user' ? group.me.nickname : '系统');
                                     return `${senderName}: ${content}`;
                                 }).join('\n');
@@ -2470,7 +2554,8 @@ function generatePrivateSystemPrompt(character, opts) {
                     altBlock += '[论坛私信] 小号「' + altName + '」与用户：\n';
                     forumMsgs.forEach(function(m) {
                         const from = m.fromUserId === 'user' ? '用户' : '小号';
-                        altBlock += '- ' + from + '：' + (m.content || '').trim().slice(0, 200) + (m.content && m.content.length > 200 ? '…' : '') + '\n';
+                        const text = formatPromptRichTextContent(m.content || '');
+                        altBlock += '- ' + from + '：' + text.slice(0, 200) + (text.length > 200 ? '…' : '') + '\n';
                     });
                     altBlock += '\n';
                 }
@@ -2481,8 +2566,8 @@ function generatePrivateSystemPrompt(character, opts) {
                         altBlock += '[加好友后聊天] 小号「' + (altChar.realName || altName) + '」与用户：\n';
                         recentAlt.forEach(function(m) {
                             const from = m.role === 'user' ? '用户' : '小号';
-                            const text = (m.content || '').trim().slice(0, 200) + (m.content && m.content.length > 200 ? '…' : '');
-                            altBlock += '- ' + from + '：' + text + '\n';
+                            const text = formatPromptRichTextContent(m.content || '');
+                            altBlock += '- ' + from + '：' + text.slice(0, 200) + (text.length > 200 ? '…' : '') + '\n';
                         });
                         altBlock += '\n';
                     }
@@ -2499,8 +2584,8 @@ function generatePrivateSystemPrompt(character, opts) {
             let mainBlock = '\n<main_shared_memory>\n【主号记忆互通】你与主号记忆互通。主号在聊天里与用户说的最近对话你都知道。以下为主号与用户的最近互动' + mainRecent.length + '条：\n\n';
             mainRecent.forEach(function(m) {
                 const from = m.role === 'user' ? '用户' : '主号(' + (linkedChar.realName || linkedChar.remarkName || '') + ')';
-                const text = (m.content || '').trim().slice(0, 200) + (m.content && m.content.length > 200 ? '…' : '');
-                mainBlock += '- ' + from + '：' + text + '\n';
+                const text = formatPromptRichTextContent(m.content || '');
+                mainBlock += '- ' + from + '：' + text.slice(0, 200) + (text.length > 200 ? '…' : '') + '\n';
             });
             mainBlock += '\n</main_shared_memory>\n\n';
             prompt += mainBlock;
@@ -2609,7 +2694,7 @@ function generatePrivateSystemPrompt(character, opts) {
             const impersonated = history.filter(m => m.sender === 'char' && m.isImpersonated);
             if (impersonated.length === 0) return;
             const partnerName = cv.partnerName || '某人';
-            const contents = impersonated.map(m => (m.content || '').trim()).filter(Boolean).slice(0, 5);
+            const contents = impersonated.map(m => formatPromptRichTextContent(m.content || '')).filter(Boolean).slice(0, 5);
             const summary = contents.length > 0 ? contents.map(c => c.length > 80 ? c.slice(0, 80) + '…' : c).join('；') : '（若干条）';
             impersonationLines.push(`与 ${partnerName} 的对话中，有人冒充你发了消息，冒充内容摘要：${summary}`);
         });
@@ -2734,9 +2819,12 @@ function generatePrivateSystemPrompt(character, opts) {
                     
                     if (recentGroupHistory.length > 0) {
                         const historyText = recentGroupHistory.map(m => {
-                            let content = m.content;
+                            let content = formatPromptRichTextContent(m.content || '');
                             if (m.parts && m.parts.length > 0) {
-                                content = m.parts.map(p => p.text || '[图片]').join('');
+                                content = m.parts.map(p => {
+                                    if (p.type === 'text' || p.type === 'html') return formatPromptRichTextContent(p.text);
+                                    return '[图片]';
+                                }).join('');
                             }
                             // 简化消息格式，只保留关键信息
                             const senderName = m.senderId ? 
@@ -2937,18 +3025,18 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
             const forumMsgs = (db.forumMessages || []).filter(m =>
                 (m.fromUserId === 'user' && m.toUserId === forumUserId) || (m.fromUserId === forumUserId && m.toUserId === 'user')
             ).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).slice(-syncLimit);
-            forumMsgs.forEach(m => { altMemoryText += (m.content || '').trim().slice(0, 200) + '\n'; });
+            forumMsgs.forEach(m => { altMemoryText += formatPromptRichTextContent(m.content || '').slice(0, 200) + '\n'; });
             const altChar = altChars.find(c => c.forumUserId === forumUserId);
             if (altChar && altChar.history && altChar.history.length > 0) {
                 altChar.history.filter(m => !m.isContextDisabled).slice(-syncLimit).forEach(m => {
-                    altMemoryText += (m.content || '').trim().slice(0, 200) + '\n';
+                    altMemoryText += formatPromptRichTextContent(m.content || '').slice(0, 200) + '\n';
                 });
             }
         });
     } else if (enableCharAltDm && linkedChar && linkedChar.history && linkedChar.history.length > 0) {
         const mainSyncLimit = Math.max(1, (linkedChar.maxMemory != null ? parseInt(linkedChar.maxMemory, 10) : 20) || 20);
         linkedChar.history.filter(m => !m.isContextDisabled).slice(-mainSyncLimit).forEach(m => {
-            altMemoryText += (m.content || '').trim().slice(0, 200) + '\n';
+            altMemoryText += formatPromptRichTextContent(m.content || '').slice(0, 200) + '\n';
         });
     }
     const altMemoryTokens = estimateTokenFromText(altMemoryText);
@@ -2971,7 +3059,7 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
             gJournals.forEach(j => { groupMemoryText += j.title + '\n' + j.content + '\n'; });
             const maxGroupHistory = character.groupMemoryHistoryCount || 20;
             let recentGroupHistory = (group.history || []).slice(-maxGroupHistory).filter(m => !m.isContextDisabled);
-            recentGroupHistory.forEach(m => { groupMemoryText += (m.content || '') + '\n'; });
+            recentGroupHistory.forEach(m => { groupMemoryText += formatPromptRichTextContent(m.content || '') + '\n'; });
         });
     }
     const groupMemoryTokens = estimateTokenFromText(groupMemoryText);
@@ -3023,9 +3111,12 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
     let shortTermText = '';
     if (historyForText.length > 0) {
         const historyLines = historyForText.map(m => {
-            let content = m.content || '';
+            let content = formatPromptRichTextContent(m.content || '');
             if (m.parts && m.parts.length > 0) {
-                content = m.parts.map(p => p.text || '[图片]').join('');
+                content = m.parts.map(p => {
+                    if (p.type === 'text' || p.type === 'html') return formatPromptRichTextContent(p.text);
+                    return '[图片]';
+                }).join('');
             }
             const senderName = m.role === 'user' ? chat.myName : chat.realName;
             return `${senderName}: ${content}`;
@@ -3034,10 +3125,10 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
     }
     
     triggerMessages.forEach(msg => {
-        shortTermText += msg.content || '';
+        shortTermText += formatPromptRichTextContent(msg.content || '');
         if (msg.parts) {
             msg.parts.forEach(p => {
-                if (p.type === 'text') shortTermText += p.text || '';
+                if (p.type === 'text' || p.type === 'html') shortTermText += formatPromptRichTextContent(p.text || '');
             });
         }
     });
@@ -3079,10 +3170,10 @@ function _getChatTokenBreakdownGroup(chat) {
     historySlice = historySlice.filter(m => !m.isContextDisabled);
     let shortTermText = '';
     historySlice.forEach(msg => {
-        shortTermText += msg.content || '';
+        shortTermText += formatPromptRichTextContent(msg.content || '');
         if (msg.parts) {
             msg.parts.forEach(p => {
-                if (p.type === 'text') shortTermText += p.text || '';
+                if (p.type === 'text' || p.type === 'html') shortTermText += formatPromptRichTextContent(p.text || '');
             });
         }
     });
@@ -3206,10 +3297,13 @@ async function getCallReply(chat, callType, callContext, onStreamUpdate) {
     if (recentHistory.length > 0) {
         const historyText = recentHistory.map(m => {
             // 简单清理内容中的特殊标签，避免干扰
-            let content = m.content;
+            let content = formatPromptRichTextContent(m.content || '');
             // 如果是多模态消息(parts)，提取文本
             if (m.parts && m.parts.length > 0) {
-                content = m.parts.map(p => p.text || '[图片]').join('');
+                content = m.parts.map(p => {
+                    if (p.type === 'text' || p.type === 'html') return formatPromptRichTextContent(p.text);
+                    return '[图片]';
+                }).join('');
             }
             return content;
         }).join('\n');
@@ -3360,7 +3454,7 @@ async function getCallReply(chat, callType, callContext, onStreamUpdate) {
             if (Array.isArray(m.content)) {
                 // 多模态消息（文本+图片）
                 parts = m.content.map(p => {
-                    if (p.type === 'text') return { text: p.text };
+                    if (p.type === 'text') return { text: formatPromptRichTextContent(p.text) };
                     if (p.type === 'image_url' && p.image_url && p.image_url.url) {
                         const match = p.image_url.url.match(/^data:(image\/(.+));base64,(.*)$/);
                         if (match) return { inline_data: { mime_type: match[1], data: match[3] } };
