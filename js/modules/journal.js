@@ -79,6 +79,26 @@ function formatJournalMessageContent (content) {
         .trim();
 }
 
+function getJournalRangeOrderValue (journal) {
+    const start = Number(journal && journal.range ? journal.range.start : NaN);
+    const end = Number(journal && journal.range ? journal.range.end : NaN);
+
+    return {
+        start: Number.isFinite(start) && start > 0 ? start : Number.MAX_SAFE_INTEGER,
+        end: Number.isFinite(end) && end > 0 ? end : Number.MAX_SAFE_INTEGER,
+        createdAt: Number(journal && journal.createdAt) || 0
+    };
+}
+
+function compareJournalsByRangeOrder (a, b) {
+    const aOrder = getJournalRangeOrderValue(a);
+    const bOrder = getJournalRangeOrderValue(b);
+
+    if (aOrder.start !== bOrder.start) return aOrder.start - bOrder.start;
+    if (aOrder.end !== bOrder.end) return aOrder.end - bOrder.end;
+    return aOrder.createdAt - bOrder.createdAt;
+}
+
 function setupMemoryJournalScreen () {
     const journalTitleBtn = document.getElementById('journal-title-btn');
     const journalTitleActionsheet = document.getElementById('journal-title-actionsheet');
@@ -851,13 +871,7 @@ function renderJournalList (searchQuery = '') {
     const chatInstance = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
     const favoriteTop = chatInstance ? (chatInstance.journalFavoriteTop !== false) : true; // 默认开启
 
-    const sortedJournals = [...journals].sort((a, b) => {
-        if (favoriteTop) {
-            if (a.isFavorited && !b.isFavorited) return -1;
-            if (!a.isFavorited && b.isFavorited) return 1;
-        }
-        return a.createdAt - b.createdAt;
-    });
+    const sortedJournals = [...journals].sort(compareJournalsByRangeOrder);
 
     sortedJournals.forEach(journal => {
         const card = document.createElement('li');

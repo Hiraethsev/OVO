@@ -105,6 +105,26 @@ function formatPromptRichTextContent(content) {
         .trim();
 }
 
+function getFavoritedJournalsForPrompt(memoryJournals) {
+    return (memoryJournals || [])
+        .filter(j => j.isFavorited)
+        .sort((a, b) => {
+            const aStart = Number(a && a.range ? a.range.start : NaN);
+            const bStart = Number(b && b.range ? b.range.start : NaN);
+            const aStartValue = Number.isFinite(aStart) && aStart > 0 ? aStart : Number.MAX_SAFE_INTEGER;
+            const bStartValue = Number.isFinite(bStart) && bStart > 0 ? bStart : Number.MAX_SAFE_INTEGER;
+            if (aStartValue !== bStartValue) return aStartValue - bStartValue;
+
+            const aEnd = Number(a && a.range ? a.range.end : NaN);
+            const bEnd = Number(b && b.range ? b.range.end : NaN);
+            const aEndValue = Number.isFinite(aEnd) && aEnd > 0 ? aEnd : Number.MAX_SAFE_INTEGER;
+            const bEndValue = Number.isFinite(bEnd) && bEnd > 0 ? bEnd : Number.MAX_SAFE_INTEGER;
+            if (aEndValue !== bEndValue) return aEndValue - bEndValue;
+
+            return (a.createdAt || 0) - (b.createdAt || 0);
+        });
+}
+
 // 后台异步生成图片描述
 async function generateImageDescription(msg, chat, apiConfig) {
     if (!msg || !msg.parts || !msg.parts.some(p => p.type === 'image' && !p.description)) return;
@@ -2290,8 +2310,7 @@ function generatePrivateSystemPrompt(character, opts) {
         
         if (activeNode.readMemory) {
             nodePrompt += `<memoir>\n`;
-            const favoritedJournals = (character.memoryJournals || [])
-                .filter(j => j.isFavorited)
+            const favoritedJournals = getFavoritedJournalsForPrompt(character.memoryJournals)
                 .map(j => `标题：${j.title}\n内容：${j.content}`)
                 .join('\n\n---\n\n');
             if (favoritedJournals) {
@@ -2756,8 +2775,7 @@ function generatePrivateSystemPrompt(character, opts) {
     }
 
     prompt += `<memoir>\n`
-    const favoritedJournals = (character.memoryJournals || [])
-        .filter(j => j.isFavorited)
+    const favoritedJournals = getFavoritedJournalsForPrompt(character.memoryJournals)
         .map(j => `标题：${j.title}\n内容：${j.content}`)
         .join('\n\n---\n\n');
 
@@ -2976,8 +2994,7 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
     const stickerTokens = estimateTokenFromText(stickerText);
 
     // 5) 长期记忆（共同回忆 / 收藏日记）
-    const favoritedJournals = (character.memoryJournals || [])
-        .filter(j => j.isFavorited)
+    const favoritedJournals = getFavoritedJournalsForPrompt(character.memoryJournals)
         .map(j => `标题：${j.title}\n内容：${j.content}`)
         .join('\n\n---\n\n');
     const memoirTokens = estimateTokenFromText(favoritedJournals);
@@ -3273,8 +3290,7 @@ async function getCallReply(chat, callType, callContext, onStreamUpdate) {
     }
 
     systemPrompt += `<memoir>\n`
-        const favoritedJournals = (chat.memoryJournals || [])
-        .filter(j => j.isFavorited)
+        const favoritedJournals = getFavoritedJournalsForPrompt(chat.memoryJournals)
         .map(j => `标题：${j.title}\n内容：${j.content}`)
         .join('\n\n---\n\n');
 
@@ -3668,8 +3684,7 @@ async function generateCallSummary(chat, callContext) {
     const worldBooksAfter = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'after')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
 
     // 获取回忆日记
-    const favoritedJournals = (chat.memoryJournals || [])
-        .filter(j => j.isFavorited)
+    const favoritedJournals = getFavoritedJournalsForPrompt(chat.memoryJournals)
         .map(j => `标题：${j.title}\n内容：${j.content}`)
         .join('\n\n---\n\n');
 
