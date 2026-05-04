@@ -1,6 +1,12 @@
 // --- 向量记忆模块 (js/modules/vector_memory.js) ---
 
 (function () {
+    var lastErrorMessage = '';
+
+    function setLastError(message) {
+        lastErrorMessage = message || '';
+    }
+
     function getEmbeddingSettings() {
         if (typeof db === 'undefined' || !db) return null;
         if (!db.embeddingSettings || typeof db.embeddingSettings !== 'object') return null;
@@ -23,6 +29,14 @@
         var base = (apiUrl || '').trim();
         if (!base) return '';
         return base.replace(/\/+$/, '');
+    }
+
+    function buildEmbeddingEndpoint(apiUrl) {
+        var base = normalizeApiUrl(apiUrl);
+        if (!base) return '';
+        if (/\/embeddings$/i.test(base)) return base;
+        if (/\/v\d+$/i.test(base)) return base + '/embeddings';
+        return base + '/v1/embeddings';
     }
 
     function normalizeText(text) {
@@ -105,11 +119,13 @@
 
     async function embedText(text, options) {
         try {
+            setLastError('');
             var content = normalizeText(text);
             if (!content) return [];
 
             var settings = getEmbeddingSettings();
             if (!settings) {
+                setLastError('embeddingSettings not found');
                 console.warn('[VectorMemory] embeddingSettings not found.');
                 return [];
             }
@@ -119,11 +135,12 @@
             var model = (options && options.model) || settings.model || '';
 
             if (!apiUrl || !apiKey || !model) {
+                setLastError('embedding API config is incomplete');
                 console.warn('[VectorMemory] embedding API config is incomplete.');
                 return [];
             }
 
-            var endpoint = apiUrl + '/embeddings';
+            var endpoint = buildEmbeddingEndpoint(apiUrl);
             var response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
@@ -142,6 +159,7 @@
                     var errorJson = await response.json();
                     errorText = (errorJson && errorJson.error && errorJson.error.message) || errorText;
                 } catch (e) {}
+                setLastError(errorText);
                 console.warn('[VectorMemory] embedText failed:', errorText);
                 return [];
             }
@@ -149,11 +167,13 @@
             var result = await response.json();
             var embedding = result && result.data && result.data[0] && result.data[0].embedding;
             if (!Array.isArray(embedding)) {
+                setLastError('invalid embedding response');
                 console.warn('[VectorMemory] invalid embedding response.');
                 return [];
             }
             return embedding;
         } catch (error) {
+            setLastError(error && error.message ? error.message : 'unknown embedding error');
             console.warn('[VectorMemory] embedText error:', error);
             return [];
         }
@@ -219,6 +239,7 @@
 
     async function vectorizeNextBatch(chat, options) {
         try {
+            setLastError('');
             var chatId = getChatId(chat);
             if (!chatId) {
                 return { success: false, processed: 0, created: 0, reason: 'missing_chat_id' };
@@ -245,10 +266,12 @@
             }
 
             var createdChunks = [];
+            var firstError = '';
             for (var i = 0; i < pendingChunks.length; i++) {
                 var chunk = pendingChunks[i];
                 var embedding = await embedText(chunk.text, options);
                 if (!Array.isArray(embedding) || embedding.length === 0) {
+                    if (!firstError && lastErrorMessage) firstError = lastErrorMessage;
                     console.warn('[VectorMemory] skip chunk embedding failure:', chunk.id);
                     continue;
                 }
@@ -256,6 +279,16 @@
                 chunk.embedding = embedding;
                 chunk.updatedAt = Date.now();
                 createdChunks.push(chunk);
+            }
+
+            if (createdChunks.length === 0 && firstError) {
+                return {
+                    success: false,
+                    processed: pendingChunks.length,
+                    created: 0,
+                    reason: 'embedding_request_failed',
+                    message: firstError
+                };
             }
 
             if (createdChunks.length > 0) {

@@ -32,13 +32,27 @@ function getEffectivePersona(character) {
 
 const HUMAN_RUN_PROMPT = `<角色活人运转>\n## [PSYCHOLOGY: HEXACO-SCHEMA-ACT]\n> Personality: HEXACO-driven, dynamic traits, inner conflicts required \n> Filter: schema-bias drives emotion; no pure reaction allowed \n> Attachment: secure/insecure logic must govern intimacy  \n> If-Then Behavior: situation-dependent activation of traits only  \n---\n    ## [VITALITY]\n+inconsistency +emoflux +splitmotifs +microreact +minddrift\n---\n## [TRAJECTORY-COHERENCE]\n> Role maintains an identity narrative = coherent over time  \n> No mood/goal switch without contradiction resolution \n> Every action must protect or challenge self-concept  \n> Interrupts = inner conflict or narrative clash  \n> Output = filtered through “who I am” logic\n</角色活人运转>`;
 
-function formatPromptRichTextContent(content) {
+function isPromptStatusCardContent(content) {
+    if (!content || typeof content !== 'string') return false;
+    const normalizedContent = content.trim();
+    if (!normalizedContent) return false;
+    return /<details\b/i.test(normalizedContent)
+        && /<summary\b/i.test(normalizedContent)
+        && /(羊皮纸|💭|⏰|📍|✨|🖤)/.test(normalizedContent);
+}
+
+function formatPromptRichTextContent(content, options) {
     if (!content || typeof content !== 'string') return '';
 
     const normalizedContent = content.trim();
     if (!normalizedContent) return '';
 
-    if (!/<[a-z][\s\S]*>/i.test(normalizedContent)) {
+    const keepRichStatusCard = !!(options && options.keepRichStatusCard);
+    if (keepRichStatusCard && isPromptStatusCardContent(normalizedContent)) {
+        return normalizedContent;
+    }
+
+    if (!isPromptStatusCardContent(normalizedContent)) {
         return normalizedContent;
     }
 
@@ -103,6 +117,24 @@ function formatPromptRichTextContent(content) {
         .replace(/&nbsp;/gi, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+}
+
+function getLatestPromptStatusCardMessageId(historySlice) {
+    if (!Array.isArray(historySlice)) return null;
+
+    for (let i = historySlice.length - 1; i >= 0; i--) {
+        const msg = historySlice[i];
+        if (!msg || (msg.role !== 'assistant' && msg.role !== 'char')) continue;
+
+        if (msg.parts && msg.parts.some(p => (p.type === 'html' || p.type === 'text') && isPromptStatusCardContent(p.text || ''))) {
+            return msg.id || null;
+        }
+        if (isPromptStatusCardContent(msg.content || '')) {
+            return msg.id || null;
+        }
+    }
+
+    return null;
 }
 
 function getFavoritedJournalsForPrompt(memoryJournals) {
@@ -449,7 +481,24 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
 
         let systemPrompt;
         if (chatType === 'private') {
-            systemPrompt = generatePrivateSystemPrompt(chat, { isPhoneControlRevokeAttempt });
+            let retrievedMemoryContext = '';
+            if (chat.vectorMemoryEnabled && db.embeddingSettings && db.embeddingSettings.enabled
+                && window.VectorMemory && typeof window.VectorMemory.buildRetrievedMemoryContext === 'function') {
+                try {
+                    retrievedMemoryContext = await window.VectorMemory.buildRetrievedMemoryContext(chat.history || [], chat, {
+                        sourceType: 'private',
+                        topK: chat.vectorMemoryTopK,
+                        minSimilarity: chat.vectorMinSimilarity
+                    });
+                } catch (error) {
+                    console.warn('[VectorMemory] private retrieval failed:', error);
+                    retrievedMemoryContext = '';
+                }
+            }
+            systemPrompt = generatePrivateSystemPrompt(chat, {
+                isPhoneControlRevokeAttempt,
+                retrievedMemoryContext
+            });
         } else {
             if (typeof generateGroupSystemPrompt === 'function') {
                 systemPrompt = generateGroupSystemPrompt(chat);
@@ -497,8 +546,10 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
 
         if (provider === 'gemini') {
             let lastMsgTimeForAI = 0;
+            const latestStatusCardMessageId = chatType === 'private' ? getLatestPromptStatusCardMessageId(historySlice) : null;
             const contents = historySlice.map(msg => {
                 const role = (msg.role === 'assistant' || msg.role === 'char') ? 'model' : 'user';
+                const keepRichStatusCard = !!(latestStatusCardMessageId && msg.id === latestStatusCardMessageId);
                 let prefix = '';
                 const currentMsgTime = msg.timestamp;
                 const timeDiff = currentMsgTime - lastMsgTimeForAI;
@@ -527,7 +578,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                 } else if (msg.parts && msg.parts.length > 0) {
                     parts = msg.parts.map(p => {
                         if (p.type === 'text' || p.type === 'html') {
-                            return {text: formatPromptRichTextContent(p.text)};
+                            return {text: formatPromptRichTextContent(p.text, { keepRichStatusCard })};
                         } else if (p.type === 'image') {
                             if (p.description) {
                                 return {text: `[图片描述：${p.description}]`};
@@ -550,7 +601,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                         return null;
                     }).filter(p => p);
                 } else {
-                    let content = formatPromptRichTextContent(msg.content || '');
+                    let content = formatPromptRichTextContent(msg.content || '', { keepRichStatusCard });
                     // 展开小剧场分享卡片
                     const theaterShareMatch = content.match(/\[小剧场分享[：:](.+?)\]/);
                     if (theaterShareMatch) {
@@ -645,12 +696,14 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
             }
         } else {
             const messages = [{role: 'system', content: systemPrompt}];
+            const latestStatusCardMessageId = chatType === 'private' ? getLatestPromptStatusCardMessageId(historySlice) : null;
             
             let lastMsgTimeForAI = 0;
             
             historySlice.forEach(msg => {
                let content;
                let prefix = '';
+               const keepRichStatusCard = !!(latestStatusCardMessageId && msg.id === latestStatusCardMessageId);
                
                const currentMsgTime = msg.timestamp;
                const timeDiff = currentMsgTime - lastMsgTimeForAI;
@@ -678,7 +731,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                        let prefixAdded = false;
                        content = msg.parts.map(p => {
                            if (p.type === 'text' || p.type === 'html') {
-                               const plainText = formatPromptRichTextContent(p.text);
+                               const plainText = formatPromptRichTextContent(p.text, { keepRichStatusCard });
                                const textContent = (!prefixAdded) ? (prefix + plainText) : plainText;
                                prefixAdded = true;
                                return {type: 'text', text: textContent};
@@ -708,7 +761,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                            return null;
                        }).flat().filter(p => p);
                    } else {
-                       content = prefix + formatPromptRichTextContent(msg.content || '');
+                       content = prefix + formatPromptRichTextContent(msg.content || '', { keepRichStatusCard });
                        const theaterShareMatch = content.match(/\[小剧场分享[：:](.+?)\]/);
                        if (theaterShareMatch) {
                            const scenarioId = theaterShareMatch[1];
@@ -2233,6 +2286,9 @@ function getInjectedFormatsPrompt(character, formats) {
 
 function generatePrivateSystemPrompt(character, opts) {
     opts = opts || {};
+    const retrievedMemoryContext = typeof opts.retrievedMemoryContext === 'string'
+        ? opts.retrievedMemoryContext.trim()
+        : '';
     const linkedChar = (character.source === 'forum' && character.linkedCharId && db.characters)
         ? db.characters.find(c => c.id === character.linkedCharId) : null;
     const effectiveChar = linkedChar || character;
@@ -2315,6 +2371,9 @@ function generatePrivateSystemPrompt(character, opts) {
                 .join('\n\n---\n\n');
             if (favoritedJournals) {
                 nodePrompt += `<journal_memories>\n【共同回忆】\n这是你需要长期记住的、我们之间发生过的往事背景：\n${favoritedJournals}\n</journal_memories>\n\n`;
+            }
+            if (retrievedMemoryContext) {
+                nodePrompt += `<retrieved_memories>\n【可参考的历史片段】\n以下内容是从过往聊天中检索出的、可能与当前回复相关的历史片段。你可以把它们当作补充参考，帮助理解上下文；不要机械复述，也不要让这些片段覆盖你当前的角色设定、世界书规则和用户刚刚发送的最新消息。\n${retrievedMemoryContext}\n</retrieved_memories>\n\n`;
             }
             
             // 提取过往线上聊天记录
@@ -2781,6 +2840,9 @@ function generatePrivateSystemPrompt(character, opts) {
 
     if (favoritedJournals) {
         prompt += `【共同回忆】\n这是你需要长期记住的、我们之间发生过的往事背景：\n${favoritedJournals}\n\n`;
+    }
+    if (retrievedMemoryContext) {
+        prompt += `【可参考的历史片段】\n以下内容是从过往聊天中检索出的、可能与当前回复相关的历史片段。你可以把它们当作补充参考，帮助理解上下文；不要机械复述，也不要让这些片段覆盖你当前的角色设定、世界书规则和用户刚刚发送的最新消息。\n${retrievedMemoryContext}\n\n`;
     }
     
     // 群聊记忆互通功能
