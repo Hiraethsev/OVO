@@ -4107,10 +4107,10 @@
                                             placeholder="点击修改">
                                     </div>
                                 </div>
-                                <div class="kkt-item">
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:8px;">
                                     <div class="kkt-item-label">角色时区</div>
-                                    <div class="kkt-item-control" style="display:flex; align-items:center; gap:5px;">
-                                        <select id="setting-char-timezone-preset" style="border: 1px solid #eee; border-radius: 6px; padding: 4px 8px; background: #f9f9f9; min-width: 80px; direction: rtl; appearance: none; -webkit-appearance: none; text-align: center; text-align-last: center;">
+                                    <div class="kkt-item-control" style="display:flex; align-items:center; gap:5px; width:100%;">
+                                        <select id="setting-char-timezone-preset" style="border: 1px solid #eee; border-radius: 6px; padding: 4px 8px; background: #f9f9f9; min-width: 80px; appearance: none; -webkit-appearance: none; text-align: center; text-align-last: center;">
                                             <option value="">预设</option>
                                             <optgroup label="亚洲">
                                                 <option value="Asia/Shanghai">北京/上海 (UTC+8)</option>
@@ -4148,18 +4148,19 @@
                                         </select>
                                         <span class="kkt-arrow">›</span>
                                         <input type="text" id="setting-char-timezone" autocomplete="off"
-                                            style="text-align:right; border:none; background:transparent; width: 120px;"
+                                            style="text-align:right; border:none; background:transparent; flex:1; min-width:0;"
                                             placeholder="可在此自定义输入">
                                     </div>
                                 </div>
-                                <div class="kkt-item">
-                                    <div class="kkt-item-label">开启动态时区提示词<p style="font-size:12px;color:#999;margin:4px 0 0;">通过系统时间加上双方时差设定，让角色感知两地时间</p></div>
-                                    <div class="kkt-item-control">
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:4px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>开启动态时区提示词</span>
                                         <label class="kkt-switch">
                                             <input type="checkbox" id="setting-char-enable-dynamic-timezone">
                                             <span class="kkt-slider"></span>
                                         </label>
                                     </div>
+                                    <p style="font-size:12px;color:#999;margin:0;">通过系统时间加上双方时差设定，让角色感知两地时间</p>
                                 </div>
                                 <div class="kkt-item" style="flex-direction:column; align-items:flex-start;">
                                     <div class="kkt-item-label" style="margin-bottom:8px;">角色人设</div>
@@ -4260,10 +4261,10 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="kkt-item">
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:8px;">
                                     <div class="kkt-item-label">我的时区</div>
-                                    <div class="kkt-item-control" style="display:flex; align-items:center; gap:5px;">
-                                        <select id="setting-my-timezone-preset" style="border: 1px solid #eee; border-radius: 6px; padding: 4px 8px; background: #f9f9f9; min-width: 80px; direction: rtl; appearance: none; -webkit-appearance: none; text-align: center; text-align-last: center;">
+                                    <div class="kkt-item-control" style="display:flex; align-items:center; gap:5px; width:100%;">
+                                        <select id="setting-my-timezone-preset" style="border: 1px solid #eee; border-radius: 6px; padding: 4px 8px; background: #f9f9f9; min-width: 80px; appearance: none; -webkit-appearance: none; text-align: center; text-align-last: center;">
                                             <option value="">预设</option>
                                             <optgroup label="亚洲">
                                                 <option value="Asia/Shanghai">北京/上海 (UTC+8)</option>
@@ -4301,18 +4302,19 @@
                                         </select>
                                         <span class="kkt-arrow">›</span>
                                         <input type="text" id="setting-my-timezone" autocomplete="off"
-                                            style="text-align:right; border:none; background:transparent; width: 120px;"
+                                            style="text-align:right; border:none; background:transparent; flex:1; min-width:0;"
                                             placeholder="可在此自定义输入">
                                     </div>
                                 </div>
-                                <div class="kkt-item">
-                                    <div class="kkt-item-label">开启动态时区提示词<p style="font-size:12px;color:#999;margin:4px 0 0;">通过系统时间加上双方时差设定，让角色感知两地时间</p></div>
-                                    <div class="kkt-item-control">
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:4px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>开启动态时区提示词</span>
                                         <label class="kkt-switch">
                                             <input type="checkbox" id="setting-my-enable-dynamic-timezone">
                                             <span class="kkt-slider"></span>
                                         </label>
                                     </div>
+                                    <p style="font-size:12px;color:#999;margin:0;">通过系统时间加上双方时差设定，让角色感知两地时间</p>
                                 </div>
                                 <div class="kkt-item" style="flex-direction:column; align-items:flex-start;">
                                     <div class="kkt-item-label" style="margin-bottom:8px;">我的人设</div>
