@@ -953,8 +953,9 @@ function renderWorldBookList(expandedCategory = null) {
         worldBookListContainer.appendChild(section);
     });
 
-    // 初始化分类拖拽排序
-    if (typeof Sortable !== 'undefined' && !isWorldBookMultiSelectMode && !searchKeyword) {
+    // 初始化分类拖拽排序（移动端/触摸设备不启用，避免影响点击）
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (typeof Sortable !== 'undefined' && !isWorldBookMultiSelectMode && !searchKeyword && !isTouchDevice) {
         categorySortable = new Sortable(worldBookListContainer, {
             animation: 150,
             handle: '.collapsible-header', // 点击头部拖拽
