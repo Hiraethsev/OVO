@@ -464,6 +464,15 @@
     window.acceptFriendRequest = acceptFriendRequest;
     window.rejectFriendRequest = rejectFriendRequest;
 
+    function reopenPendingFriendRequest(charId) {
+        var char = db.characters.find(function(c) { return c.id === charId; });
+        if (!char || !char.blockReapply || !char.blockReapply.pendingRequestId) return;
+        currentPendingRequestCharId = char.id;
+        currentPendingRequestId = char.blockReapply.pendingRequestId;
+        showFriendRequestModal(char, currentPendingRequestId);
+    }
+    window.reopenPendingFriendRequest = reopenPendingFriendRequest;
+
     document.addEventListener('DOMContentLoaded', function () {
         startBlockSystemInterval();
         var acceptBtn = document.getElementById('friend-request-accept-btn');

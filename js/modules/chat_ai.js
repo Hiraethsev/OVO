@@ -20,6 +20,60 @@ function isInQuietHours(charId) {
     }
 }
 
+function getActiveWorldBooksContents(character) {
+    if (!character) return { before: '', middle: '', after: '' };
+    const linkedChar = (character.source === 'forum' && character.linkedCharId && typeof db !== 'undefined' && db.characters)
+        ? db.characters.find(c => c.id === character.linkedCharId) : null;
+    const effectiveChar = linkedChar || character;
+
+    let associatedIds = effectiveChar.worldBookIds || [];
+    
+    // 检查线下节点
+    let isOfflineNode = false;
+    if (character.activeNodeId && character.nodes) {
+        const activeNode = character.nodes.find(n => n.id === character.activeNodeId);
+        if (activeNode) {
+            let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
+                           (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
+            if (baseMode === 'offline') {
+                isOfflineNode = true;
+            }
+        }
+    }
+    if (isOfflineNode) {
+        associatedIds = (effectiveChar.offlineWorldBookIds && effectiveChar.offlineWorldBookIds.length > 0) ? effectiveChar.offlineWorldBookIds : (effectiveChar.worldBookIds || []);
+    }
+
+    const globalBooks = typeof db !== 'undefined' ? db.worldBooks.filter(wb => wb.isGlobal && !wb.disabled) : [];
+    const globalIds = globalBooks.map(wb => wb.id);
+    const allBookIds = [...new Set([...associatedIds, ...globalIds])];
+
+    // 获取最近聊天记录用于关键词匹配
+    const recentMsgs = (character.history || []).filter(m => m.role === 'user' || m.role === 'assistant' || m.role === 'char').slice(-15);
+    const recentText = recentMsgs.map(m => {
+        if (m.parts && m.parts.length > 0) return m.parts.map(p => p.text || '').join(' ');
+        return m.content || '';
+    }).join('\n');
+
+    const activeWorldBooks = allBookIds.map(id => typeof db !== 'undefined' ? db.worldBooks.find(wb => wb.id === id) : null).filter(wb => {
+        if (!wb || wb.disabled) return false;
+        if (wb.alwaysOn !== false) return true; // 默认常驻或开启常驻
+        // 否则检查关键词
+        if (wb.keywords && wb.keywords.length > 0) {
+            return wb.keywords.some(kw => recentText.includes(kw));
+        }
+        return false;
+    });
+
+    const sortByWeight = (a, b) => (a.weight !== undefined ? a.weight : 100) - (b.weight !== undefined ? b.weight : 100);
+
+    return {
+        before: activeWorldBooks.filter(wb => wb.position === 'before').sort(sortByWeight).map(wb => wb.content).join('\n'),
+        middle: activeWorldBooks.filter(wb => wb.position === 'middle').sort(sortByWeight).map(wb => wb.content).join('\n'),
+        after: activeWorldBooks.filter(wb => wb.position === 'after').sort(sortByWeight).map(wb => wb.content).join('\n')
+    };
+}
+
 function getEffectivePersona(character) {
     if (!character) return '';
     let p = character.persona || '';
@@ -354,9 +408,18 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
             return true;
         });
 
+        let weatherText = '';
+        if (chatType === 'private' && window.WeatherService) {
+            const charWeather = await window.WeatherService.getCharacterWeatherPrompt(chat);
+            const userWeather = await window.WeatherService.getUserWeatherPrompt(chat);
+            if (charWeather || userWeather) {
+                weatherText = `\n<environment>\n${charWeather ? charWeather + '\n' : ''}${userWeather ? userWeather + '\n' : ''}</environment>\n`;
+            }
+        }
+
         let systemPrompt;
         if (chatType === 'private') {
-            systemPrompt = generatePrivateSystemPrompt(chat, { isPhoneControlRevokeAttempt });
+            systemPrompt = generatePrivateSystemPrompt(chat, { isPhoneControlRevokeAttempt, weatherText });
         } else {
             if (typeof generateGroupSystemPrompt === 'function') {
                 systemPrompt = generateGroupSystemPrompt(chat);
@@ -1151,6 +1214,18 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
             const char = db.characters.find(c => c.id === targetChatId);
             const pcResult = executePhoneControlCommands(fullResponse, char);
             if (pcResult.executed) fullResponse = pcResult.cleaned;
+            
+            if (fullResponse.includes('[同意关闭]')) {
+                fullResponse = fullResponse.replace(/\[同意关闭\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+                if (char && char.phoneControlEnabled) {
+                    char.phoneControlEnabled = false;
+                    if (typeof showToast === 'function') showToast('TA已同意，权限已关闭');
+                    if (typeof loadSettingsToSidebar === 'function') setTimeout(loadSettingsToSidebar, 100);
+                }
+            } else if (fullResponse.includes('[拒绝关闭]')) {
+                fullResponse = fullResponse.replace(/\[拒绝关闭\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+                if (typeof showToast === 'function') showToast('TA拒绝了关闭权限的请求');
+            }
         }
 
         // 1.5 提取并执行角色收藏指令，然后从展示内容中移除
@@ -2143,6 +2218,162 @@ function generatePrivateSystemPrompt(character, opts) {
         ? db.characters.find(c => c.id === character.linkedCharId) : null;
     const effectiveChar = linkedChar || character;
 
+    let { before: worldBooksBefore, middle: worldBooksMiddle, after: worldBooksAfter } = getActiveWorldBooksContents(character);
+    
+    const now = new Date();
+    let currentTime = `${now.getFullYear()}年${pad(now.getMonth() + 1)}月${pad(now.getDate())}日 ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    if (character.enableDynamicTimezone && character.charTimezone) {
+        const tzTime = getLocalTimeInTimezone(character.charTimezone);
+        if (tzTime) currentTime = tzTime;
+    }
+
+    // 检查角色是否有专属的自定义提示词，或者全局是否开启了自定义提示词
+    let useCustomPrompt = false;
+    let template = '';
+    if (character.customPromptPreset && db.magicRoom && db.magicRoom.presets) {
+        const preset = db.magicRoom.presets.find(p => p.name === character.customPromptPreset);
+        if (preset) {
+            useCustomPrompt = true;
+            template = preset.template;
+        }
+    }
+    
+    if (!useCustomPrompt && db.magicRoom && db.magicRoom.customPromptEnabled && db.magicRoom.customPromptTemplate) {
+        useCustomPrompt = true;
+        template = db.magicRoom.customPromptTemplate;
+    }
+
+    // 处理用户自定义的底层系统提示词模板
+    if (useCustomPrompt && template) {
+        
+        // 构建共同回忆字符串
+        let favoritedJournals = (character.memoryJournals || [])
+            .filter(j => j.isFavorited)
+            .map(j => `标题：${j.title}\n内容：${j.content}`)
+            .join('\n\n---\n\n');
+        
+        let commonMemories = '';
+        if (favoritedJournals) {
+            commonMemories = `【共同回忆】\n这是你需要长期记住的、我们之间发生过的往事背景：\n${favoritedJournals}`;
+        }
+        
+        // 构建群聊记忆互通字符串
+        if (character.syncGroupMemory) {
+            let groupsWithCharacter = db.groups.filter(group => 
+                group.members && group.members.some(member => member.originalCharId === character.id)
+            );
+            if (character.syncGroupIds && Array.isArray(character.syncGroupIds) && character.syncGroupIds.length > 0) {
+                groupsWithCharacter = groupsWithCharacter.filter(group => 
+                    character.syncGroupIds.includes(group.id)
+                );
+            }
+            if (groupsWithCharacter.length > 0) {
+                let groupMemoryContext = '';
+                groupsWithCharacter.forEach(group => {
+                    let groupFavoritedJournals = (group.memoryJournals || []).filter(j => j.isFavorited);
+                    const summaryCount = character.groupMemorySummaryCount || 0;
+                    if (summaryCount > 0 && groupFavoritedJournals.length > summaryCount) {
+                        groupFavoritedJournals = groupFavoritedJournals.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, summaryCount);
+                    }
+                    const groupFavoritedJournalsText = groupFavoritedJournals.map(j => `标题：${j.title}\n内容：${j.content}`).join('\n\n---\n\n');
+                    const maxGroupHistory = character.groupMemoryHistoryCount || 20;
+                    let recentGroupHistory = group.history.slice(-maxGroupHistory);
+                    if (typeof filterHistoryForAI === 'function') {
+                        recentGroupHistory = filterHistoryForAI(group, recentGroupHistory);
+                    }
+                    recentGroupHistory = recentGroupHistory.filter(m => !m.isContextDisabled);
+                    if (groupFavoritedJournalsText || recentGroupHistory.length > 0) {
+                        groupMemoryContext += `\n【群聊"${group.name}"的背景信息】\n`;
+                        if (groupFavoritedJournalsText) groupMemoryContext += `群聊总结：\n${groupFavoritedJournalsText}\n`;
+                        if (recentGroupHistory.length > 0) {
+                            const historyText = recentGroupHistory.map(m => {
+                                let content = m.content;
+                                if (m.parts && m.parts.length > 0) content = m.parts.map(p => p.text || '[图片]').join('');
+                                const senderName = m.senderId ? (group.members.find(mem => mem.id === m.senderId)?.groupNickname || '未知') : (m.role === 'user' ? group.me.nickname : '系统');
+                                return `${senderName}: ${content}`;
+                            }).join('\n');
+                            groupMemoryContext += `最近群聊记录：\n${historyText}\n`;
+                        }
+                    }
+                });
+                if (groupMemoryContext) {
+                    commonMemories += `\n【群聊记忆互通】\n以下是你所在群聊的相关背景信息，这些信息可以帮助你更好地理解我们之间的对话上下文：${groupMemoryContext}`;
+                }
+            }
+        }
+
+        // 构建在线逻辑规则
+        let onlineLogicRules = getOnlineLogicRules(character, 4);
+
+        // 构建输出格式
+        let outputFormats = getOnlineOutputFormats(character, worldBooksBefore, worldBooksAfter);
+
+        // 替换变量
+        template = template.replace(/\{\{当前时间\}\}/g, currentTime);
+        template = template.replace(/\{\{世界书_前\}\}/g, worldBooksBefore || '');
+        template = template.replace(/\{\{世界书_中\}\}/g, worldBooksMiddle || '');
+        template = template.replace(/\{\{世界书_后\}\}/g, worldBooksAfter || '');
+        template = template.replace(/\{\{角色名\}\}/g, character.realName || '');
+        template = template.replace(/\{\{用户称呼\}\}/g, character.myName || '');
+        template = template.replace(/\{\{角色状态\}\}/g, character.status || '在线');
+        template = template.replace(/\{\{角色人设\}\}/g, getEffectivePersona(character) || '');
+        template = template.replace(/\{\{用户人设\}\}/g, character.myPersona || '');
+        template = template.replace(/\{\{共同回忆\}\}/g, commonMemories || '');
+        template = template.replace(/\{\{在线逻辑规则\}\}/g, onlineLogicRules || '');
+        template = template.replace(/\{\{输出格式\}\}/g, outputFormats || '');
+        template = template.replace(/\{\{天气信息\}\}/g, opts.weatherText || '');
+
+        if (opts.weatherText && !template.includes('<environment>')) {
+             template += opts.weatherText;
+        }
+
+        // 补充必要的结尾和选项（如双语、自知等）
+        if (character.bilingualModeEnabled) {
+            template += `\n✨双语模式特别指令✨：当你的角色的母语为中文以外的语言时，你的消息回复**必须**严格遵循双语模式下的普通消息格式：[${character.realName}的消息：{外语原文}「中文翻译」],例如: [${character.realName}的消息：Of course, I'd love to.「当然，我很乐意。」],中文翻译文本视为系统自翻译，不视为角色的原话;当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并使用普通消息的标准格式: [${character.realName}的消息：{中文消息内容}] 。**语音消息**在双语模式下也须使用相同格式：[${character.realName}的语音：{外语原文}「中文翻译」]，例如：[${character.realName}的语音：Of course, I'd love to.「当然，我很乐意。」]。这条规则的优先级非常高，请务必遵守。\n`;
+        }
+        
+        if (character.replyCountEnabled) {
+            const minReply = character.replyCountMin || 3;
+            const maxReply = character.replyCountMax || 8;
+            template += `\n<Chatting Guidelines>\n17. **对话节奏**: 你需要模拟真人的聊天习惯，你可以一次性生成多条短消息。每次回复消息条数**必须**严格限定在**${minReply}-${maxReply}条以内**，**关键规则**：请保持回复消息数量的**随机性和多样性**。**除非**你的设定偏向活跃或情绪波动大或是特殊情况下，否则**不要**触碰 ${maxReply} 条的上限。\n`;
+        } else {
+            template += `\n<Chatting Guidelines>\n17. **对话节奏**: 你需要模拟真人的聊天习惯，你可以一次性生成多条短消息。每次回复3-8条消息之内，**关键规则**：请保持回复消息数量的**随机性和多样性**。\n`;
+        }
+        template += `18. **特殊消息格式的使用原则**：(1)请把语音、撤回、转账、商城互动、更新状态、引用、定位等特殊格式视为增强互动的“调味剂”，遵循**自然、主动、多样化触发逻辑。同种格式不要重复频繁发送，不同格式不要用户不提就一直不发**。\n(2)注意在本回合消息列里，特殊消息插入位置的随机性，每轮必须和上一回合插入位置不同。\n`;
+        template += `19. 🌟**防复读对话**🌟：在本轮回复中，你**必须**区别于过往聊天记录而去变换句式和词汇，**绝对不要**重复或模仿历史记录中的文本结构，保持自然、随机和多样性。\n`;
+        template += `</Chatting Guidelines>\n`;
+        template += `20. 不要主动终止聊天进程，除非我明确提出。保持你的人设，自然地进行对话。`;
+
+        if (character.characterAutoFavoriteEnabled) {
+            template += `\n\n【消息收藏功能】\n你可以主动收藏用户发送的重要消息，以便日后回顾。在 <think> 中可先思考是否需要收藏。\n\n**使用方法**：在回复中加入指令 [FAVORITE:消息ID:收藏寄语]。每条用户消息在上下文中以 [id:消息ID] 标注在消息开头，请使用该 ID。\n\n**收藏标准**：用户分享的重要个人信息（梦想、价值观、经历）、情感转折点的关键对话、用户明确表达的喜好或厌恶、对建立深层关系有帮助的信息。只收藏用户的消息，不要过度收藏，寄语简短精炼（20字以内）。静默收藏，不要在对话中提及收藏行为。\n\n**示例**：若决定收藏某条用户消息（其前有 [id:msg_123]），在回复中写 [FAVORITE:msg_123:他的童年梦想，反映核心价值观]，再写你的正常聊天内容。`;
+        }
+
+        if (character.charAwareUserFavorites) {
+            const allFavs = db.favorites || [];
+            let userFavs = allFavs.filter(f => f.favoriteBy === 'user');
+            if (character.awareFavoriteScope !== 'all') {
+                userFavs = userFavs.filter(f => f.chatId === character.id && f.chatType === 'private');
+            }
+            if (userFavs.length > 0) {
+                let favText = '';
+                userFavs.forEach(f => {
+                    favText += `- 内容：${f.content || ''}`;
+                    if (f.note) {
+                        favText += ` （用户寄语：${f.note}）`;
+                    }
+                    favText += `\n`;
+                });
+                template += `\n\n【用户收藏的内容】\n这是用户在${character.awareFavoriteScope === 'all' ? '所有对话' : '与你的对话'}中主动收藏的消息内容，你可以借此了解用户的喜好和内心想法：\n${favText}`;
+            }
+        }
+
+        if (opts && opts.historyText) {
+            template += '\n' + opts.historyText;
+        }
+
+        return template;
+    }
+
     // 节点系统：拦截并返回专属提示词
     let activeNode = null;
     let isOfflineNode = false;
@@ -2156,22 +2387,8 @@ function generatePrivateSystemPrompt(character, opts) {
             }
         }
     }
-
-    // 收集世界书：关联的 + 全局的（去重）；小号用主角色世界书
-    let associatedIds = effectiveChar.worldBookIds || [];
-    if (isOfflineNode) {
-        associatedIds = (effectiveChar.offlineWorldBookIds && effectiveChar.offlineWorldBookIds.length > 0) ? effectiveChar.offlineWorldBookIds : (effectiveChar.worldBookIds || []);
-    }
-    const globalBooks = db.worldBooks.filter(wb => wb.isGlobal && !wb.disabled);
-    const globalIds = globalBooks.map(wb => wb.id);
-    const allBookIds = [...new Set([...associatedIds, ...globalIds])]; // 合并去重
     
-    // 按位置分类
-    const worldBooksBefore = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'before')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksMiddle = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'middle')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksAfter = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'after')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const now = new Date();
-    const currentTime = `${now.getFullYear()}年${pad(now.getMonth() + 1)}月${pad(now.getDate())}日 ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
 
     if (activeNode) {
         let nodePrompt = `当前为剧情节点「${activeNode.name}」，你正在扮演一个角色。请严格遵守以下规则：\n`;
@@ -2208,6 +2425,12 @@ function generatePrivateSystemPrompt(character, opts) {
                 nodePrompt += `[System Notice] ✨重要✨ 与你对话的用户（称呼：${character.myName}）出生于${birthDate.getFullYear()}年${birthDate.getMonth() + 1}月${birthDate.getDate()}日，今天正是他/她的${age}岁生日！请在对话中自然地表现出你对这一点的知晓和关心。\n`;
             } else {
                 nodePrompt += `[System Notice] 与你对话的用户（称呼：${character.myName}）出生于${birthDate.getFullYear()}年${birthDate.getMonth() + 1}月${birthDate.getDate()}日，现在的年龄是${age}岁。\n`;
+            }
+        }
+        if (character.myEnableDynamicTimezone && character.myTimezone) {
+            const timeStr = getLocalTimeInTimezone(character.myTimezone);
+            if (timeStr) {
+                nodePrompt += `[System Notice] 与你对话的用户（称呼：${character.myName}）当前所在的当地时间是：${timeStr} (${character.myTimezone})。\n`;
             }
         }
         nodePrompt += `</user_settings>\n\n`;
@@ -2402,6 +2625,12 @@ function generatePrivateSystemPrompt(character, opts) {
             prompt += `[System Notice] 你的出生日期是${birthDate.getFullYear()}年${birthDate.getMonth() + 1}月${birthDate.getDate()}日，你现在的年龄是${age}岁。\n`;
         }
     }
+    if (character.enableDynamicTimezone && character.charTimezone) {
+        const timeStr = getLocalTimeInTimezone(character.charTimezone);
+        if (timeStr) {
+            prompt += `[System Notice] 你当前所在的当地时间是：${timeStr} (${character.charTimezone})。\n`;
+        }
+    }
     if (!db.apiSettings || db.apiSettings.onlineRoleEnabled !== false) {
         prompt += `B. 纯线上互动：这是一个完全虚拟的线上聊天。你扮演的角色和我之间没有任何线下关系。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。你必须始终保持在线角色的身份。\n\n`;
     } else {
@@ -2525,6 +2754,12 @@ function generatePrivateSystemPrompt(character, opts) {
             prompt += `[System Notice] 与你对话的用户（称呼：${character.myName}）出生于${birthDate.getFullYear()}年${birthDate.getMonth() + 1}月${birthDate.getDate()}日，现在的年龄是${age}岁。\n`;
         }
     }
+    if (character.myEnableDynamicTimezone && character.myTimezone) {
+        const timeStr = getLocalTimeInTimezone(character.myTimezone);
+        if (timeStr) {
+            prompt += `[System Notice] 与你对话的用户（称呼：${character.myName}）当前所在的当地时间是：${timeStr} (${character.myTimezone})。\n`;
+        }
+    }
     prompt += `</user_settings>\n`
 
     const userCardToChar = (db.piggyBank && db.piggyBank.familyCards) ? db.piggyBank.familyCards.find(c => c.targetCharId === character.id && c.status === 'active') : null;
@@ -2625,7 +2860,9 @@ function generatePrivateSystemPrompt(character, opts) {
     if (character.phoneControlEnabled) {
         prompt += formatUserPhoneStateForPrompt(character);
         if (opts.isPhoneControlRevokeAttempt) {
-            prompt += '\n【重要】用户刚刚试图关闭你对 TA 手机的查看与操控权限。请根据人设做出反应（如质问、挽留、生气等），并可继续正常对话。\n';
+            prompt += '\n【重要指令】用户正在尝试关闭你对TA手机的查看与操控权限！你必须在回复中做出明确选择：\n' +
+                      '如果同意关闭，必须包含标签 [同意关闭] ；如果拒绝关闭，必须包含标签 [拒绝关闭] （二者必选其一）。\n' +
+                      '同时，无论同意还是拒绝，你都必须在给用户的回复中，根据你的人设表达出明确的态度和理由（如质问、生气、挽留、或爽快答应等），不可无视该请求继续闲聊。\n';
         }
     }
 
@@ -2800,8 +3037,36 @@ function generatePrivateSystemPrompt(character, opts) {
 **示例**：若决定收藏某条用户消息（其前有 [id:msg_123]），在回复中写 [FAVORITE:msg_123:他的童年梦想，反映核心价值观]，再写你的正常聊天内容。`;
     }
 
+    if (character.charAwareUserFavorites) {
+        const allFavs = db.favorites || [];
+        let userFavs = allFavs.filter(f => f.favoriteBy === 'user');
+        
+        if (character.awareFavoriteScope === 'all') {
+            // 包含所有的收藏
+        } else {
+            // 仅当前角色
+            userFavs = userFavs.filter(f => f.chatId === character.id && f.chatType === 'private');
+        }
+        
+        if (userFavs.length > 0) {
+            let favText = '';
+            userFavs.forEach(f => {
+                favText += `- 内容：${f.content || ''}`;
+                if (f.note) {
+                    favText += ` （用户寄语：${f.note}）`;
+                }
+                favText += `\n`;
+            });
+            prompt += `\n\n【用户收藏的内容】\n这是用户在${character.awareFavoriteScope === 'all' ? '所有对话' : '与你的对话'}中主动收藏的消息内容，你可以借此了解用户的喜好和内心想法：\n${favText}`;
+        }
+    }
+
     if (character.myName) {
         prompt = prompt.replace(/\{\{user\}\}/gi, character.myName);
+    }
+
+    if (opts && opts.weatherText) {
+        prompt += '\n' + opts.weatherText;
     }
 
     if (opts && opts.historyText) {
@@ -2830,8 +3095,14 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
     const chat = (chatType === 'private') ? db.characters.find(c => c.id === chatId) : db.groups.find(g => g.id === chatId);
     if (!chat) return null;
 
-    // --- 群聊走旧逻辑（整体 systemPrompt 拆分） ---
-    if (chatType !== 'private') {
+    let useCustomPrompt = false;
+    if (chatType === 'private' && chat.customPromptPreset && db.magicRoom && db.magicRoom.presets) {
+        const preset = db.magicRoom.presets.find(p => p.name === chat.customPromptPreset);
+        if (preset) useCustomPrompt = true;
+    }
+    
+    // 如果开启了自定义底层提示词或者是群聊，走旧逻辑（整体 systemPrompt 拆分）
+    if (chatType !== 'private' || (db.magicRoom && db.magicRoom.customPromptEnabled) || useCustomPrompt) {
         return _getChatTokenBreakdownGroup(chat);
     }
 
@@ -2855,16 +3126,7 @@ function getChatTokenBreakdown(chatId, chatType = 'private') {
     }
 
     // 1) 世界书
-    let associatedIds = effectiveChar.worldBookIds || [];
-    if (isOfflineNode) {
-        associatedIds = (effectiveChar.offlineWorldBookIds && effectiveChar.offlineWorldBookIds.length > 0) ? effectiveChar.offlineWorldBookIds : (effectiveChar.worldBookIds || []);
-    }
-    const globalBooks = db.worldBooks.filter(wb => wb.isGlobal && !wb.disabled);
-    const globalIds = globalBooks.map(wb => wb.id);
-    const allBookIds = [...new Set([...associatedIds, ...globalIds])];
-    const worldBooksBefore = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'before')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksMiddle = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'middle')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksAfter = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'after')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
+    const { before: worldBooksBefore, middle: worldBooksMiddle, after: worldBooksAfter } = getActiveWorldBooksContents(character);
     const worldBookText = [worldBooksBefore, worldBooksMiddle, worldBooksAfter].filter(Boolean).join('\n');
     const worldBookTokens = estimateTokenFromText(worldBookText);
 
@@ -3117,31 +3379,14 @@ async function getCallReply(chat, callType, callContext, onStreamUpdate) {
 
     // 1. 构建 System Prompt
     const now = new Date();
-    const currentTime = `${now.getFullYear()}年${pad(now.getMonth() + 1)}月${pad(now.getDate())}日 ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    let currentTime = `${now.getFullYear()}年${pad(now.getMonth() + 1)}月${pad(now.getDate())}日 ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    if (chat.enableDynamicTimezone && chat.charTimezone) {
+        const tzTime = getLocalTimeInTimezone(chat.charTimezone);
+        if (tzTime) currentTime = tzTime;
+    }
     
     // 获取世界书（包含全局）
-    let isOfflineNode = false;
-    if (chat.activeNodeId && chat.nodes) {
-        const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
-        if (activeNode) {
-            let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
-                           (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
-            if (baseMode === 'offline') {
-                isOfflineNode = true;
-            }
-        }
-    }
-    let associatedIds = chat.worldBookIds || [];
-    if (isOfflineNode) {
-        associatedIds = (chat.offlineWorldBookIds && chat.offlineWorldBookIds.length > 0) ? chat.offlineWorldBookIds : (chat.worldBookIds || []);
-    }
-    const globalBooks = db.worldBooks.filter(wb => wb.isGlobal && !wb.disabled);
-    const globalIds = globalBooks.map(wb => wb.id);
-    const allBookIds = [...new Set([...associatedIds, ...globalIds])];
-    
-    const worldBooksBefore = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'before')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksMiddle = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'middle')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksAfter = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'after')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
+    const { before: worldBooksBefore, middle: worldBooksMiddle, after: worldBooksAfter } = getActiveWorldBooksContents(chat);
 
     let systemPrompt = `你正在一个名为“404”的线上聊天软件中扮演一个角色，正在与${chat.myName}进行${callType === 'video' ? '视频' : '语音'}通话。请严格遵守以下规则：\n`;
     systemPrompt += `核心规则：\n`;
@@ -3176,6 +3421,14 @@ async function getCallReply(chat, callType, callContext, onStreamUpdate) {
     }
     systemPrompt += `</user_settings>\n`
     
+    if (window.WeatherService) {
+        const charWeather = await window.WeatherService.getCharacterWeatherPrompt(chat);
+        const userWeather = await window.WeatherService.getUserWeatherPrompt(chat);
+        if (charWeather || userWeather) {
+            systemPrompt += `\n<environment>\n${charWeather ? charWeather + '\n' : ''}${userWeather ? userWeather + '\n' : ''}</environment>\n`;
+        }
+    }
+
     // 检查是否启用“角色活人运转” (默认关闭)
     if (db.cotSettings && db.cotSettings.humanRunEnabled) {
         systemPrompt += HUMAN_RUN_PROMPT + '\n';
@@ -3550,28 +3803,7 @@ async function generateCallSummary(chat, callContext) {
     if (url.endsWith('/')) url = url.slice(0, -1);
 
     // 获取世界书（包含全局）
-    let isOfflineNode = false;
-    if (chat.activeNodeId && chat.nodes) {
-        const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
-        if (activeNode) {
-            let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
-                           (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
-            if (baseMode === 'offline') {
-                isOfflineNode = true;
-            }
-        }
-    }
-    let associatedIds = chat.worldBookIds || [];
-    if (isOfflineNode) {
-        associatedIds = (chat.offlineWorldBookIds && chat.offlineWorldBookIds.length > 0) ? chat.offlineWorldBookIds : (chat.worldBookIds || []);
-    }
-    const globalBooks = db.worldBooks.filter(wb => wb.isGlobal && !wb.disabled);
-    const globalIds = globalBooks.map(wb => wb.id);
-    const allBookIds = [...new Set([...associatedIds, ...globalIds])];
-    
-    const worldBooksBefore = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'before')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksMiddle = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'middle')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
-    const worldBooksAfter = allBookIds.map(id => db.worldBooks.find(wb => wb.id === id && wb.position === 'after')).filter(wb => wb && !wb.disabled).map(wb => wb.content).join('\n');
+    const { before: worldBooksBefore, middle: worldBooksMiddle, after: worldBooksAfter } = getActiveWorldBooksContents(chat);
 
     // 获取回忆日记
     const favoritedJournals = (chat.memoryJournals || [])

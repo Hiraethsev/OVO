@@ -408,6 +408,52 @@ function customConfirm(message, title = '确认') {
     });
 }
 
+function customPrompt(message, defaultValue = '', title = '输入') {
+    return new Promise((resolve) => {
+        const modalId = 'custom-prompt-modal';
+        let modal = document.getElementById(modalId);
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = modalId;
+            modal.className = 'modal-overlay';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = '100000';
+            modal.innerHTML = `
+                <div class="modal-window custom-prompt-window" style="max-width: 320px; width: 90%; padding: 20px;">
+                    <h3 id="custom-prompt-title" style="margin-top:0; margin-bottom: 12px; font-size: 1.1rem; color: #333; text-align: center;"></h3>
+                    <p id="custom-prompt-message" style="font-size: 0.95rem; color: #555; margin-bottom: 10px; line-height: 1.5; text-align: left;"></p>
+                    <input type="text" id="custom-prompt-input" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; box-sizing: border-box; font-size: 1rem; outline: none;">
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" id="custom-prompt-ok-btn" class="btn btn-primary" style="flex:1; background: var(--primary-color, #ff6b81); border: none;">确定</button>
+                        <button type="button" id="custom-prompt-cancel-btn" class="btn btn-neutral" style="flex:1;">取消</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        document.getElementById('custom-prompt-title').textContent = title;
+        document.getElementById('custom-prompt-message').textContent = message;
+        const inputEl = document.getElementById('custom-prompt-input');
+        inputEl.value = defaultValue;
+        modal.style.display = 'flex';
+        inputEl.focus();
+        
+        const okBtn = document.getElementById('custom-prompt-ok-btn');
+        const cancelBtn = document.getElementById('custom-prompt-cancel-btn');
+        
+        const cleanup = () => {
+            modal.style.display = 'none';
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+        };
+        
+        okBtn.onclick = () => { cleanup(); resolve(inputEl.value); };
+        cancelBtn.onclick = () => { cleanup(); resolve(null); };
+    });
+}
+
 function customAlert(message, title = '提示') {
     return new Promise((resolve) => {
         const modalId = 'custom-alert-modal';
@@ -1025,6 +1071,7 @@ function renderTutorialContent() {
                         char.statusPanel.history = [];
                         char.statusPanel.currentStatusRaw = '';
                         char.statusPanel.currentStatusHtml = '';
+                        char.status = '在线';
                         cleared.push('状态面板');
                     }
                     if (selectedKeys.includes('gallery') && Array.isArray(char.gallery)) {

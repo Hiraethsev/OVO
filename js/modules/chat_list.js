@@ -271,9 +271,28 @@ function renderChatFolders() {
 
     container.innerHTML = '';
 
+    // 计算 All 的未读消息数
+    let allUnreadCount = 0;
+    const allChats = [...db.characters, ...db.groups];
+    allChats.forEach(chat => {
+        if (!chat.folderId) {
+            allUnreadCount += (chat.unreadCount || 0);
+        }
+    });
+
     const allTab = document.createElement('div');
     allTab.className = `tab-item ${currentFolderId === 'all' ? 'active pill-black' : 'pill-white'}`;
     allTab.textContent = 'All';
+
+    // 添加 All 标签的未读红点
+    if (allUnreadCount > 0) {
+        const unreadText = allUnreadCount > 99 ? '99+' : allUnreadCount;
+        const unreadBadge = document.createElement('span');
+        unreadBadge.className = 'unread-badge visible';
+        unreadBadge.textContent = unreadText;
+        allTab.appendChild(unreadBadge);
+    }
+
     allTab.onclick = () => {
         currentFolderId = 'all';
         renderChatFolders();
@@ -283,9 +302,26 @@ function renderChatFolders() {
 
     if (db.chatFolders && db.chatFolders.length > 0) {
         db.chatFolders.forEach(folder => {
+            // 计算当前文件夹的未读消息数
+            let folderUnreadCount = 0;
+            allChats.forEach(chat => {
+                if (chat.folderId === folder.id) {
+                    folderUnreadCount += (chat.unreadCount || 0);
+                }
+            });
+
             const tab = document.createElement('div');
             tab.className = `tab-item ${currentFolderId === folder.id ? 'active pill-black' : 'pill-white'}`;
             tab.textContent = folder.name;
+
+            // 添加当前文件夹的未读红点
+            if (folderUnreadCount > 0) {
+                const unreadText = folderUnreadCount > 99 ? '99+' : folderUnreadCount;
+                const unreadBadge = document.createElement('span');
+                unreadBadge.className = 'unread-badge visible';
+                unreadBadge.textContent = unreadText;
+                tab.appendChild(unreadBadge);
+            }
 
             tab.onclick = () => {
                 currentFolderId = folder.id;

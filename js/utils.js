@@ -105,6 +105,43 @@ async function compressImage(file, options = {}) {
 // 数字补零
 const pad = (num) => num.toString().padStart(2, '0');
 
+// 获取指定时区的当前当地时间
+function getLocalTimeInTimezone(timezone) {
+    if (!timezone) return null;
+    
+    // 兼容旧的非标准预设格式
+    const legacyTimezoneMap = {
+        '北京/UTC+8': 'Asia/Shanghai',
+        '东京/UTC+9': 'Asia/Tokyo',
+        '首尔/UTC+9': 'Asia/Seoul',
+        '伦敦/UTC+0': 'Europe/London',
+        '纽约/UTC-5': 'America/New_York',
+        '悉尼/UTC+10': 'Australia/Sydney',
+        '巴黎/UTC+1': 'Europe/Paris'
+    };
+    
+    if (legacyTimezoneMap[timezone]) {
+        timezone = legacyTimezoneMap[timezone];
+    }
+    
+    try {
+        const options = {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        };
+        const formatter = new Intl.DateTimeFormat('zh-CN', options);
+        return formatter.format(new Date());
+    } catch (e) {
+        console.error("Invalid timezone:", timezone, e);
+        return null;
+    }
+}
+
 // PNG tEXt Chunk 编辑工具
 function writeOvoPngMetadata(base64ImageOrUrl, jsonData) {
     return new Promise((resolve, reject) => {
@@ -354,6 +391,26 @@ const showToast = (notification) => {
     notificationQueue.push(notification);
     processToastQueue();
 };
+
+// 系统级通知（通过 Service Worker postMessage 触发，无需服务器，应用前/后台均有效）
+async function showSystemNotification({ title, body, icon }) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    if (!navigator.serviceWorker) return;
+
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && reg.active) {
+            reg.active.postMessage({
+                type: 'SHOW_NOTIFICATION',
+                payload: { title, body: body || '', icon: icon || undefined, tag: 'ovo-message' }
+            });
+        }
+    } catch (e) {
+        console.warn('showSystemNotification error:', e);
+    }
+}
+window.showSystemNotification = showSystemNotification;
 
 // 触感反馈工具
 function triggerHapticFeedback(type = 'light') {
@@ -1438,6 +1495,7 @@ window.openImageViewer = openImageViewer;
 window.getRandomValue = getRandomValue;
 window.pad = pad;
 window.formatTimeGap = formatTimeGap;
+window.getLocalTimeInTimezone = getLocalTimeInTimezone;
 window.filterHistoryForAI = filterHistoryForAI;
 window.showToast = showToast;
 window.playSound = (typeof playSound !== 'undefined') ? playSound : null; // 防止循环依赖

@@ -48,6 +48,10 @@
     z-index: 10;
 }
 
+body.has-statusbar .app-header {
+    padding-top: calc(35px + env(safe-area-inset-top)) !important; /* 开启状态栏时，让顶部导航栏顺位下移 */
+}
+
 .app-header .back-btn,
 .app-header .action-btn {
     background: none;
@@ -150,6 +154,10 @@
     position: relative;
 }
 
+body.has-statusbar #home-screen {
+    padding-top: calc(75px + env(safe-area-inset-top)) !important; /* 开启状态栏时，让内容下移防止遮挡 */
+}
+
 /* 顶栏状态栏 */
 .home-top-statusbar {
     position: absolute;
@@ -160,7 +168,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: calc(4px + env(safe-area-inset-top)) 16px 4px;
+    padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
     font-size: 13px;
     font-weight: 600;
     color: var(--text-color, #333);

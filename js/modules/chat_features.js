@@ -24,6 +24,38 @@ function sendMyVoiceMessage(text) {
     document.getElementById('send-voice-modal').classList.remove('visible');
     setTimeout(() => {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+        if (!chat.history) chat.history = [];
+
+        // --- 添加时间感知逻辑 ---
+        if (db.apiSettings && db.apiSettings.timePerceptionEnabled) {
+            const now = new Date();
+            const lastMessageTime = chat.lastUserMessageTimestamp;
+            if (lastMessageTime) {
+                const timeGap = now.getTime() - lastMessageTime;
+                const thirtyMinutes = 30 * 60 * 1000;
+
+                if (timeGap > thirtyMinutes) {
+                    const displayContent = `[system-display:距离上次聊天已经过去 ${formatTimeGap(timeGap)}]`;
+                    const visualMessage = {
+                        id: `msg_visual_timesense_${Date.now()}`,
+                        role: 'system',
+                        content: displayContent,
+                        parts: [],
+                        timestamp: now.getTime() - 2
+                    };
+
+                    if (currentChatType === 'group') {
+                        visualMessage.senderId = 'user_me';
+                    }
+
+                    chat.history.push(visualMessage);
+                    addMessageBubble(visualMessage, currentChatId, currentChatType);
+                }
+            }
+            chat.lastUserMessageTimestamp = now.getTime();
+        }
+        // ----------------------
+
         const myName = (currentChatType === 'private') ? chat.myName : chat.me.nickname;
         const content = `[${myName}的语音：${text}]`;
         const message = {
@@ -64,6 +96,38 @@ function sendMyPhotoVideo(text) {
     document.getElementById('send-pv-modal').classList.remove('visible');
     setTimeout(() => {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+        if (!chat.history) chat.history = [];
+
+        // --- 添加时间感知逻辑 ---
+        if (db.apiSettings && db.apiSettings.timePerceptionEnabled) {
+            const now = new Date();
+            const lastMessageTime = chat.lastUserMessageTimestamp;
+            if (lastMessageTime) {
+                const timeGap = now.getTime() - lastMessageTime;
+                const thirtyMinutes = 30 * 60 * 1000;
+
+                if (timeGap > thirtyMinutes) {
+                    const displayContent = `[system-display:距离上次聊天已经过去 ${formatTimeGap(timeGap)}]`;
+                    const visualMessage = {
+                        id: `msg_visual_timesense_${Date.now()}`,
+                        role: 'system',
+                        content: displayContent,
+                        parts: [],
+                        timestamp: now.getTime() - 2
+                    };
+
+                    if (currentChatType === 'group') {
+                        visualMessage.senderId = 'user_me';
+                    }
+
+                    chat.history.push(visualMessage);
+                    addMessageBubble(visualMessage, currentChatId, currentChatType);
+                }
+            }
+            chat.lastUserMessageTimestamp = now.getTime();
+        }
+        // ----------------------
+
         const myName = (currentChatType === 'private') ? chat.myName : chat.me.nickname;
         const content = `[${myName}发来的照片\/视频：${text}]`;
         const message = {
@@ -145,6 +209,38 @@ function setupCameraCapture() {
 async function sendImageForRecognition(base64Data) {
     if (!base64Data || isGenerating) return;
     const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+    if (!chat.history) chat.history = [];
+
+    // --- 添加时间感知逻辑 ---
+    if (db.apiSettings && db.apiSettings.timePerceptionEnabled) {
+        const now = new Date();
+        const lastMessageTime = chat.lastUserMessageTimestamp;
+        if (lastMessageTime) {
+            const timeGap = now.getTime() - lastMessageTime;
+            const thirtyMinutes = 30 * 60 * 1000;
+
+            if (timeGap > thirtyMinutes) {
+                const displayContent = `[system-display:距离上次聊天已经过去 ${formatTimeGap(timeGap)}]`;
+                const visualMessage = {
+                    id: `msg_visual_timesense_${Date.now()}`,
+                    role: 'system',
+                    content: displayContent,
+                    parts: [],
+                    timestamp: now.getTime() - 2
+                };
+
+                if (currentChatType === 'group') {
+                    visualMessage.senderId = 'user_me';
+                }
+
+                chat.history.push(visualMessage);
+                addMessageBubble(visualMessage, currentChatId, currentChatType);
+            }
+        }
+        chat.lastUserMessageTimestamp = now.getTime();
+    }
+    // ----------------------
+
     const myName = (currentChatType === 'private') ? chat.myName : chat.me.nickname;
     const textPrompt = `[${myName}发来了一张图片：]`;
     const message = {
@@ -304,6 +400,38 @@ function sendMyTransfer(amount, remark) {
     document.getElementById('send-transfer-modal').classList.remove('visible');
     setTimeout(() => {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+        if (!chat.history) chat.history = [];
+
+        // --- 添加时间感知逻辑 ---
+        if (db.apiSettings && db.apiSettings.timePerceptionEnabled) {
+            const now = new Date();
+            const lastMessageTime = chat.lastUserMessageTimestamp;
+            if (lastMessageTime) {
+                const timeGap = now.getTime() - lastMessageTime;
+                const thirtyMinutes = 30 * 60 * 1000;
+
+                if (timeGap > thirtyMinutes) {
+                    const displayContent = `[system-display:距离上次聊天已经过去 ${formatTimeGap(timeGap)}]`;
+                    const visualMessage = {
+                        id: `msg_visual_timesense_${Date.now()}`,
+                        role: 'system',
+                        content: displayContent,
+                        parts: [],
+                        timestamp: now.getTime() - 2
+                    };
+
+                    if (currentChatType === 'group') {
+                        visualMessage.senderId = 'user_me';
+                    }
+
+                    chat.history.push(visualMessage);
+                    addMessageBubble(visualMessage, currentChatId, currentChatType);
+                }
+            }
+            chat.lastUserMessageTimestamp = now.getTime();
+        }
+        // ----------------------
+
         if (currentChatType === 'private') {
             const content = `[${chat.myName}给你转账：${amount}元；备注：${remark}]`;
             const message = {
@@ -527,6 +655,37 @@ function sendMyGift(description) {
     document.getElementById('send-gift-modal').classList.remove('visible');
     setTimeout(() => {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+        if (!chat.history) chat.history = [];
+
+        // --- 添加时间感知逻辑 ---
+        if (db.apiSettings && db.apiSettings.timePerceptionEnabled) {
+            const now = new Date();
+            const lastMessageTime = chat.lastUserMessageTimestamp;
+            if (lastMessageTime) {
+                const timeGap = now.getTime() - lastMessageTime;
+                const thirtyMinutes = 30 * 60 * 1000;
+
+                if (timeGap > thirtyMinutes) {
+                    const displayContent = `[system-display:距离上次聊天已经过去 ${formatTimeGap(timeGap)}]`;
+                    const visualMessage = {
+                        id: `msg_visual_timesense_${Date.now()}`,
+                        role: 'system',
+                        content: displayContent,
+                        parts: [],
+                        timestamp: now.getTime() - 2
+                    };
+
+                    if (currentChatType === 'group') {
+                        visualMessage.senderId = 'user_me';
+                    }
+
+                    chat.history.push(visualMessage);
+                    addMessageBubble(visualMessage, currentChatId, currentChatType);
+                }
+            }
+            chat.lastUserMessageTimestamp = now.getTime();
+        }
+        // ----------------------
 
         if (currentChatType === 'private') {
             const content = `[${chat.myName}送来的礼物：${description}]`;
@@ -605,6 +764,38 @@ function sendMyLocation(content) {
     setTimeout(() => {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
         if (!chat) return;
+        if (!chat.history) chat.history = [];
+
+        // --- 添加时间感知逻辑 ---
+        if (db.apiSettings && db.apiSettings.timePerceptionEnabled) {
+            const now = new Date();
+            const lastMessageTime = chat.lastUserMessageTimestamp;
+            if (lastMessageTime) {
+                const timeGap = now.getTime() - lastMessageTime;
+                const thirtyMinutes = 30 * 60 * 1000;
+
+                if (timeGap > thirtyMinutes) {
+                    const displayContent = `[system-display:距离上次聊天已经过去 ${formatTimeGap(timeGap)}]`;
+                    const visualMessage = {
+                        id: `msg_visual_timesense_${Date.now()}`,
+                        role: 'system',
+                        content: displayContent,
+                        parts: [],
+                        timestamp: now.getTime() - 2
+                    };
+
+                    if (currentChatType === 'group') {
+                        visualMessage.senderId = 'user_me';
+                    }
+
+                    chat.history.push(visualMessage);
+                    addMessageBubble(visualMessage, currentChatId, currentChatType);
+                }
+            }
+            chat.lastUserMessageTimestamp = now.getTime();
+        }
+        // ----------------------
+
         const message = {
             id: `msg_${Date.now()}`,
             role: 'user',

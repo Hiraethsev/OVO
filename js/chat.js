@@ -623,7 +623,7 @@ function openChatRoom(chatId, type) {
         subtitle.style.display = 'none';
     }
     getReplyBtn.style.display = 'inline-flex';
-    chatRoomScreen.style.backgroundImage = chat.chatBg ? `url(${chat.chatBg})` : 'none';
+    chatRoomScreen.style.backgroundImage = chat.chatBg ? `url(${chat.chatBg})` : (db.globalChatWallpaper ? `url(${db.globalChatWallpaper})` : 'none');
     typingIndicator.style.display = 'none';
     isGenerating = false;
     getReplyBtn.disabled = false;

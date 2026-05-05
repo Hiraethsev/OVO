@@ -23,6 +23,25 @@
     border-color: #e0e0e0;
 }
 
+/* 拖拽状态样式 */
+.cot-item-card.draggable {
+    cursor: grab;
+}
+.cot-item-card.draggable:active {
+    cursor: grabbing;
+}
+.cot-item-card.dragging {
+    opacity: 0.5;
+    border: 1px dashed var(--primary-color);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+.cot-item-card.drag-over-top {
+    border-top: 2px solid var(--primary-color);
+}
+.cot-item-card.drag-over-bottom {
+    border-bottom: 2px solid var(--primary-color);
+}
+
 /* 锁定条目样式 */
 .cot-item-card.locked {
     background: #fcfcfc;
@@ -139,21 +158,20 @@
     gap: 5px;
 }
 
-/* XML 说明按钮样式 */
+/* 标题栏操作按钮样式 */
 .cot-help-btn {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: #e0e0e0;
     color: #666;
     border: none;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: bold;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-left: 8px;
     transition: all 0.2s;
 }
 
