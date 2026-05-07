@@ -43,7 +43,7 @@ function handleMessageLongPress(messageWrapper, x, y) {
                     
                     char.history = char.history.filter(m => m.id !== messageId);
                     
-                    await saveData();
+                    await saveCurrentChat();
                     renderMessages(false, true);
                     if (typeof NodeSystem !== 'undefined') {
                         NodeSystem.checkActiveNodeUI();
@@ -101,7 +101,7 @@ function handleMessageLongPress(messageWrapper, x, y) {
                     if (message.parts && message.parts.length > 0) {
                         message.parts = [{type: 'text', text: message.content}];
                     }
-                    if (typeof saveData === 'function') await saveData();
+                    if (typeof saveCurrentChat === 'function') await saveCurrentChat();
                     renderMessages(false, true);
                     if (typeof showToast === 'function') showToast('时间已修改');
                 }
@@ -206,7 +206,7 @@ function handleMessageLongPress(messageWrapper, x, y) {
                         });
                         // 更新为新图
                         message.novelAiImageUrl = result.imageUrl;
-                        await saveData();
+                        await saveCurrentChat();
                         renderMessages(false, true);
                         showToast('✅ 生图完成');
                     }
@@ -303,7 +303,7 @@ function startDebugEdit(messageId) {
                     recalculateChatStatus(chat);
                 }
 
-                await saveData(); 
+                await saveCurrentChat(); 
                 renderMessages(false, true); 
                 cancelMessageEdit(); 
                 showToast('消息已删除');
@@ -622,7 +622,7 @@ async function saveMessageEdit() {
         }
     }
 
-    await saveData();
+    await saveCurrentChat();
     currentPage = 1;
     renderMessages(false, true);
     renderChatList();
@@ -912,7 +912,7 @@ async function deleteSelectedMessages() {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
     currentPage = 1;
     renderMessages(false, true);
     renderChatList();
@@ -950,7 +950,7 @@ async function withdrawMessage(messageId) {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
 
     currentPage = 1;
     renderMessages(false, true);
@@ -1113,7 +1113,7 @@ function setupDeleteHistoryChunk() {
             }
             
             if (changedCount > 0) {
-                await saveData();
+                await saveCurrentChat();
                 showToast(`已屏蔽 ${changedCount} 条消息`);
                 // Update DOM in-place
                 modifiedIds.forEach(id => {
@@ -1148,7 +1148,7 @@ function setupDeleteHistoryChunk() {
             }
             
             if (changedCount > 0) {
-                await saveData();
+                await saveCurrentChat();
                 showToast(`已恢复 ${changedCount} 条消息`);
                 // Update DOM in-place
                 modifiedIds.forEach(id => {
@@ -1209,7 +1209,7 @@ function setupDeleteHistoryChunk() {
                 recalculateChatStatus(chat);
             }
 
-            await saveData();
+            await saveCurrentChat();
             confirmDeleteModal.classList.remove('visible');
             deleteChunkModal.classList.remove('visible');
             showToast(`已永久删除 ${count} 条消息`);
@@ -1434,7 +1434,7 @@ async function confirmInsertMessage() {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
     currentPage = 1;
     renderMessages(false, true);
     renderChatList();
@@ -1627,7 +1627,7 @@ async function confirmForwardMessages() {
         forwardCount++;
     }
 
-    await saveData();
+    await saveCurrentChat();
     
     // 更新外层聊天列表显示
     if (typeof renderChatList === 'function') {

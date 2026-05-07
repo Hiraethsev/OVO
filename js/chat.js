@@ -1,6 +1,14 @@
 // --- 核心聊天逻辑 (js/chat.js) ---
 // 此文件保留核心入口和胶水代码，具体功能已拆分至 js/modules/chat_*.js
 
+async function saveCurrentChat() {
+    if (currentChatType === 'group') {
+        await saveGroup(currentChatId);
+    } else {
+        await saveCharacter(currentChatId);
+    }
+}
+
 function setupChatRoom() {
     const memoryJournalBtn = document.getElementById('memory-journal-btn');
     const deleteHistoryBtn = document.getElementById('delete-history-btn');
@@ -607,7 +615,7 @@ function openChatRoom(chatId, type) {
 
     if (chat.unreadCount && chat.unreadCount > 0) {
         chat.unreadCount = 0;
-        saveData();
+        saveCurrentChat();
         renderChatList(); 
     }
     exitMultiSelectMode();
@@ -821,7 +829,7 @@ async function sendMessage() {
         promptForBackupIfNeeded('history_milestone');
     }
 
-    await saveData();
+    await saveCurrentChat();
     renderChatList();
 
     if (currentQuoteInfo) {
@@ -1061,7 +1069,7 @@ async function deleteSelectedStatusSlides() {
         char.statusPanel.currentStatusRaw = '';
     }
 
-    await saveData();
+    await saveCurrentChat();
 
     // 退出多选模式并关闭面板
     exitStatusMultiSelect();

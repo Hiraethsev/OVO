@@ -206,7 +206,7 @@ function setupChatSettings() {
                 await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(currentChatId, oldMyAvatar, compressedUrl);
             }
             char.myAvatar = compressedUrl;
-            await saveData();
+            await saveCharacter(currentChatId);
             document.getElementById('setting-my-avatar-preview').src = compressedUrl;
             showToast('我的头像已更新');
             if (typeof renderMessages === 'function') renderMessages(false, true);
@@ -287,7 +287,7 @@ function setupChatSettings() {
             } else if (checked) {
                 db.avatarRecognitionDetailLevel = checked.value;
             }
-            if (typeof saveData === 'function') saveData();
+            if (typeof saveGlobalSettings === 'function') saveGlobalSettings();
             updateDisplay();
             modal.classList.remove('visible');
         });
@@ -309,7 +309,7 @@ function setupChatSettings() {
                     });
                     char.chatBg = compressedUrl;
                     chatRoomScreen.style.backgroundImage = `url(${compressedUrl})`;
-                    await saveData();
+                    await saveCharacter(currentChatId);
                     showToast('聊天背景已更换');
                 } catch (error) {
                     showToast('背景压缩失败，请重试');
@@ -323,7 +323,7 @@ function setupChatSettings() {
         if (!char) return;
         char.chatBg = '';
         chatRoomScreen.style.backgroundImage = 'none';
-        await saveData();
+        await saveCharacter(currentChatId);
         showToast('已恢复默认背景');
     });
 
@@ -339,7 +339,7 @@ function setupChatSettings() {
                         maxHeight: 1920
                     });
                     char.callWallpaper = compressedUrl;
-                    await saveData();
+                    await saveCharacter(currentChatId);
                     showToast('通话背景已更换');
                 } catch (error) {
                     showToast('背景压缩失败，请重试');
@@ -352,7 +352,7 @@ function setupChatSettings() {
         const char = db.characters.find(c => c.id === currentChatId);
         if (!char) return;
         char.callWallpaper = '';
-        await saveData();
+        await saveCharacter(currentChatId);
         showToast('已恢复默认通话背景');
     });
     
@@ -376,7 +376,7 @@ function setupChatSettings() {
             // 隐藏角色拉黑遮罩（如果有）
             var charBlockedOverlay = document.getElementById('char-blocked-overlay');
             if (charBlockedOverlay) charBlockedOverlay.style.display = 'none';
-            await saveData();
+            await saveCharacter(currentChatId);
             renderMessages(false, true);
             renderChatList();
             if (currentChatId === character.id) {
@@ -619,7 +619,7 @@ function setupChatSettings() {
                 recalculateChatStatus(character);
             }
 
-            await saveData();
+            await saveCharacter(currentChatId);
             currentPage = 1;
             renderMessages(false, true);
             renderChatList();
@@ -837,7 +837,7 @@ function setupChatSettings() {
                 if (!char) return;
                 const cbs = Array.from(document.querySelectorAll('.phone-control-char-cb:checked'));
                 char.phoneControlVisibleCharIds = cbs.map(cb => cb.value);
-                await saveData();
+                await saveCharacter(currentChatId);
                 document.getElementById('phone-control-char-select-modal').style.display = 'none';
                 showToast('已保存可见角色设置');
             });
@@ -876,7 +876,7 @@ function setupChatSettings() {
             const character = db.characters.find(c => c.id === currentChatId);
             if (character) {
                 character.phoneControlEnabled = false;
-                await saveData();
+                await saveCharacter(currentChatId);
                 if (phoneControlEnabledEl) phoneControlEnabledEl.checked = false;
                 hidePhoneControlOptions();
                 if (typeof showToast === 'function') showToast('已强制关闭');
@@ -928,7 +928,7 @@ function setupChatSettings() {
             delete character.recycledByCharId;
             db.phoneControlRecycleBin = bin2.filter((_, i) => i !== idx);
             db.characters.push(character);
-            await saveData();
+            await saveData(); // 这里恢复了角色，修改了 db.characters 数组，保留全量保存或可考虑精细化但暂时保留 saveData
             if (typeof renderChatList === 'function') renderChatList();
             if (typeof showToast === 'function') showToast('已恢复');
             renderPhoneControlRecycleList();
@@ -991,6 +991,7 @@ function setupChatSettings() {
                 } else {
                     character.worldBookIds = toSave;
                 }
+                await saveCharacter(currentChatId);
             }
         } else if (currentChatType === 'group') {
             const group = db.groups.find(g => g.id === currentChatId);
@@ -1000,9 +1001,11 @@ function setupChatSettings() {
                 } else {
                     group.worldBookIds = toSave;
                 }
+                await saveGroup(currentChatId);
             }
+        } else {
+            await saveData();
         }
-        await saveData();
         document.getElementById('world-book-selection-modal').classList.remove('visible');
         showToast('世界书关联已更新');
     });

@@ -887,6 +887,19 @@ function initDatabase() {
 
 // 数据保存与加载
 const saveData = async () => {
+    // 存储配额预检
+    if (navigator.storage && navigator.storage.estimate) {
+        try {
+            const { usage, quota } = await navigator.storage.estimate();
+            const pct = (usage / quota) * 100;
+            if (pct > 95) {
+                if (typeof showToast === 'function') {
+                    showToast(`⚠️ 存储空间已使用 ${pct.toFixed(0)}%，请立即导出备份！`, 6000);
+                }
+            }
+        } catch (_) { /* 不阻断主流程 */ }
+    }
+
     try {
         await dexieDB.transaction('rw', dexieDB.tables, async () => {
             await dexieDB.characters.bulkPut(db.characters);
@@ -907,10 +920,68 @@ const saveData = async () => {
     } catch (e) {
         console.error("saveData failed:", e);
         if (typeof showToast === 'function') {
-            showToast("保存数据失败: " + e.message);
+            // 根据错误类型给用户有意义的提示
+            const isQuota = e.name === 'QuotaExceededError'
+                || (e.message && (e.message.includes('quota') || e.message.includes('delete record')));
+            const msg = isQuota
+                ? '存储空间不足，保存失败！请到「存储管理」导出备份后清理数据。'
+                : '保存数据失败: ' + e.message;
+            showToast(msg, 6000);
         }
     }
 };
+
+/**
+ * 只保存单个角色到 IndexedDB（聊天消息写入、角色配置修改时使用）
+ * 失败时自动降级为全量 saveData
+ */
+const saveCharacter = async (characterId) => {
+    const character = db.characters.find(c => c.id === characterId);
+    if (!character) return;
+    try {
+        await dexieDB.characters.put(character);
+    } catch (e) {
+        console.error("saveCharacter failed, falling back to saveData:", e);
+        await saveData();
+    }
+};
+
+/**
+ * 只保存单个群组到 IndexedDB（群消息写入、群配置修改时使用）
+ * 失败时自动降级为全量 saveData
+ */
+const saveGroup = async (groupId) => {
+    const group = db.groups.find(g => g.id === groupId);
+    if (!group) return;
+    try {
+        await dexieDB.groups.put(group);
+    } catch (e) {
+        console.error("saveGroup failed, falling back to saveData:", e);
+        await saveData();
+    }
+};
+
+/**
+ * 只保存全局设置（apiSettings、壁纸、主题等），不写角色/群
+ */
+const saveGlobalSettings = async () => {
+    try {
+        const allSettingKeys = [...globalSettingKeys, 'worldBookCategoryOrder'];
+        await dexieDB.transaction('rw', dexieDB.globalSettings, async () => {
+            const promises = allSettingKeys
+                .filter(key => db[key] !== undefined)
+                .map(key => dexieDB.globalSettings.put({ key, value: db[key] }));
+            await Promise.all(promises);
+        });
+    } catch (e) {
+        console.error("saveGlobalSettings failed:", e);
+        if (typeof showToast === 'function') showToast("保存设置失败: " + e.message);
+    }
+};
+
+window.saveCharacter = saveCharacter;
+window.saveGroup = saveGroup;
+window.saveGlobalSettings = saveGlobalSettings;
 
 const loadData = async () => {
     const tables = [

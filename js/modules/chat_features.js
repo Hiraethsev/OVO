@@ -70,7 +70,7 @@ function sendMyVoiceMessage(text) {
         }
         chat.history.push(message);
         addMessageBubble(message, currentChatId, currentChatType);
-        saveData();
+        saveCurrentChat();
         renderChatList();
     }, 100);
 }
@@ -142,7 +142,7 @@ function sendMyPhotoVideo(text) {
         }
         chat.history.push(message);
         addMessageBubble(message, currentChatId, currentChatType);
-        saveData();
+        saveCurrentChat();
         renderChatList();
     }, 100);
 }
@@ -255,7 +255,7 @@ async function sendImageForRecognition(base64Data) {
     }
     chat.history.push(message);
     addMessageBubble(message, currentChatId, currentChatType);
-    await saveData();
+    await saveCurrentChat();
     renderChatList();
 }
 
@@ -465,7 +465,7 @@ function sendMyTransfer(amount, remark) {
                 });
             }
         }
-        saveData();
+        saveCurrentChat();
         renderChatList();
     }, 100);
 }
@@ -517,7 +517,7 @@ async function respondToTransfer(action) {
                 timestamp: Date.now()
             };
             character.history.push(contextMessage);
-            await saveData();
+            await saveCurrentChat();
             renderChatList();
         }
     } else if (currentChatType === 'group') {
@@ -572,7 +572,7 @@ async function respondToTransfer(action) {
                 }
             }
             
-            await saveData();
+            await saveCurrentChat();
             renderChatList();
         }
     }
@@ -622,7 +622,7 @@ window.sendFamilyCardResponse = async function(msgId, action) {
     };
     character.history.push(contextMessage);
     if (typeof addMessageBubble === 'function') addMessageBubble(contextMessage, currentChatId, currentChatType);
-    if (typeof saveData === 'function') await saveData();
+    if (typeof saveCurrentChat === 'function') await saveCurrentChat();
     if (typeof renderChatList === 'function') renderChatList();
 };
 
@@ -719,7 +719,7 @@ function sendMyGift(description) {
                 });
             }
         }
-        saveData();
+        saveCurrentChat();
         renderChatList();
     }, 100);
 }
@@ -808,7 +808,7 @@ function sendMyLocation(content) {
         }
         chat.history.push(message);
         addMessageBubble(message, currentChatId, currentChatType);
-        saveData();
+        saveCurrentChat();
         renderChatList();
     }, 100);
 }
@@ -860,7 +860,7 @@ async function sendTimeSkipMessage(text) {
 
     chat.history.push(visualMessage, contextMessage);
     addMessageBubble(visualMessage, currentChatId, currentChatType);
-    await saveData();
+    await saveCurrentChat();
     renderChatList();
 }
 

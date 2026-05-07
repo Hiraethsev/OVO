@@ -233,8 +233,8 @@ async function generateImageDescription(msg, chat, apiConfig) {
                     updated = true;
                 }
             });
-            if (updated && typeof saveData === 'function') {
-                await saveData();
+            if (updated && typeof saveCurrentChat === 'function') {
+                await saveCurrentChat();
                 console.log('[Auto-Description] 图片描述生成成功:', description);
                 if (typeof showToast === 'function') showToast('✅ 图片描述已生成');
             }
@@ -450,7 +450,7 @@ async function getAiReply(chatId, chatType, isBackground = false, isSummary = fa
                     originalMsg.isImageRecognitionTriggered = true;
                     lastUserMsg.isImageRecognitionTriggered = true; 
                     
-                    if (typeof saveData === 'function') saveData(); // 先保存一下标记
+                    if (typeof saveCurrentChat === 'function') await saveCurrentChat(); // 先保存一下标记
                     
                     // 同步调用识图，等待结果后再继续，以便本轮主模型能看到图片描述
                     await generateImageDescription(originalMsg, chat, descApiConfig);
@@ -1076,7 +1076,7 @@ function executePhoneControlCommands(text, controllingChar) {
         const pushHistory = (type, actionName, target, detail) => {
             if (!Array.isArray(controllingChar.phoneControlHistory)) controllingChar.phoneControlHistory = [];
             controllingChar.phoneControlHistory.push({ type, action: actionName, target: target || undefined, detail: detail || undefined, timestamp: Date.now() });
-            if (typeof saveData === 'function') saveData();
+            if (typeof saveCharacter === 'function') saveCharacter(controllingChar.id);
             executed = true;
         };
 
@@ -1149,7 +1149,7 @@ function executePhoneControlCommands(text, controllingChar) {
                         });
                     });
                     pushHistory('action', 'send-message', targetName, count > 1 ? count + '条' : toSend[0].slice(0, 50));
-                    if (typeof saveData === 'function') saveData();
+                    if (typeof saveCharacter === 'function') saveCharacter(controllingChar.id);
                 }
             }
             toRemove.push(match[0]);
@@ -1160,7 +1160,7 @@ function executePhoneControlCommands(text, controllingChar) {
                 db.phoneControlRecycleBin.push({ ...c, recycledAt: Date.now(), recycledByCharId: controllingChar.id });
                 db.characters = db.characters.filter(x => x.id !== c.id);
                 pushHistory('action', 'delete-character', targetName, '已移入回收站');
-                if (typeof saveData === 'function') saveData();
+                if (typeof saveCharacter === 'function') saveCharacter(controllingChar.id);
                 if (typeof renderChatList === 'function') renderChatList();
             }
             toRemove.push(match[0]);
@@ -1171,7 +1171,7 @@ function executePhoneControlCommands(text, controllingChar) {
                 const val = (params.value || '').toLowerCase() === 'on' || (params.value || '').toLowerCase() === 'true';
                 if (key === 'videocallenabled' || key === 'videoCallEnabled') { c.videoCallEnabled = val; pushHistory('action', 'toggle-setting', targetName, 'videoCallEnabled=' + val); }
                 else if (key === 'canblockuser' || key === 'canBlockUser') { c.canBlockUser = val; pushHistory('action', 'toggle-setting', targetName, 'canBlockUser=' + val); }
-                if (typeof saveData === 'function') saveData();
+                if (typeof saveCharacter === 'function') saveCharacter(controllingChar.id);
             }
             toRemove.push(match[0]);
         } else if (action === 'clear-history' && targetName) {
@@ -1191,7 +1191,9 @@ function executePhoneControlCommands(text, controllingChar) {
                 found.chat.blockedByCharAt = null;
                 found.chat.blockedByCharReason = null;
                 pushHistory('action', 'clear-history', targetName, '清空' + count + '条');
-                if (typeof saveData === 'function') saveData();
+                if (typeof saveCharacter === 'function') saveCharacter(controllingChar.id);
+                if (typeof saveCharacter === 'function' && found.chatType === 'private') saveCharacter(found.chatId);
+                if (typeof saveGroup === 'function' && found.chatType === 'group') saveGroup(found.chatId);
                 if (typeof renderChatList === 'function') renderChatList();
             }
             toRemove.push(match[0]);
@@ -1472,7 +1474,7 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
                             chat.useCustomBubbleCss = true;
                             char.currentBubbleCssPresetName = preset.name;
                             if (typeof updateCustomBubbleStyle === 'function') updateCustomBubbleStyle(targetChatId, preset.css, true);
-                            if (typeof saveData === 'function') saveData();
+                            if (typeof saveCurrentChat === 'function') await saveCurrentChat();
                             contentAfterStrip = contentAfterStrip.replace(themeSwitchMatch[0], '').replace(/\n{3,}/g, '\n\n').trim();
                         }
                     }
@@ -1535,7 +1537,7 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
                     message.isWithdrawn = true;
                     message.content = `[${characterName}撤回了一条消息：${originalContent}]`;
                     
-                    await saveData();
+                    await saveCurrentChat();
                     
                     if ((targetChatType === 'private' && currentChatId === chat.id) || 
                         (targetChatType === 'group' && currentChatId === chat.id)) {
@@ -1784,7 +1786,7 @@ async function handleAiReplyContent(fullResponse, chat, targetChatId, targetChat
             addMessageBubble(summaryMsg, targetChatId, targetChatType);
         }
 
-        await saveData();
+        await saveCurrentChat();
         renderChatList();
 
         if (targetChatType === 'private' && (chat.source === 'forum' || chat.source === 'peek') && chat.supplementPersonaAiEnabled) {
@@ -1902,7 +1904,7 @@ async function _doRegenerate(chat, lastUserMessageIndex) {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
     
     currentPage = 1; 
     renderMessages(false, true); 
