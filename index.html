@@ -1731,6 +1731,86 @@
                         </div>
                     </form>
 
+                    <!-- Embedding API / 向量化 API -->
+                    <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
+                        <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">向量化 API / Embedding API</h3>
+                                <p style="font-size: 12px; color: #999; margin: 5px 0 0;">用于向量化记忆切块与语义检索，不影响主聊天 API 与各副 API</p>
+                            </div>
+                            <span class="collapsible-arrow">▼</span>
+                        </div>
+
+                        <div class="collapsible-content">
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">启用向量记忆</div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="embedding-enabled-switch">
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">API 地址</div>
+                                <div class="kkt-item-control">
+                                    <input type="text" id="embedding-api-url" autocomplete="off"
+                                        placeholder="https://..."
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">API Key</div>
+                                <div class="kkt-item-control">
+                                    <input type="password" id="embedding-api-key" autocomplete="new-password"
+                                        placeholder="sk-..."
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">模型</div>
+                                <div class="kkt-item-control">
+                                    <input type="text" id="embedding-api-model" autocomplete="off"
+                                        placeholder="text-embedding-3-small"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">批处理数量</div>
+                                <div class="kkt-item-control">
+                                    <input type="number" id="embedding-batch-size" min="1" step="1"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">默认注入条数</div>
+                                <div class="kkt-item-control">
+                                    <input type="number" id="embedding-default-topk" min="1" step="1"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">默认最低相似度</div>
+                                <div class="kkt-item-control">
+                                    <input type="number" id="embedding-default-min-similarity" min="0" max="1" step="0.01"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-primary" id="embedding-api-save-btn"
+                                style="margin-top: 15px; width: 100%;">
+                                <span class="btn-text">保存向量化 API 设置</span>
+                                <div class="spinner"></div>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- 副API 1: 总结专用 -->
                     <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
                         <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
@@ -5578,6 +5658,49 @@
                                     <p style="font-size: 12px; color: #999; margin-top: 5px; margin-bottom: 0;">
                                         该内容将在请求大模型时直接合并到 Request Body 中。如果不清楚如何配置，请留空。
                                     </p>
+                                </div>
+                            </div>
+
+                            <!-- 向量记忆 -->
+                            <div class="kkt-group" style="margin-top:15px;" id="setting-vector-memory-group">
+                                <div style="margin-bottom: 10px; padding-top: 5px; padding-left: 8px;">
+                                    <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">向量记忆</div>
+                                    <p style="font-size: 11px; color: #999; margin: 5px 0 0;">手动为当前私聊建立向量记忆切块，不会影响普通聊天</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">启用当前聊天向量记忆</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-vector-memory-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">注入记忆条数</div>
+                                    <div class="kkt-item-control">
+                                        <input type="number" id="setting-vector-memory-topk" value="3" min="1" step="1"
+                                            style="width:50px; text-align:right; border:none;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">最低相似度</div>
+                                    <div class="kkt-item-control">
+                                        <input type="number" id="setting-vector-min-similarity" value="0.3" min="0" max="1" step="0.01"
+                                            style="width:60px; text-align:right; border:none;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">已向量化 chunk 数量</div>
+                                    <div class="kkt-item-control">
+                                        <span id="setting-vector-memory-count" style="color: var(--primary-color); font-weight: bold;">0</span>
+                                    </div>
+                                </div>
+                                <div style="padding: 0 15px 10px;">
+                                    <button type="button" class="btn btn-primary" id="setting-vectorize-next-batch-btn" style="width:100%;">
+                                        向量化下一批
+                                    </button>
+                                    <p id="setting-vector-memory-status" style="font-size: 12px; color: #999; margin: 8px 0 0;">尚未开始向量化</p>
                                 </div>
                             </div>
 
@@ -9785,6 +9908,7 @@
     <!-- [1. 基础层] -->
     <script src="js/utils.js"></script> <!-- 工具函数：图片压缩、Toast提示、随机数等 -->
     <script src="js/db.js"></script> <!-- 数据层：Dexie数据库配置、全局变量定义、数据存取 -->
+    <script src="js/modules/vector_memory.js"></script> <!-- 向量记忆模块：embedding、切块、检索 -->
 
     <!-- [2. 核心交互层] -->
     <script src="js/ui.js"></script> <!-- UI交互：界面切换、主屏幕逻辑、右键菜单 -->
@@ -9837,6 +9961,7 @@
 
     <!-- [4. 程序入口] -->
     <script src="js/main.js"></script> <!-- 主入口：初始化(init)、全局事件监听 -->
+    <script src="js/local_login_override.js"></script>
 </body>
 
 </html>

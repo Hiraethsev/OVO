@@ -2,7 +2,104 @@
 
 let generatingChatId = null;
 
-function setupMemoryJournalScreen() {
+function formatJournalMessageContent (content) {
+    if (!content || typeof content !== 'string') return '';
+
+    const normalizedContent = content.trim();
+    if (!normalizedContent) return '';
+
+    if (!/<[a-z][\s\S]*>/i.test(normalizedContent)) {
+        return normalizedContent;
+    }
+
+    try {
+        const container = document.createElement('div');
+        container.innerHTML = normalizedContent;
+
+        const blockTags = new Set(['DETAILS', 'SUMMARY', 'DIV', 'P', 'LI', 'UL', 'OL', 'SECTION', 'ARTICLE']);
+        const lines = [];
+        let currentLine = '';
+
+        const flushLine = () => {
+            const cleanLine = currentLine.replace(/\s+/g, ' ').trim();
+            if (cleanLine) {
+                lines.push(cleanLine);
+            }
+            currentLine = '';
+        };
+
+        const appendText = (text) => {
+            const cleanText = text.replace(/\s+/g, ' ').trim();
+            if (!cleanText) return;
+
+            if (currentLine && !/[（(\[{“"'‘]$/.test(currentLine) && !/^[，。！？：；、,.:;!?)}\]”"'’]/.test(cleanText)) {
+                currentLine += ' ';
+            }
+            currentLine += cleanText;
+        };
+
+        const walk = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                appendText(node.nodeValue || '');
+                return;
+            }
+
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+            const tagName = node.tagName;
+            if (tagName === 'BR') {
+                flushLine();
+                return;
+            }
+
+            Array.from(node.childNodes).forEach(walk);
+
+            if (blockTags.has(tagName)) {
+                flushLine();
+            }
+        };
+
+        Array.from(container.childNodes).forEach(walk);
+        flushLine();
+
+        const plainText = lines.join('\n').trim();
+        if (plainText) {
+            return plainText;
+        }
+    } catch (error) {
+        console.warn('formatJournalMessageContent failed, falling back to regex cleanup:', error);
+    }
+
+    return normalizedContent
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(details|summary|div|p|li|ul|ol|section|article)>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function getJournalRangeOrderValue (journal) {
+    const start = Number(journal && journal.range ? journal.range.start : NaN);
+    const end = Number(journal && journal.range ? journal.range.end : NaN);
+
+    return {
+        start: Number.isFinite(start) && start > 0 ? start : Number.MAX_SAFE_INTEGER,
+        end: Number.isFinite(end) && end > 0 ? end : Number.MAX_SAFE_INTEGER,
+        createdAt: Number(journal && journal.createdAt) || 0
+    };
+}
+
+function compareJournalsByRangeOrder (a, b) {
+    const aOrder = getJournalRangeOrderValue(a);
+    const bOrder = getJournalRangeOrderValue(b);
+
+    if (aOrder.start !== bOrder.start) return aOrder.start - bOrder.start;
+    if (aOrder.end !== bOrder.end) return aOrder.end - bOrder.end;
+    return aOrder.createdAt - bOrder.createdAt;
+}
+
+function setupMemoryJournalScreen () {
     const journalTitleBtn = document.getElementById('journal-title-btn');
     const journalTitleActionsheet = document.getElementById('journal-title-actionsheet');
     const journalTitleCancelBtn = document.getElementById('journal-title-cancel-btn');
@@ -13,7 +110,7 @@ function setupMemoryJournalScreen() {
     const manualJournalModal = document.getElementById('manual-journal-modal');
     const manualJournalForm = document.getElementById('manual-journal-form');
     const manualJournalCancelBtn = document.getElementById('manual-journal-cancel-btn');
-    
+
     // 导入/导出
     const exportJournalBtn = document.getElementById('export-journal-btn');
     const importJournalBtn = document.getElementById('import-journal-btn');
@@ -84,14 +181,14 @@ function setupMemoryJournalScreen() {
             exportAllJournals();
         });
     }
-    
+
     if (importJournalBtn) {
         importJournalBtn.addEventListener('click', () => {
             if (journalTitleActionsheet) journalTitleActionsheet.classList.remove('visible');
             if (importJournalFileInput) importJournalFileInput.click();
         });
     }
-    
+
     if (importJournalFileInput) {
         importJournalFileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -128,7 +225,7 @@ function setupMemoryJournalScreen() {
             e.preventDefault();
             const titleInput = document.getElementById('manual-journal-title');
             const contentInput = document.getElementById('manual-journal-content');
-            
+
             const title = titleInput.value.trim();
             const content = contentInput.value.trim();
 
@@ -148,7 +245,7 @@ function setupMemoryJournalScreen() {
                 createdAt: Date.now(),
                 chatId: currentChatId,
                 chatType: currentChatType,
-                isFavorited: false 
+                isFavorited: false
             };
 
             if (!chat.memoryJournals) {
@@ -191,7 +288,7 @@ function setupMemoryJournalScreen() {
             }
         });
     }
-    
+
     if (journalBatchExportBtn) {
         journalBatchExportBtn.addEventListener('click', () => {
             if (selectedJournalIds.size === 0) return;
@@ -216,21 +313,21 @@ function setupMemoryJournalScreen() {
         });
     }
 
-    function toggleMultiSelectMode(active) {
+    function toggleMultiSelectMode (active) {
         isMultiSelectMode = active;
         selectedJournalIds.clear();
         updateSelectCount();
 
         const container = document.getElementById('journal-list-container');
         const cards = container.querySelectorAll('.journal-card');
-        
+
         if (active) {
             manageBtn.style.display = 'none';
             cancelManageBtn.style.display = 'flex';
             multiSelectBar.style.display = 'flex';
             generateNewJournalBtn.style.display = 'none'; // 隐藏生成按钮避免干扰
             if (bindWorldBookBtn) bindWorldBookBtn.style.display = 'none';
-            
+
             cards.forEach(card => {
                 card.classList.add('select-mode');
             });
@@ -246,23 +343,23 @@ function setupMemoryJournalScreen() {
                 const checkbox = card.querySelector('.journal-checkbox');
                 if (checkbox) checkbox.classList.remove('checked');
             });
-            
+
             // 退出多选模式时重置全选按钮
             if (selectAllBtn) selectAllBtn.textContent = '全选';
         }
     }
 
-    function updateSelectCount() {
+    function updateSelectCount () {
         if (selectCountSpan) {
             selectCountSpan.textContent = `已选 ${selectedJournalIds.size} 篇`;
         }
-        
+
         // 更新全选按钮文字
         if (selectAllBtn) {
-            const chat = (currentChatType === 'private') 
-                ? db.characters.find(c => c.id === currentChatId) 
+            const chat = (currentChatType === 'private')
+                ? db.characters.find(c => c.id === currentChatId)
                 : db.groups.find(g => g.id === currentChatId);
-            
+
             if (chat && chat.memoryJournals) {
                 const totalCount = chat.memoryJournals.length;
                 const isAllSelected = selectedJournalIds.size === totalCount && totalCount > 0;
@@ -271,16 +368,16 @@ function setupMemoryJournalScreen() {
         }
     }
 
-    function toggleSelectAll() {
-        const chat = (currentChatType === 'private') 
-            ? db.characters.find(c => c.id === currentChatId) 
+    function toggleSelectAll () {
+        const chat = (currentChatType === 'private')
+            ? db.characters.find(c => c.id === currentChatId)
             : db.groups.find(g => g.id === currentChatId);
-        
+
         if (!chat || !chat.memoryJournals) return;
-        
+
         const allJournalIds = chat.memoryJournals.map(j => j.id);
         const isAllSelected = allJournalIds.every(id => selectedJournalIds.has(id));
-        
+
         if (isAllSelected) {
             // 取消全选
             selectedJournalIds.clear();
@@ -294,12 +391,12 @@ function setupMemoryJournalScreen() {
                 checkbox.classList.add('checked');
             });
         }
-        
+
         updateSelectCount();
     }
-    
+
     // --- 导出所有日记 ---
-    function exportAllJournals() {
+    function exportAllJournals () {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
         if (!chat || !chat.memoryJournals || chat.memoryJournals.length === 0) {
             showToast('当前没有可导出的日记');
@@ -307,22 +404,22 @@ function setupMemoryJournalScreen() {
         }
         downloadJournalsJson(chat.memoryJournals, `${chat.name || chat.remarkName || '未知角色'}_日记导出`);
     }
-    
+
     // --- 导出选中的日记 ---
-    function exportSelectedJournals(ids) {
+    function exportSelectedJournals (ids) {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
         if (!chat || !chat.memoryJournals) return;
-        
+
         const selectedJournals = chat.memoryJournals.filter(j => ids.includes(j.id));
         if (selectedJournals.length === 0) {
-             showToast('未选择要导出的日记');
-             return;
+            showToast('未选择要导出的日记');
+            return;
         }
         downloadJournalsJson(selectedJournals, `${chat.name || chat.remarkName || '未知角色'}_选定日记导出`);
     }
-    
+
     // --- 下载 JSON 工具函数 ---
-    function downloadJournalsJson(journalsData, defaultFilename) {
+    function downloadJournalsJson (journalsData, defaultFilename) {
         try {
             const dataStr = JSON.stringify(journalsData, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
@@ -340,9 +437,9 @@ function setupMemoryJournalScreen() {
             showToast('导出日记失败');
         }
     }
-    
+
     // --- 导入日记逻辑 ---
-    function importJournals(file) {
+    function importJournals (file) {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
@@ -350,19 +447,19 @@ function setupMemoryJournalScreen() {
                 if (!Array.isArray(importedData)) {
                     throw new Error("格式错误，请确保导入的是包含日记数组的 JSON 文件。");
                 }
-                
+
                 const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
                 if (!chat) return;
                 if (!chat.memoryJournals) {
                     chat.memoryJournals = [];
                 }
-                
+
                 let count = 0;
                 // 为了避免 ID 冲突，给导入的日记重新生成 ID，并确保格式正确
                 importedData.forEach(item => {
                     if (item.title && item.content) {
                         const newJournal = {
-                            id: `journal_imp_${Date.now()}_${Math.random().toString(36).substring(2,9)}`,
+                            id: `journal_imp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                             range: item.range || { start: 0, end: 0 },
                             title: item.title,
                             content: item.content,
@@ -379,7 +476,7 @@ function setupMemoryJournalScreen() {
                         count++;
                     }
                 });
-                
+
                 if (count > 0) {
                     await saveData();
                     renderJournalList();
@@ -395,7 +492,7 @@ function setupMemoryJournalScreen() {
         reader.readAsText(file);
     }
 
-    async function mergeJournals(journalIds) {
+    async function mergeJournals (journalIds) {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
         if (!chat) return;
 
@@ -434,10 +531,10 @@ function setupMemoryJournalScreen() {
         summaryPrompt += `待合并的日记内容如下：\n\n${combinedContent}`;
 
         showToast('正在合并精简，请稍候...');
-        
+
         // 退出多选模式并显示加载状态
         toggleMultiSelectMode(false);
-        
+
         // 显示列表占位卡片
         const container = document.getElementById('journal-list-container');
         const loadingCard = document.createElement('li');
@@ -493,7 +590,7 @@ function setupMemoryJournalScreen() {
                 createdAt: Date.now(),
                 chatId: currentChatId,
                 chatType: currentChatType,
-                isFavorited: false 
+                isFavorited: false
             };
 
             if (!chat.memoryJournals) {
@@ -507,7 +604,7 @@ function setupMemoryJournalScreen() {
 
         } catch (error) {
             const card = document.getElementById('journal-generating-card');
-            if(card) card.remove();
+            if (card) card.remove();
             showApiError(error);
         } finally {
             isGenerating = false;
@@ -537,7 +634,7 @@ function setupMemoryJournalScreen() {
 
             // 渲染世界书列表 (总是渲染，以便切换时可用)
             renderCategorizedWorldBookList(journalStyleWorldBookList, db.worldBooks, chat.journalStyleSettings.customWorldBookIds || [], 'journal-style-wb-select');
-            
+
             journalStyleModal.classList.add('visible');
         } else {
             showToast('群聊暂不支持自定义风格设置');
@@ -563,7 +660,7 @@ function setupMemoryJournalScreen() {
             mode: selectedMode,
             customWorldBookIds: selectedIds
         };
-        
+
         // 同步更新旧字段以保持潜在的向后兼容性
         chat.journalWorldBookIds = selectedIds;
 
@@ -575,7 +672,7 @@ function setupMemoryJournalScreen() {
     generateNewJournalBtn.addEventListener('click', () => {
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
         const totalMessages = chat ? chat.history.length : 0;
-        
+
         const rangeInfo = document.getElementById('journal-range-info');
         rangeInfo.textContent = `当前聊天总消息数: ${totalMessages}`;
 
@@ -597,7 +694,7 @@ function setupMemoryJournalScreen() {
         const start = parseInt(startInput.value);
         const end = parseInt(endInput.value);
         const includeFavorited = includeFavoritedCheckbox.checked;
-        
+
         if (isNaN(start) || isNaN(end) || start <= 0 || end < start) {
             showToast('请输入有效的起止范围');
             return;
@@ -613,7 +710,7 @@ function setupMemoryJournalScreen() {
         if (!card) return;
 
         const journalId = card.dataset.id;
-        
+
         // 多选模式逻辑
         if (isMultiSelectMode) {
             if (selectedJournalIds.has(journalId)) {
@@ -649,10 +746,10 @@ function setupMemoryJournalScreen() {
             showToast(journal.isFavorited ? '已收藏' : '已取消收藏');
             return;
         }
-        
+
         const date = new Date(journal.createdAt);
         const formattedDate = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-        
+
         currentJournalDetailId = journal.id;
 
         const titleEl = document.getElementById('journal-detail-title');
@@ -670,7 +767,7 @@ function setupMemoryJournalScreen() {
         titleEl.textContent = journal.title;
         document.getElementById('journal-detail-meta').textContent = `创建于 ${formattedDate} | 消息范围: ${journal.range.start}-${journal.range.end}`;
         document.getElementById('journal-detail-content').textContent = journal.content;
-        
+
         switchScreen('memory-journal-detail-screen');
     });
 
@@ -719,7 +816,7 @@ function setupMemoryJournalScreen() {
     });
 }
 
-function renderJournalList(searchQuery = '') {
+function renderJournalList (searchQuery = '') {
     const container = document.getElementById('journal-list-container');
     const placeholder = document.getElementById('no-journals-placeholder');
     container.innerHTML = '';
@@ -735,7 +832,7 @@ function renderJournalList(searchQuery = '') {
     // 更新标题和按钮显示
     const bindBtn = document.getElementById('bind-journal-worldbook-btn');
     const title = document.querySelector('#memory-journal-screen .title');
-    
+
     if (currentChatType === 'group') {
         if (bindBtn) bindBtn.style.display = 'none';
         if (title) title.textContent = '智能总结';
@@ -774,13 +871,7 @@ function renderJournalList(searchQuery = '') {
     const chatInstance = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
     const favoriteTop = chatInstance ? (chatInstance.journalFavoriteTop !== false) : true; // 默认开启
 
-    const sortedJournals = [...journals].sort((a, b) => {
-        if (favoriteTop) {
-            if (a.isFavorited && !b.isFavorited) return -1;
-            if (!a.isFavorited && b.isFavorited) return 1;
-        }
-        return a.createdAt - b.createdAt;
-    });
+    const sortedJournals = [...journals].sort(compareJournalsByRangeOrder);
 
     sortedJournals.forEach(journal => {
         const card = document.createElement('li');
@@ -825,7 +916,7 @@ function renderJournalList(searchQuery = '') {
     });
 }
 
-async function generateJournal(start, end, includeFavorited = false, silent = false, nodeInfo = null) {
+async function generateJournal (start, end, includeFavorited = false, silent = false, nodeInfo = null) {
     if (!silent) {
         showToast('正在生成日记，请稍候...');
     }
@@ -842,7 +933,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
         <div class="spinner"></div>
         <div class="text">正在${currentChatType === 'group' ? '总结群聊' : '编织回忆'}...</div>
     `;
-    
+
     if (container.firstChild) {
         container.insertBefore(loadingCard, container.firstChild);
     } else {
@@ -850,7 +941,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
     }
     container.scrollTop = 0;
 
-    isGenerating = true; 
+    isGenerating = true;
     generatingChatId = currentChatId;
 
     try {
@@ -861,14 +952,14 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
 
         const startIndex = start - 1;
         const endIndex = end;
-        
+
         if (startIndex < 0 || endIndex > chat.history.length || startIndex >= endIndex) {
             throw new Error("无效的消息范围。");
         }
 
         // ...
         let messagesToSummarize = chat.history.slice(startIndex, endIndex);
-        
+
         // 1. 保持原样：第三个参数设为 true，确保你想要的“高权重”隐藏消息能被读进来
         messagesToSummarize = filterHistoryForAI(chat, messagesToSummarize, true);
 
@@ -881,7 +972,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
         // 如果你担心以前的历史记录里有 thinking 标签但没有 isThinking 属性，可以加一步正则清洗
         messagesToSummarize.forEach(m => {
             if (m.content && typeof m.content === 'string') {
-               m.content = m.content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+                m.content = m.content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
             }
         });
 
@@ -895,9 +986,21 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
                 .filter(j => j.isFavorited)
                 .map(j => `标题：${j.title}\n内容：${j.content}`)
                 .join('\n\n---\n\n');
-            
+
             if (favoritedJournals) {
-                favoritedJournalsPrompt = `【过往回顾】\n这是你之前已经写下的内容，请参考它们，以确保新内容的连续性，并避免重复记录已经记录过的事件。\n\n${favoritedJournals}\n\n`;
+                favoritedJournalsPrompt = `【已确认的前史与关系基线】
+以下内容是此前已经收藏并确认的重要关系总结。它们用于说明当前聊天发生前，对话双方已经经历过的事件、已经形成的关系状态、既有约定、重要细节和相处模式。
+
+请严格按照以下方式使用这些内容：
+
+1. 它们是“前史基线”，不是本次需要重新总结的聊天记录。
+2. 本次总结应当承接这些内容已经建立的时间线和关系状态，只记录当前聊天带来的新增事件、新增细节、新增关系变化，或对既有关系模式的延续、加深、修正、转折。
+3. 已经在收藏总结中记录过、且当前聊天只是简单再次提到的事件，不要重复写成本次核心事件。
+4. 如果旧事件在当前聊天中被重新提起，并产生了新的意义、用途、关系影响或情绪变化，可以记录它的“新意义”，但不要重复旧事件本身。
+5. 如果当前聊天与过往总结中的关系状态发生冲突或变化，请不要直接覆盖旧总结，而要说明这种变化是“延续、加深、修正，还是转折”。
+6. 当前聊天记录的优先级高于过往收藏总结。过往收藏总结只用于理解前情，不得凭空扩展当前聊天中没有发生的内容。
+
+以下是已确认的前史与关系基线：\n\n${favoritedJournals}\n\n`;
             }
         }
 
@@ -912,7 +1015,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
             worldBooksContent = groupWorldBooks.map(wb => wb.content).join('\n\n');
 
             summaryPrompt = `你是一个群聊记录总结助手。请以完全客观的第三视角，对以下群聊记录进行精简总结。\n\n`;
-            
+
             if (favoritedJournalsPrompt) {
                 summaryPrompt += favoritedJournalsPrompt;
             }
@@ -943,14 +1046,14 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
                     const currentTime = m.timestamp;
                     const timeDiff = currentTime - lastTime;
                     const isSameDay = new Date(currentTime).toDateString() === new Date(lastTime).toDateString();
-                    
+
                     if (lastTime === 0 || timeDiff > 20 * 60 * 1000 || !isSameDay) {
                         const d = new Date(currentTime);
                         const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
                         prefix = `\n[系统时间: ${timeStr}]\n`;
                     }
                     lastTime = currentTime;
-                    return `${prefix}${m.content}`;
+                    return `${prefix}${formatJournalMessageContent(m.content)}`;
                 }).join('\n');
             })()}\n---`;
 
@@ -959,22 +1062,10 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
             // 0. 确保迁移
             migrateJournalSettings(chat);
 
-            // 1. 自动获取通用世界书 (Context) + 全局世界书
-            let isOfflineNode = false;
-            if (chat.activeNodeId && chat.nodes) {
-                const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
-                if (activeNode) {
-                    let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
-                                   (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
-                    if (baseMode === 'offline') {
-                        isOfflineNode = true;
-                    }
-                }
-            }
-            let associatedIds = chat.worldBookIds || [];
-            if (isOfflineNode) {
-                associatedIds = (chat.offlineWorldBookIds && chat.offlineWorldBookIds.length > 0) ? chat.offlineWorldBookIds : (chat.worldBookIds || []);
-            }
+            // 1. 日记始终优先使用线下世界书，未绑定时回退普通世界书，并保留全局世界书
+            const associatedIds = (chat.offlineWorldBookIds && chat.offlineWorldBookIds.length > 0)
+                ? chat.offlineWorldBookIds
+                : (chat.worldBookIds || []);
             const globalBooks = db.worldBooks.filter(wb => wb.isGlobal && !wb.disabled);
             const globalIds = globalBooks.map(wb => wb.id);
             const allBookIds = [...new Set([...associatedIds, ...globalIds])];
@@ -983,12 +1074,12 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
 
             // 2. 获取风格设置
             const styleSettings = chat.journalStyleSettings || { mode: 'default', customWorldBookIds: [] };
-            
+
             // 3. 构建 Prompt
             if (styleSettings.mode === 'summary') {
                 // 摘要总结风格
                 summaryPrompt = `你是一个专业的对话记录总结助手。请根据提供的聊天记录，生成一份精简的摘要总结。\n\n`;
-                
+
                 if (favoritedJournalsPrompt) {
                     summaryPrompt += favoritedJournalsPrompt;
                 }
@@ -1010,28 +1101,61 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
 </journal>
 
 聊天记录如下：\n\n---\n${(() => {
-                let lastTime = 0;
-                return messagesToSummarize.map(m => {
-                    let prefix = '';
-                    const currentTime = m.timestamp;
-                    const timeDiff = currentTime - lastTime;
-                    const isSameDay = new Date(currentTime).toDateString() === new Date(lastTime).toDateString();
-                    
-                    if (lastTime === 0 || timeDiff > 20 * 60 * 1000 || !isSameDay) {
-                        const d = new Date(currentTime);
-                        const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                        prefix = `\n[系统时间: ${timeStr}]\n`;
-                    }
-                    lastTime = currentTime;
-                    return `${prefix}${m.content}`;
-                }).join('\n');
-            })()}\n---`;
+                        let lastTime = 0;
+                        return messagesToSummarize.map(m => {
+                            let prefix = '';
+                            const currentTime = m.timestamp;
+                            const timeDiff = currentTime - lastTime;
+                            const isSameDay = new Date(currentTime).toDateString() === new Date(lastTime).toDateString();
 
+                            if (lastTime === 0 || timeDiff > 20 * 60 * 1000 || !isSameDay) {
+                                const d = new Date(currentTime);
+                                const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                                prefix = `\n[系统时间: ${timeStr}]\n`;
+                            }
+                            lastTime = currentTime;
+                            return `${prefix}${formatJournalMessageContent(m.content)}`;
+                        }).join('\n');
+                    })()}\n---`;
+
+            } else if (styleSettings.mode === 'custom') {
+                // 自定义风格（与默认风格类似，但注入了额外的格式要求）
+                summaryPrompt = `你是一个长期对话关系记忆整理助手。 请根据提供的 ${chat.realName}和${chat.myName}聊天记录，以第三人称视角生成一份“结构化关系记忆总结”。请把对话双方当作长期真实相处的人来整理，而不是当作小说角色来概括。这份总结不是日记，不是小说梗概，也不是情绪抒发。它的用途是：帮助后续对话准确记住已经发生过的事件、双方形成的关系变化、重要细节、约定、偏好、心理转折和相处模式。\n\n`;
+
+                if (favoritedJournalsPrompt) {
+                    summaryPrompt += favoritedJournalsPrompt;
+                }
+
+                summaryPrompt += "为了更好地理解角色和背景，请参考以下信息：\n";
+                summaryPrompt += "=====\n";
+
+                if (worldBooksContent) {
+                    summaryPrompt += `世界观设定:\n${worldBooksContent}\n\n`;
+                }
+
+                summaryPrompt += `char的角色设定:\n- 角色名: ${chat.realName}\n- 人设: ${chat.persona || "一个友好、乐于助人的伙伴。"}\n\n`;
+                summaryPrompt += `user的角色设定:\n- 称呼: ${chat.myName}\n- 人设: ${chat.myPersona || "无特定人设。"}\n\n`;
+                summaryPrompt += "=====\n";
+
+                // 如果是自定义风格，注入额外要求
+                if (styleSettings.mode === 'custom') {
+                    const customWorldBooks = (styleSettings.customWorldBookIds || []).map(id => db.worldBooks.find(wb => wb.id === id)).filter(wb => wb && !wb.disabled);
+                    const customStyleContent = customWorldBooks.map(wb => wb.content).join('\n\n');
+
+                    if (customStyleContent) {
+                        summaryPrompt += `\n请严格遵循以下风格指南或格式要求来撰写：\n${customStyleContent}\n\n`;
+                    }
+                }
+                summaryPrompt += `请基于以上所有背景信息，总结以下聊天记录。请严格使用以下 XML 标签格式输出你的结果，不要输出任何其他多余的解释：\n<journal>\n    <title>年月日·一个简洁的标题</title>\n    <content>完整的日记正文</content>\n</journal>\n\n聊天记录如下：\n\n---\n${(() => {
+                    return messagesToSummarize.map(m => {
+                        return `${formatJournalMessageContent(m.content)}`;
+                    }).join('\n');
+                })()}\n---`;
             } else {
-                // 默认风格 (流水账) 或 自定义风格
+                // 默认风格 (流水账) 
                 // 基础 Prompt (第一人称)
                 summaryPrompt = `你是一个日记整理助手。请以角色 "${chat.remarkName || chat.name}" 的第一人称视角，总结以下聊天记录。请专注于重要的情绪、事件和细节。\n\n`;
-                
+
                 if (favoritedJournalsPrompt) {
                     summaryPrompt += favoritedJournalsPrompt;
                 }
@@ -1051,29 +1175,29 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
                 if (styleSettings.mode === 'custom') {
                     const customWorldBooks = (styleSettings.customWorldBookIds || []).map(id => db.worldBooks.find(wb => wb.id === id)).filter(wb => wb && !wb.disabled);
                     const customStyleContent = customWorldBooks.map(wb => wb.content).join('\n\n');
-                    
+
                     if (customStyleContent) {
                         summaryPrompt += `\n**特别日记格式/风格要求**：\n请优先严格遵循以下风格指南或格式要求来撰写日记：\n${customStyleContent}\n\n`;
                     }
                 }
 
                 summaryPrompt += `请基于以上所有背景信息，总结以下聊天记录。请严格使用以下 XML 标签格式输出你的结果，不要输出任何其他多余的解释：\n<journal>\n    <title>年月日·一个简洁的标题</title>\n    <content>完整的日记正文</content>\n</journal>\n\n聊天记录如下：\n\n---\n${(() => {
-                let lastTime = 0;
-                return messagesToSummarize.map(m => {
-                    let prefix = '';
-                    const currentTime = m.timestamp;
-                    const timeDiff = currentTime - lastTime;
-                    const isSameDay = new Date(currentTime).toDateString() === new Date(lastTime).toDateString();
-                    
-                    if (lastTime === 0 || timeDiff > 20 * 60 * 1000 || !isSameDay) {
-                        const d = new Date(currentTime);
-                        const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                        prefix = `\n[系统时间: ${timeStr}]\n`;
-                    }
-                    lastTime = currentTime;
-                    return `${prefix}${m.content}`;
-                }).join('\n');
-            })()}\n---`;
+                    let lastTime = 0;
+                    return messagesToSummarize.map(m => {
+                        let prefix = '';
+                        const currentTime = m.timestamp;
+                        const timeDiff = currentTime - lastTime;
+                        const isSameDay = new Date(currentTime).toDateString() === new Date(lastTime).toDateString();
+
+                        if (lastTime === 0 || timeDiff > 20 * 60 * 1000 || !isSameDay) {
+                            const d = new Date(currentTime);
+                            const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                            prefix = `\n[系统时间: ${timeStr}]\n`;
+                        }
+                        lastTime = currentTime;
+                        return `${prefix}${formatJournalMessageContent(m.content)}`;
+                    }).join('\n');
+                })()}\n---`;
             }
         }
 
@@ -1084,7 +1208,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
         } else {
             apiConfig = db.apiSettings;
         }
-        
+
         let { url, key, model, provider } = apiConfig;
         if (!url || !key || !model) {
             throw new Error("API设置不完整。");
@@ -1120,7 +1244,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
             createdAt: Date.now(),
             chatId: currentChatId,
             chatType: currentChatType,
-            isFavorited: false 
+            isFavorited: false
         };
 
         // 如果是节点总结，附加节点信息
@@ -1162,7 +1286,7 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
         await saveData();
 
         renderJournalList();
-        
+
         // 如果是重新总结且在节点大厅，刷新列表
         if (nodeInfo && nodeInfo.isResummarize && document.getElementById('node-system-screen').classList.contains('active')) {
             if (typeof NodeSystem !== 'undefined' && typeof NodeSystem.renderArchiveList === 'function') {
@@ -1175,44 +1299,32 @@ async function generateJournal(start, end, includeFavorited = false, silent = fa
     } catch (error) {
         // 移除生成卡片
         const card = document.getElementById('journal-generating-card');
-        if(card) card.remove();
-        
+        if (card) card.remove();
+
         // 如果列表为空，恢复显示 placeholder
         const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
         if (!chat || !chat.memoryJournals || chat.memoryJournals.length === 0) {
-             const placeholder = document.getElementById('no-journals-placeholder');
-             if (placeholder) placeholder.style.display = 'block';
+            const placeholder = document.getElementById('no-journals-placeholder');
+            if (placeholder) placeholder.style.display = 'block';
         }
 
         showApiError(error);
     } finally {
-        isGenerating = false; 
+        isGenerating = false;
         generatingChatId = null;
     }
 }
 
-function migrateJournalSettings(chat) {
+function migrateJournalSettings (chat) {
     if (!chat.journalStyleSettings) {
         const oldJournalIds = chat.journalWorldBookIds || [];
-        let isOfflineNode = false;
-        if (chat.activeNodeId && chat.nodes) {
-            const activeNode = chat.nodes.find(n => n.id === chat.activeNodeId);
-            if (activeNode) {
-                let baseMode = (activeNode.customConfig && activeNode.customConfig.baseMode) ? activeNode.customConfig.baseMode : 
-                               (activeNode.type === 'offline' || (activeNode.type === 'spinoff' && activeNode.spinoffMode === 'offline') ? 'offline' : 'online');
-                if (baseMode === 'offline') {
-                    isOfflineNode = true;
-                }
-            }
-        }
-        let chatCommonIds = chat.worldBookIds || [];
-        if (isOfflineNode) {
-            chatCommonIds = (chat.offlineWorldBookIds && chat.offlineWorldBookIds.length > 0) ? chat.offlineWorldBookIds : (chat.worldBookIds || []);
-        }
-        
+        const chatCommonIds = (chat.offlineWorldBookIds && chat.offlineWorldBookIds.length > 0)
+            ? chat.offlineWorldBookIds
+            : (chat.worldBookIds || []);
+
         // 1. 剔除重复项 (在通用里已存在的)
         const uniqueCustomIds = oldJournalIds.filter(id => !chatCommonIds.includes(id));
-        
+
         // 2. 决定模式
         let newMode = 'default';
         let migrationMsg = '';
@@ -1233,11 +1345,11 @@ function migrateJournalSettings(chat) {
         }
 
         // 3. 应用设置
-        chat.journalStyleSettings = { 
-            mode: newMode, 
-            customWorldBookIds: uniqueCustomIds 
+        chat.journalStyleSettings = {
+            mode: newMode,
+            customWorldBookIds: uniqueCustomIds
         };
-        
+
         return migrationMsg;
     }
     return null;
@@ -1247,7 +1359,7 @@ function migrateJournalSettings(chat) {
  * 在 AI 回复完成后调用：若开启自动总结且达到间隔，则静默总结到最近一个完整区间（如 1-100），不包含超出部分。
  * @param {Object} chat - 当前聊天对象（character 或 group）
  */
-async function checkAndTriggerAutoJournal(chat) {
+async function checkAndTriggerAutoJournal (chat) {
     if (!chat || !chat.autoJournalEnabled) return;
     if (typeof isGenerating !== 'undefined' && isGenerating) return;
 

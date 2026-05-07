@@ -69,6 +69,62 @@ function setupChatSettings() {
         }, 80);
     });
 
+    document.getElementById('setting-vectorize-next-batch-btn')?.addEventListener('click', async () => {
+        const statusEl = document.getElementById('setting-vector-memory-status');
+        const countEl = document.getElementById('setting-vector-memory-count');
+        const btn = document.getElementById('setting-vectorize-next-batch-btn');
+        const chat = db.characters.find(c => c.id === currentChatId);
+
+        if (!chat || currentChatType !== 'private') {
+            if (statusEl) statusEl.textContent = '当前不是私聊，无法向量化';
+            showToast('当前不是私聊，无法向量化');
+            return;
+        }
+        if (!window.VectorMemory || typeof window.VectorMemory.vectorizeNextBatch !== 'function') {
+            if (statusEl) statusEl.textContent = '向量记忆模块未加载';
+            showToast('向量记忆模块未加载');
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '向量化中...';
+        }
+        if (statusEl) statusEl.textContent = '正在向量化下一批...';
+
+        try {
+            const result = await window.VectorMemory.vectorizeNextBatch(chat);
+            if (!result || result.success === false) {
+                let msg = '向量化失败';
+                if (result && result.reason === 'missing_embedding_config') msg = '向量化失败：未配置 embedding API key / apiUrl / model';
+                else if (result && result.reason === 'missing_chat_id') msg = '向量化失败：当前聊天缺少 chatId';
+                else if (result && result.reason === 'exception' && result.error && result.error.message) msg = '向量化失败：' + result.error.message;
+                if (statusEl) statusEl.textContent = msg;
+                showToast(msg);
+            } else {
+                const created = result.created || 0;
+                const stats = (window.VectorMemory && typeof window.VectorMemory.getVectorMemoryStats === 'function')
+                    ? window.VectorMemory.getVectorMemoryStats(chat.id)
+                    : null;
+                if (countEl && stats) countEl.textContent = String(stats.vectorizedChunks || 0);
+                const msg = created > 0 ? `本次向量化了 ${created} 个 chunk` : '没有新的 chunk 需要向量化';
+                if (statusEl) statusEl.textContent = msg;
+                showToast(msg);
+            }
+        } catch (error) {
+            console.error('[VectorMemory] button click failed:', error);
+            const msg = '向量化失败：' + (error && error.message ? error.message : '未知错误');
+            if (statusEl) statusEl.textContent = msg;
+            showToast(msg);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '向量化下一批';
+            }
+            refreshVectorMemoryStats();
+        }
+    });
+
     const scrollToTopOrBottomGroup = (mode) => {
         switchScreen('chat-room-screen');
         setTimeout(() => {
@@ -1463,6 +1519,22 @@ function loadSettingsToSidebar() {
         }
         document.getElementById('setting-auto-journal-interval').value = e.autoJournalInterval || 100;
 
+        const vectorMemoryEnabledEl = document.getElementById('setting-vector-memory-enabled');
+        if (vectorMemoryEnabledEl) vectorMemoryEnabledEl.checked = !!e.vectorMemoryEnabled;
+        const vectorMemoryTopKEl = document.getElementById('setting-vector-memory-topk');
+        if (vectorMemoryTopKEl) {
+            const defaultTopK = (db.embeddingSettings && db.embeddingSettings.defaultTopK) || 3;
+            vectorMemoryTopKEl.value = e.vectorMemoryTopK != null ? e.vectorMemoryTopK : defaultTopK;
+        }
+        const vectorMinSimilarityEl = document.getElementById('setting-vector-min-similarity');
+        if (vectorMinSimilarityEl) {
+            const defaultMinSimilarity = (db.embeddingSettings && db.embeddingSettings.defaultMinSimilarity != null)
+                ? db.embeddingSettings.defaultMinSimilarity
+                : 0.3;
+            vectorMinSimilarityEl.value = e.vectorMinSimilarity != null ? e.vectorMinSimilarity : defaultMinSimilarity;
+        }
+        refreshVectorMemoryStats();
+
         const charAutoFavEl = document.getElementById('setting-char-auto-favorite');
         if (charAutoFavEl) charAutoFavEl.checked = e.characterAutoFavoriteEnabled || false;
         
@@ -2257,6 +2329,16 @@ async function saveSettingsFromSidebar() {
         e.autoJournalEnabled = document.getElementById('setting-auto-journal-enabled').checked;
         const autoJournalIntervalInput = parseInt(document.getElementById('setting-auto-journal-interval').value, 10);
         e.autoJournalInterval = (isNaN(autoJournalIntervalInput) || autoJournalIntervalInput < 10) ? 100 : autoJournalIntervalInput;
+        const vectorMemoryEnabledSave = document.getElementById('setting-vector-memory-enabled');
+        if (vectorMemoryEnabledSave) e.vectorMemoryEnabled = vectorMemoryEnabledSave.checked;
+        const vectorMemoryTopKSave = parseInt(document.getElementById('setting-vector-memory-topk')?.value, 10);
+        e.vectorMemoryTopK = (isNaN(vectorMemoryTopKSave) || vectorMemoryTopKSave < 1)
+            ? ((db.embeddingSettings && db.embeddingSettings.defaultTopK) || 3)
+            : vectorMemoryTopKSave;
+        const vectorMinSimilaritySave = parseFloat(document.getElementById('setting-vector-min-similarity')?.value);
+        e.vectorMinSimilarity = (isNaN(vectorMinSimilaritySave) || vectorMinSimilaritySave < 0)
+            ? ((db.embeddingSettings && db.embeddingSettings.defaultMinSimilarity != null) ? db.embeddingSettings.defaultMinSimilarity : 0.3)
+            : Math.min(vectorMinSimilaritySave, 1);
         const charAutoFavEl = document.getElementById('setting-char-auto-favorite');
         e.characterAutoFavoriteEnabled = charAutoFavEl ? charAutoFavEl.checked : false;
 
@@ -3019,6 +3101,7 @@ function setupApiSettingsApp() {
     });
     
     // === 副API设置：总结API ===
+    setupEmbeddingSettings();
     setupSubApiSettings('summary', 'summaryApiSettings', 'summaryApiPresets');
     
     // === 副API设置：后台活动API ===
@@ -3082,6 +3165,105 @@ function setupApiSettingsApp() {
 }
 
 // --- 预设管理 ---
+function setupEmbeddingSettings() {
+    const enabledEl = document.getElementById('embedding-enabled-switch');
+    const urlEl = document.getElementById('embedding-api-url');
+    const keyEl = document.getElementById('embedding-api-key');
+    const modelEl = document.getElementById('embedding-api-model');
+    const batchSizeEl = document.getElementById('embedding-batch-size');
+    const topKEl = document.getElementById('embedding-default-topk');
+    const minSimilarityEl = document.getElementById('embedding-default-min-similarity');
+    const saveBtn = document.getElementById('embedding-api-save-btn');
+
+    if (!enabledEl || !urlEl || !keyEl || !modelEl || !batchSizeEl || !topKEl || !minSimilarityEl || !saveBtn) return;
+
+    const defaultSettings = (typeof createDefaultEmbeddingSettings === 'function')
+        ? createDefaultEmbeddingSettings()
+        : {
+            enabled: false,
+            provider: 'openai',
+            apiUrl: '',
+            apiKey: '',
+            model: '',
+            batchSize: 10,
+            defaultTopK: 3,
+            defaultMinSimilarity: 0.3
+        };
+
+    const currentSettings = {
+        ...defaultSettings,
+        ...(db.embeddingSettings || {})
+    };
+
+    enabledEl.checked = !!currentSettings.enabled;
+    urlEl.value = currentSettings.apiUrl || '';
+    keyEl.value = currentSettings.apiKey || '';
+    modelEl.value = currentSettings.model || '';
+    batchSizeEl.value = currentSettings.batchSize != null ? currentSettings.batchSize : defaultSettings.batchSize;
+    topKEl.value = currentSettings.defaultTopK != null ? currentSettings.defaultTopK : defaultSettings.defaultTopK;
+    minSimilarityEl.value = currentSettings.defaultMinSimilarity != null ? currentSettings.defaultMinSimilarity : defaultSettings.defaultMinSimilarity;
+
+    saveBtn.addEventListener('click', async () => {
+        if (BLOCKED_API_DOMAINS.some(domain => urlEl.value.includes(domain))) {
+            showToast('该 API 站点已被屏蔽，无法保存！');
+            return;
+        }
+
+        const batchSize = parseInt(batchSizeEl.value, 10);
+        const defaultTopK = parseInt(topKEl.value, 10);
+        const defaultMinSimilarity = parseFloat(minSimilarityEl.value);
+
+        db.embeddingSettings = {
+            ...defaultSettings,
+            ...(db.embeddingSettings || {}),
+            enabled: enabledEl.checked,
+            provider: 'openai',
+            apiUrl: urlEl.value.trim(),
+            apiKey: keyEl.value.trim(),
+            model: modelEl.value.trim(),
+            batchSize: (isNaN(batchSize) || batchSize < 1) ? defaultSettings.batchSize : batchSize,
+            defaultTopK: (isNaN(defaultTopK) || defaultTopK < 1) ? defaultSettings.defaultTopK : defaultTopK,
+            defaultMinSimilarity: (isNaN(defaultMinSimilarity) || defaultMinSimilarity < 0)
+                ? defaultSettings.defaultMinSimilarity
+                : Math.min(defaultMinSimilarity, 1)
+        };
+
+        await saveData();
+
+        batchSizeEl.value = db.embeddingSettings.batchSize;
+        topKEl.value = db.embeddingSettings.defaultTopK;
+        minSimilarityEl.value = db.embeddingSettings.defaultMinSimilarity;
+        showToast('向量化 API 设置已保存！');
+    });
+}
+
+function refreshVectorMemoryStats() {
+    const countEl = document.getElementById('setting-vector-memory-count');
+    const statusEl = document.getElementById('setting-vector-memory-status');
+    if (!countEl) return;
+
+    const chat = db.characters.find(c => c.id === currentChatId);
+    if (!chat || currentChatType !== 'private') {
+        countEl.textContent = '0';
+        if (statusEl) statusEl.textContent = '当前不是私聊';
+        return;
+    }
+
+    if (!window.VectorMemory || typeof window.VectorMemory.getVectorMemoryStats !== 'function') {
+        countEl.textContent = '0';
+        if (statusEl) statusEl.textContent = '向量记忆模块未加载';
+        return;
+    }
+
+    const stats = window.VectorMemory.getVectorMemoryStats(chat.id);
+    countEl.textContent = String((stats && stats.vectorizedChunks) || 0);
+    if (statusEl && !statusEl.dataset.lockedMessage) {
+        statusEl.textContent = stats && stats.vectorizedChunks > 0
+            ? `当前已向量化 ${stats.vectorizedChunks} 个 chunk`
+            : '尚未开始向量化';
+    }
+}
+
 function _getApiPresets() {
     return db.apiPresets || [];
 }
