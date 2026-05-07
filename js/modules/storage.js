@@ -295,6 +295,42 @@ function setupStorageAnalysisScreen() {
                 };
             }
         }
+        
+        // 追加配额进度条
+        if (navigator.storage && navigator.storage.estimate) {
+            try {
+                const { usage, quota } = await navigator.storage.estimate();
+                const usedMB = (usage / 1024 / 1024).toFixed(1);
+                const totalMB = (quota / 1024 / 1024).toFixed(0);
+                const pct = Math.min(100, (usage / quota) * 100);
+                const color = pct > 90 ? '#f44336' : pct > 70 ? '#ff9800' : '#4caf50';
+
+                // 移除旧的进度条节点，避免重复渲染
+                const oldQuotaDiv = document.getElementById('storage-quota-status');
+                if (oldQuotaDiv) oldQuotaDiv.remove();
+
+                const quotaDiv = document.createElement('div');
+                quotaDiv.id = 'storage-quota-status';
+                quotaDiv.style.cssText = "padding: 12px; background: #f8f9fa; border-radius: 12px; margin-bottom: 20px; border: 1px solid #eee;";
+                quotaDiv.innerHTML = `
+                    <div style="font-weight:600;font-size:15px;color:#333;margin-bottom:8px;">存储空间用量</div>
+                    <div style="background:#eee;border-radius:4px;height:8px;overflow:hidden;margin-bottom:6px;">
+                        <div style="width:${pct.toFixed(1)}%;background:${color};height:100%;border-radius:4px;transition:width .3s;"></div>
+                    </div>
+                    <div style="font-size:12px;color:${color};">已使用 ${usedMB} MB / 约 ${totalMB} MB（${pct.toFixed(1)}%）</div>
+                    ${pct > 90 ? '<div style="font-size:12px;color:#f44336;margin-top:4px;">⚠️ 空间即将耗尽，请导出备份并清理数据！</div>' : ''}
+                `;
+                
+                const statusContainer = document.getElementById('storage-persistence-status');
+                if (statusContainer && statusContainer.parentNode) {
+                    statusContainer.parentNode.insertBefore(quotaDiv, statusContainer.nextSibling);
+                } else if (chartContainer && chartContainer.parentNode) {
+                    chartContainer.parentNode.insertBefore(quotaDiv, chartContainer);
+                }
+            } catch (e) {
+                console.error("Failed to estimate storage:", e);
+            }
+        }
     }
 }
 

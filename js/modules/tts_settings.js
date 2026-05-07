@@ -29,6 +29,28 @@ const TTSSettings = {
             });
         }
 
+        // 豆包教程弹窗事件
+        const volcengineTutorialBtn = document.getElementById('volcengine-tts-tutorial-btn');
+        if (volcengineTutorialBtn) {
+            volcengineTutorialBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('volcengine-tts-tutorial-modal').style.display = 'flex';
+            });
+        }
+        const volcengineUserTutorialBtn = document.getElementById('volcengine-user-tts-tutorial-btn');
+        if (volcengineUserTutorialBtn) {
+            volcengineUserTutorialBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('volcengine-tts-tutorial-modal').style.display = 'flex';
+            });
+        }
+        const closeVolcengineTutorialBtn = document.getElementById('close-volcengine-tts-tutorial-btn');
+        if (closeVolcengineTutorialBtn) {
+            closeVolcengineTutorialBtn.addEventListener('click', () => {
+                document.getElementById('volcengine-tts-tutorial-modal').style.display = 'none';
+            });
+        }
+
         // 语速滑块实时显示
         const speedInput = document.getElementById('setting-tts-speed');
         const speedValueSpan = document.getElementById('setting-tts-speed-value');

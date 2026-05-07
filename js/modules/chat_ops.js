@@ -43,7 +43,7 @@ function handleMessageLongPress(messageWrapper, x, y) {
                     
                     char.history = char.history.filter(m => m.id !== messageId);
                     
-                    await saveData();
+                    await saveCurrentChat();
                     renderMessages(false, true);
                     if (typeof NodeSystem !== 'undefined') {
                         NodeSystem.checkActiveNodeUI();
@@ -66,6 +66,7 @@ function handleMessageLongPress(messageWrapper, x, y) {
     const isPhotoVideoMessage = /\[.*?发来的照片\/视频：.*?\]/.test(message.content);
     const isTransferMessage = /\[.*?给你转账：.*?\]|\[.*?的转账：.*?\]|\[.*?向.*?转账：.*?\]/.test(message.content);
     const isGiftMessage = /\[.*?送来的礼物：.*?\]|\[.*?向.*?送来了礼物：.*?\]/.test(message.content);
+    const timeGapMatch = message.content.match(/\[system-display:距离上次聊天已经过去 (.*?)\]/);
     
     let invisibleRegex;
     if (chat.showStatusUpdateMsg) {
@@ -88,6 +89,24 @@ function handleMessageLongPress(messageWrapper, x, y) {
         if (message.role === 'user') {
             menuItems.push({label: '撤回', action: () => withdrawMessage(messageId)});
         }
+    }
+
+    if (timeGapMatch) {
+        menuItems.push({
+            label: '编辑时间',
+            action: async () => {
+                const newTime = await customPrompt('修改经过的时间', timeGapMatch[1], '编辑时间');
+                if (newTime !== null && newTime.trim() !== '') {
+                    message.content = `[system-display:距离上次聊天已经过去 ${newTime.trim()}]`;
+                    if (message.parts && message.parts.length > 0) {
+                        message.parts = [{type: 'text', text: message.content}];
+                    }
+                    if (typeof saveCurrentChat === 'function') await saveCurrentChat();
+                    renderMessages(false, true);
+                    if (typeof showToast === 'function') showToast('时间已修改');
+                }
+            }
+        });
     }
 
     if (!isInvisibleMessage) {
@@ -187,7 +206,7 @@ function handleMessageLongPress(messageWrapper, x, y) {
                         });
                         // 更新为新图
                         message.novelAiImageUrl = result.imageUrl;
-                        await saveData();
+                        await saveCurrentChat();
                         renderMessages(false, true);
                         showToast('✅ 生图完成');
                     }
@@ -284,7 +303,7 @@ function startDebugEdit(messageId) {
                     recalculateChatStatus(chat);
                 }
 
-                await saveData(); 
+                await saveCurrentChat(); 
                 renderMessages(false, true); 
                 cancelMessageEdit(); 
                 showToast('消息已删除');
@@ -481,19 +500,26 @@ async function saveMessageEdit() {
         }
     } else {
         const oldContent = chat.history[messageIndex].content;
-        const prefixMatch = oldContent.match(/(\[.*?的消息：)[\s\S]+\]/);
-        let newContent;
-
-        if (prefixMatch && prefixMatch[1]) {
-            const prefix = prefixMatch[1];
-            newContent = `${prefix}${newText}]`;
-        } else {
-            newContent = newText;
+        // 如果编辑的内容已经是 [xxx] 的形式（用户使用了插入模板等）直接应用新文本
+        let newContent = newText;
+        if (!newText.match(/^\[.*?\]$/)) {
+            // 普通文本，沿用原消息的前缀
+            const prefixMatch = oldContent.match(/(\[.*?：)[\s\S]*\]/);
+            if (prefixMatch && prefixMatch[1]) {
+                const prefix = prefixMatch[1];
+                newContent = `${prefix}${newText}]`;
+            } else if (oldContent.startsWith('[') && oldContent.endsWith(']')) {
+                // 原文有括号但没匹配到冒号，尽量保留发送者名字前缀
+                const nameMatch = oldContent.match(/^\[(.*?的消息：)/);
+                if (nameMatch) {
+                    newContent = `${nameMatch[1]}${newText}]`;
+                }
+            }
         }
 
         chat.history[messageIndex].content = newContent;
         if (chat.history[messageIndex].parts) {
-        chat.history[messageIndex].parts = [{type: 'text', text: newContent}];
+            chat.history[messageIndex].parts = [{type: 'text', text: newContent}];
         }
     }
 
@@ -596,7 +622,7 @@ async function saveMessageEdit() {
         }
     }
 
-    await saveData();
+    await saveCurrentChat();
     currentPage = 1;
     renderMessages(false, true);
     renderChatList();
@@ -886,7 +912,7 @@ async function deleteSelectedMessages() {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
     currentPage = 1;
     renderMessages(false, true);
     renderChatList();
@@ -924,7 +950,7 @@ async function withdrawMessage(messageId) {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
 
     currentPage = 1;
     renderMessages(false, true);
@@ -1087,7 +1113,7 @@ function setupDeleteHistoryChunk() {
             }
             
             if (changedCount > 0) {
-                await saveData();
+                await saveCurrentChat();
                 showToast(`已屏蔽 ${changedCount} 条消息`);
                 // Update DOM in-place
                 modifiedIds.forEach(id => {
@@ -1122,7 +1148,7 @@ function setupDeleteHistoryChunk() {
             }
             
             if (changedCount > 0) {
-                await saveData();
+                await saveCurrentChat();
                 showToast(`已恢复 ${changedCount} 条消息`);
                 // Update DOM in-place
                 modifiedIds.forEach(id => {
@@ -1183,7 +1209,7 @@ function setupDeleteHistoryChunk() {
                 recalculateChatStatus(chat);
             }
 
-            await saveData();
+            await saveCurrentChat();
             confirmDeleteModal.classList.remove('visible');
             deleteChunkModal.classList.remove('visible');
             showToast(`已永久删除 ${count} 条消息`);
@@ -1247,6 +1273,69 @@ function recalculateChatStatus(chat) {
     }
 }
 
+// 快捷插入文本功能
+window.insertFormatText = function(textareaId, type) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+    
+    const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+    
+    // 确定发送者身份名称
+    let senderName = chat ? (chat.remarkName || chat.name || '角色') : '角色';
+    
+    // 如果是在新增消息面板，判断选择了谁
+    const senderRoleRadio = document.querySelector('input[name="insert-sender-role"]:checked');
+    if (textareaId === 'insert-message-textarea' && senderRoleRadio && senderRoleRadio.value === 'user') {
+        senderName = (currentChatType === 'private') ? (chat.myName || '我') : (chat.me ? chat.me.nickname : '我');
+    } else if (textareaId === 'message-edit-textarea') {
+        // 如果是普通编辑面板，尝试从已有消息推断角色名，或者直接用默认角色名
+        const currentMessageIndex = chat.history.findIndex(m => m.id === editingMessageId);
+        if (currentMessageIndex !== -1) {
+            const msg = chat.history[currentMessageIndex];
+            if (msg.role === 'user') {
+                senderName = (currentChatType === 'private') ? (chat.myName || '我') : (chat.me ? chat.me.nickname : '我');
+            }
+        }
+    }
+
+    // 提取当前输入框中已有的话（如果本身有带[]的前缀，就把前缀清理掉提取纯文本）
+    let currentText = textarea.value.trim();
+    if (currentText.match(/^\[.*?：([\s\S]*)\]$/)) {
+        currentText = currentText.match(/^\[.*?：([\s\S]*)\]$/)[1].trim();
+    } else if (currentText.match(/^\[(.*?)\]$/)) {
+        // 对于有些没冒号但带括号的特殊情况
+        currentText = currentText.match(/^\[(.*?)\]$/)[1].trim();
+    }
+    
+    let template = '';
+    let newCursorPos = -1;
+    
+    switch(type) {
+        case 'voice':
+            template = `[${senderName}的语音：${currentText}]`;
+            newCursorPos = template.length - 1; // 光标留在 ] 前
+            break;
+        case 'quote':
+            // 引用的话，原本的话当做回复内容，引用的内容需要用户去填
+            template = `[${senderName}引用“”并回复：${currentText}]`;
+            // 光标留在第一个 ” 里
+            newCursorPos = template.indexOf('”');
+            break;
+        case 'visual':
+            template = `[${senderName}发来的照片/视频：${currentText}]`;
+            newCursorPos = template.length - 1;
+            break;
+    }
+    
+    if (template) {
+        textarea.value = template;
+        textarea.focus();
+        if (newCursorPos !== -1) {
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+        }
+    }
+};
+
 // 在当前编辑的消息下方插入新消息
 function insertMessageBelow() {
     if (!editingMessageId) {
@@ -1264,13 +1353,27 @@ function insertMessageBelow() {
     }
     
     insertTextarea.value = '';
+    
+    // 初始化选择发送者的radio
+    const currentMessageIndex = ((currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId))?.history.findIndex(m => m.id === editingMessageId);
+    if (currentMessageIndex !== undefined && currentMessageIndex !== -1) {
+        const chat = (currentChatType === 'private') ? db.characters.find(c => c.id === currentChatId) : db.groups.find(g => g.id === currentChatId);
+        const currentMessage = chat.history[currentMessageIndex];
+        const isCharMessage = currentMessage.role === 'char' || currentMessage.role === 'assistant';
+        if (isCharMessage) {
+            document.getElementById('insert-sender-char').checked = true;
+        } else {
+            document.getElementById('insert-sender-me').checked = true;
+        }
+    }
+    
     insertModal.classList.add('visible');
     insertTextarea.focus();
 }
 
 // 确认插入新消息
 async function confirmInsertMessage() {
-    const newContent = document.getElementById('insert-message-textarea').value.trim();
+    let newContent = document.getElementById('insert-message-textarea').value.trim();
     if (!newContent) {
         showToast('请输入消息内容');
         return;
@@ -1301,11 +1404,19 @@ async function confirmInsertMessage() {
         newTimestamp = currentMessage.timestamp + 60000;
     }
 
-    // 根据当前编辑消息的角色决定新消息的角色
-    const isCharMessage = currentMessage.role === 'char' || currentMessage.role === 'assistant';
-    const messageContent = isCharMessage
-        ? `[${chat.name || '角色'}的消息：${newContent}]`
-        : `[${chat.myName || '我'}的消息：${newContent}]`;
+    // 获取选择的发送者身份
+    const senderRole = document.querySelector('input[name="insert-sender-role"]:checked').value;
+    const isCharMessage = senderRole === 'char';
+    const myName = (currentChatType === 'private') ? (chat.myName || '我') : (chat.me ? chat.me.nickname : '我');
+    const senderName = isCharMessage ? (chat.name || '角色') : myName;
+
+    // 如果文本本身已经被 [] 包裹了(如用户使用了插入语音/引用格式), 就直接使用它，不再重复包裹
+    // 但如果它是以 [xxx发送的xxx：开头这种特定格式就不重复包，否则还是包一下普通的
+    let messageContent = newContent;
+    if (!newContent.match(/^\[.*?\]$/)) {
+        messageContent = `[${senderName}的消息：${newContent}]`;
+    }
+
     const newMessage = {
         id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         content: messageContent,
@@ -1323,7 +1434,7 @@ async function confirmInsertMessage() {
         recalculateChatStatus(chat);
     }
 
-    await saveData();
+    await saveCurrentChat();
     currentPage = 1;
     renderMessages(false, true);
     renderChatList();
@@ -1516,7 +1627,7 @@ async function confirmForwardMessages() {
         forwardCount++;
     }
 
-    await saveData();
+    await saveCurrentChat();
     
     // 更新外层聊天列表显示
     if (typeof renderChatList === 'function') {

@@ -1606,7 +1606,8 @@ window.sendPayResponse = async function(msgId, action) {
 
 
 function addMessageBubble(message, targetChatId, targetChatType) {
-    if (targetChatId !== currentChatId || targetChatType !== currentChatType) {
+    const isChatRoomActive = document.getElementById('chat-room-screen') && document.getElementById('chat-room-screen').classList.contains('active');
+    if (targetChatId !== currentChatId || targetChatType !== currentChatType || !isChatRoomActive) {
         const senderChat = (targetChatType === 'private')
             ? db.characters.find(c => c.id === targetChatId)
             : db.groups.find(g => g.id === targetChatId);
@@ -1659,12 +1660,33 @@ function addMessageBubble(message, targetChatId, targetChatType) {
             }
             
             // === 后台消息弹窗通知开关检查 ===
-            if (senderChat.bgToastEnabled !== false) {
+            const isToastEnabled = senderChat.bgToastEnabled !== undefined ? senderChat.bgToastEnabled : (db.globalToastEnabled !== false);
+            if (isToastEnabled) {
                 showToast({
                     avatar: senderAvatar,
                     name: senderName,
                     message: previewText.substring(0, 30)
                 });
+            }
+
+            // === 系统级通知（魔法屋设置） ===
+            const mr = db.magicRoom || {};
+            if (mr.sysNotifEnabled && typeof showSystemNotification === 'function') {
+                const notifTitle = (mr.sysNotifSenderName && mr.sysNotifSenderName.trim()) ? mr.sysNotifSenderName.trim() : senderName;
+                const notifBody  = mr.sysNotifShowContent !== false ? previewText.substring(0, 60) : '你有一条新消息';
+                const notifIcon  = mr.sysNotifShowAvatar !== false ? senderAvatar : undefined;
+                showSystemNotification({ title: notifTitle, body: notifBody, icon: notifIcon });
+                // 如果用户配置了自定义推送服务器，额外发送一次
+                if (mr.sysNotifCustomServer && mr.sysNotifServerUrl) {
+                    fetch(mr.sysNotifServerUrl, {
+                        method: 'POST',
+                        headers: Object.assign(
+                            { 'Content-Type': 'application/json' },
+                            mr.sysNotifServerKey ? { 'Authorization': 'Bearer ' + mr.sysNotifServerKey } : {}
+                        ),
+                        body: JSON.stringify({ title: notifTitle, body: notifBody })
+                    }).catch(() => {});
+                }
             }
         }
         return; 

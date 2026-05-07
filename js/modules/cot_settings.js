@@ -159,8 +159,22 @@ function initXmlHelpFeature() {
         helpBtn.title = '查看 XML 标签说明';
         helpBtn.onclick = openXmlHelpModal;
         
+        // 创建重置按钮
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'cot-help-btn'; // 复用相同样式
+        resetBtn.innerHTML = '↺';
+        resetBtn.title = '重置顺序和内容为默认状态';
+        resetBtn.onclick = resetCotPreset;
+
+        // 创建按钮容器
+        const btnContainer = document.createElement('div');
+        btnContainer.style.display = 'flex';
+        btnContainer.style.gap = '8px';
+        btnContainer.appendChild(resetBtn);
+        btnContainer.appendChild(helpBtn);
+        
         // 插入到 label 后面
-        targetLabel.parentNode.appendChild(helpBtn);
+        targetLabel.parentNode.appendChild(btnContainer);
         // 调整父元素样式以支持横向排列
         targetLabel.parentNode.style.display = 'flex';
         targetLabel.parentNode.style.justifyContent = 'space-between';
@@ -342,6 +356,9 @@ function renderCotPresetSelect() {
     }
 }
 
+// 拖拽相关全局变量
+let draggedCotItemIndex = null;
+
 // 渲染条目列表
 function renderCotItems() {
     const list = document.getElementById('cot-items-list');
@@ -427,6 +444,116 @@ function renderCotItems() {
         itemEl.appendChild(switchLabel);
         itemEl.appendChild(contentDiv);
         itemEl.appendChild(btnGroup);
+        
+        // 拖拽排序逻辑
+        if (!item.locked) {
+            itemEl.draggable = true;
+            itemEl.classList.add('draggable');
+
+            itemEl.addEventListener('dragstart', (e) => {
+                draggedCotItemIndex = index;
+                e.dataTransfer.effectAllowed = 'move';
+                // 使用 setTimeout 让拖拽半透明效果不影响拖拽的缩略图
+                setTimeout(() => itemEl.classList.add('dragging'), 0);
+            });
+
+            itemEl.addEventListener('dragend', () => {
+                itemEl.classList.remove('dragging');
+                draggedCotItemIndex = null;
+                document.querySelectorAll('.cot-item-card').forEach(el => {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
+            });
+        }
+
+        // 所有卡片都可以作为放置目标（通过校验来决定是否允许放置）
+        itemEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (draggedCotItemIndex === null || draggedCotItemIndex === index) return;
+            
+            // 简单判断鼠标在卡片的上半部分还是下半部分
+            const rect = itemEl.getBoundingClientRect();
+            const relY = e.clientY - rect.top;
+            
+            itemEl.classList.remove('drag-over-top', 'drag-over-bottom');
+            if (relY < rect.height / 2) {
+                itemEl.classList.add('drag-over-top');
+            } else {
+                itemEl.classList.add('drag-over-bottom');
+            }
+        });
+
+        itemEl.addEventListener('dragleave', () => {
+            itemEl.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+
+        itemEl.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            itemEl.classList.remove('drag-over-top', 'drag-over-bottom');
+            if (draggedCotItemIndex === null || draggedCotItemIndex === index) return;
+
+            const rect = itemEl.getBoundingClientRect();
+            const relY = e.clientY - rect.top;
+            // 计算目标索引，如果在下半部分则相当于插入到下一个位置
+            let targetIndex = index;
+            if (relY >= rect.height / 2) {
+                targetIndex = index + 1;
+            }
+
+            // 调整目标索引以对应数组的实际插入位置（因为会先删除源元素）
+            if (draggedCotItemIndex < targetIndex) {
+                targetIndex--; 
+            }
+
+            if (draggedCotItemIndex === targetIndex) return;
+
+            // 获取当前预设
+            let activeId;
+            if (currentCotMode === 'chat') activeId = db.cotSettings.activePresetId;
+            else if (currentCotMode === 'call') activeId = db.cotSettings.activeCallPresetId;
+            else if (currentCotMode === 'offline') activeId = db.cotSettings.activeOfflinePresetId;
+            const activePreset = db.cotPresets.find(p => p.id === activeId);
+            if (!activePreset) return;
+
+            // 防呆校验：不允许跨越锁定条目
+            // 判断源索引和目标索引之间是否包含锁定的条目
+            const minIdx = Math.min(draggedCotItemIndex, targetIndex);
+            const maxIdx = Math.max(draggedCotItemIndex, targetIndex);
+            
+            let hasLockedBetween = false;
+            // 注意：这里需要考虑拖拽跨越的范围。如果是往后拖，跨越的条目是 minIdx+1 到 maxIdx
+            // 如果是往前拖，跨越的条目是 minIdx 到 maxIdx-1
+            if (draggedCotItemIndex < targetIndex) {
+                 for (let i = draggedCotItemIndex + 1; i <= targetIndex; i++) {
+                     if (activePreset.items[i].locked) {
+                         hasLockedBetween = true;
+                         break;
+                     }
+                 }
+            } else {
+                 for (let i = targetIndex; i < draggedCotItemIndex; i++) {
+                     if (activePreset.items[i].locked) {
+                         hasLockedBetween = true;
+                         break;
+                     }
+                 }
+            }
+
+            if (hasLockedBetween) {
+                showToast('无法跨越或移动到锁定条目区域');
+                return;
+            }
+
+            // 执行移动
+            const items = activePreset.items;
+            const [movedItem] = items.splice(draggedCotItemIndex, 1);
+            items.splice(targetIndex, 0, movedItem);
+
+            await saveData();
+            renderCotItems();
+        });
+
         list.appendChild(itemEl);
     });
 }
@@ -622,7 +749,9 @@ async function saveCotItem(e) {
 
 // 新建预设
 async function createNewCotPreset() {
-    const name = prompt('请输入新预设名称：');
+    const name = typeof customPrompt === 'function' 
+        ? await customPrompt('请输入新预设名称：', '', '此页面显示') 
+        : prompt('请输入新预设名称：');
     if (!name) return;
 
     let activeId;

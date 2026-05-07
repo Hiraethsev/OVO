@@ -471,6 +471,7 @@ function setupHomeScreen() {
         <a href="#" class="app-icon" id="day-mode-btn"><img src="${getIcon('day-mode-btn')}" alt="日间" class="icon-img"></a>
         <a href="#" class="app-icon" id="night-mode-btn"><img src="${getIcon('night-mode-btn')}" alt="夜间" class="icon-img"></a>
         <a href="#" class="app-icon" data-target="storage-analysis-screen"><img src="${getIcon('storage-analysis-screen')}" alt="存储" class="icon-img"></a>
+        <a href="#" class="app-icon" data-action="magic-room-app"><img src="${getIcon('magic-room-screen')}" alt="魔法屋" class="icon-img"></a>
     </div>`;
     homeScreen.innerHTML = homeScreenHTML;
 
@@ -514,6 +515,11 @@ function setupHomeScreen() {
     });
     document.querySelector('[data-action="biekan-app"]')?.addEventListener('click', (e) => { e.preventDefault(); showToast('别看APP正在开发中…'); });
     document.querySelector('[data-action="xiaowu-app"]')?.addEventListener('click', (e) => { e.preventDefault(); showToast('小屋APP正在开发中…'); });
+    document.querySelector('[data-action="magic-room-app"]')?.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        if (typeof setupMagicRoomApp === 'function') setupMagicRoomApp();
+        switchScreen('magic-room-screen');
+    });
     if (typeof setupPiggyBankApp === 'function') setupPiggyBankApp();
     if (typeof setupReminderModule === 'function') setupReminderModule();
 

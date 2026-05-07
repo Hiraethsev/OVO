@@ -310,7 +310,7 @@ function setupBannerChangeListeners() {
         const url = urlInput.value.trim();
         char.bannerImage = url || '';
         applyBannerToHeader(url);
-        await saveData();
+        await saveCharacter(charId);
         closeModal();
         showToast('背景图已更新');
     });
@@ -323,7 +323,7 @@ function setupBannerChangeListeners() {
         if (!char) return;
         char.bannerImage = '';
         applyBannerToHeader('');
-        await saveData();
+        await saveCharacter(charId);
         closeModal();
         showToast('背景图已重置');
     });
@@ -684,7 +684,7 @@ function setAsActivePersona() {
     if (!db.activePersonaId && currentPersonaIndex === 0) return;
 
     db.activePersonaId = p.id;
-    saveData();
+    saveGlobalSettings();
     renderMyProfile(); // 刷新联系人界面
     
     // 更新按钮状态
@@ -756,7 +756,7 @@ function deleteCurrentPersona() {
     
     if (confirm('确定删除当前人设档案吗？')) {
         db.myPersonaPresets.splice(currentPersonaIndex, 1);
-        saveData();
+        saveGlobalSettings();
         
         currentPersonaIndex = Math.max(0, currentPersonaIndex - 1);
         renderPersonaCarousel();
@@ -909,11 +909,12 @@ async function saveCurrentPersona() {
                 finalPersona = base + (base && extra ? '\n' : '') + extra;
             }
             char.myPersona = finalPersona;
+            await saveCharacter(charId);
             syncCount++;
         }
     }
 
-    await saveData();
+    await saveGlobalSettings();
     renderMyProfile();
     if (typeof currentChatId !== 'undefined' && currentChatType === 'private' && p.bindings && p.bindings[currentChatId] && typeof renderMessages === 'function') {
         renderMessages(false, true);

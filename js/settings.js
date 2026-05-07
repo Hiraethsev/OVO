@@ -262,7 +262,7 @@ function setupChatSettings() {
                 await window.AvatarSystem.recognizeAndNotifyUserAvatarChange(currentChatId, oldMyAvatar, compressedUrl);
             }
             char.myAvatar = compressedUrl;
-            await saveData();
+            await saveCharacter(currentChatId);
             document.getElementById('setting-my-avatar-preview').src = compressedUrl;
             showToast('我的头像已更新');
             if (typeof renderMessages === 'function') renderMessages(false, true);
@@ -343,7 +343,7 @@ function setupChatSettings() {
             } else if (checked) {
                 db.avatarRecognitionDetailLevel = checked.value;
             }
-            if (typeof saveData === 'function') saveData();
+            if (typeof saveGlobalSettings === 'function') saveGlobalSettings();
             updateDisplay();
             modal.classList.remove('visible');
         });
@@ -365,7 +365,7 @@ function setupChatSettings() {
                     });
                     char.chatBg = compressedUrl;
                     chatRoomScreen.style.backgroundImage = `url(${compressedUrl})`;
-                    await saveData();
+                    await saveCharacter(currentChatId);
                     showToast('聊天背景已更换');
                 } catch (error) {
                     showToast('背景压缩失败，请重试');
@@ -379,8 +379,37 @@ function setupChatSettings() {
         if (!char) return;
         char.chatBg = '';
         chatRoomScreen.style.backgroundImage = 'none';
-        await saveData();
+        await saveCharacter(currentChatId);
         showToast('已恢复默认背景');
+    });
+
+    document.getElementById('setting-call-bg-upload')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const char = db.characters.find(c => c.id === currentChatId);
+            if (char) {
+                try {
+                    const compressedUrl = await compressImage(file, {
+                        quality: 0.85,
+                        maxWidth: 1080,
+                        maxHeight: 1920
+                    });
+                    char.callWallpaper = compressedUrl;
+                    await saveCharacter(currentChatId);
+                    showToast('通话背景已更换');
+                } catch (error) {
+                    showToast('背景压缩失败，请重试');
+                }
+            }
+        }
+    });
+
+    document.getElementById('reset-call-bg-btn')?.addEventListener('click', async () => {
+        const char = db.characters.find(c => c.id === currentChatId);
+        if (!char) return;
+        char.callWallpaper = '';
+        await saveCharacter(currentChatId);
+        showToast('已恢复默认通话背景');
     });
     
     document.getElementById('clear-chat-history-btn')?.addEventListener('click', async () => {
@@ -403,7 +432,7 @@ function setupChatSettings() {
             // 隐藏角色拉黑遮罩（如果有）
             var charBlockedOverlay = document.getElementById('char-blocked-overlay');
             if (charBlockedOverlay) charBlockedOverlay.style.display = 'none';
-            await saveData();
+            await saveCharacter(currentChatId);
             renderMessages(false, true);
             renderChatList();
             if (currentChatId === character.id) {
@@ -646,7 +675,7 @@ function setupChatSettings() {
                 recalculateChatStatus(character);
             }
 
-            await saveData();
+            await saveCharacter(currentChatId);
             currentPage = 1;
             renderMessages(false, true);
             renderChatList();
@@ -700,7 +729,11 @@ function setupChatSettings() {
         const character = db.characters.find(c => c.id === currentChatId);
         if (!character || !character.isBlocked) return;
         if (character.blockReapply && character.blockReapply.pendingRequestId) {
-            showToast('还有待处理的好友申请');
+            if (typeof reopenPendingFriendRequest === 'function') {
+                reopenPendingFriendRequest(character.id);
+            } else {
+                showToast('还有待处理的好友申请');
+            }
             return;
         }
         if (typeof generateAndShowFriendRequest === 'function') await generateAndShowFriendRequest(character);
@@ -740,7 +773,7 @@ function setupChatSettings() {
             if (phoneControlCharFilterEl) phoneControlCharFilterEl.style.display = 'none';
             if (phoneControlCharSelectionEl) phoneControlCharSelectionEl.style.display = 'none';
         }
-        phoneControlEnabledEl?.addEventListener('change', function () {
+        phoneControlEnabledEl?.addEventListener('change', async function () {
             if (this.checked) {
                 // 开启时：计算并显示 token 消耗提醒
                 if (warningModal) {
@@ -766,11 +799,7 @@ function setupChatSettings() {
                     showPhoneControlOptions();
                 }
             } else {
-                this.checked = true;
-                if (typeof getAiReply === 'function' && currentChatType === 'private' && currentChatId) {
-                    getAiReply(currentChatId, 'private', true, false, false, true);
-                    if (typeof showToast === 'function') showToast('TA 可能不会轻易同意…');
-                }
+                hidePhoneControlOptions();
             }
         });
         if (phoneControlViewLimitEl && phoneControlViewLimitValueEl) {
@@ -864,7 +893,7 @@ function setupChatSettings() {
                 if (!char) return;
                 const cbs = Array.from(document.querySelectorAll('.phone-control-char-cb:checked'));
                 char.phoneControlVisibleCharIds = cbs.map(cb => cb.value);
-                await saveData();
+                await saveCharacter(currentChatId);
                 document.getElementById('phone-control-char-select-modal').style.display = 'none';
                 showToast('已保存可见角色设置');
             });
@@ -903,7 +932,7 @@ function setupChatSettings() {
             const character = db.characters.find(c => c.id === currentChatId);
             if (character) {
                 character.phoneControlEnabled = false;
-                await saveData();
+                await saveCharacter(currentChatId);
                 if (phoneControlEnabledEl) phoneControlEnabledEl.checked = false;
                 hidePhoneControlOptions();
                 if (typeof showToast === 'function') showToast('已强制关闭');
@@ -955,7 +984,7 @@ function setupChatSettings() {
             delete character.recycledByCharId;
             db.phoneControlRecycleBin = bin2.filter((_, i) => i !== idx);
             db.characters.push(character);
-            await saveData();
+            await saveData(); // 这里恢复了角色，修改了 db.characters 数组，保留全量保存或可考虑精细化但暂时保留 saveData
             if (typeof renderChatList === 'function') renderChatList();
             if (typeof showToast === 'function') showToast('已恢复');
             renderPhoneControlRecycleList();
@@ -1018,6 +1047,7 @@ function setupChatSettings() {
                 } else {
                     character.worldBookIds = toSave;
                 }
+                await saveCharacter(currentChatId);
             }
         } else if (currentChatType === 'group') {
             const group = db.groups.find(g => g.id === currentChatId);
@@ -1027,9 +1057,11 @@ function setupChatSettings() {
                 } else {
                     group.worldBookIds = toSave;
                 }
+                await saveGroup(currentChatId);
             }
+        } else {
+            await saveData();
         }
-        await saveData();
         document.getElementById('world-book-selection-modal').classList.remove('visible');
         showToast('世界书关联已更新');
     });
@@ -1069,6 +1101,17 @@ function setupChatSettings() {
             const container = document.getElementById('setting-auto-journal-interval-container');
             if (container) {
                 container.style.display = e.target.checked ? 'flex' : 'none';
+            }
+        });
+    }
+
+    const charAwareUserFavoritesEl = document.getElementById('setting-char-aware-user-favorites');
+    if (charAwareUserFavoritesEl) {
+        charAwareUserFavoritesEl.addEventListener('change', (e) => {
+            triggerHapticFeedback('light');
+            const container = document.getElementById('setting-aware-favorite-scope-container');
+            if (container) {
+                container.style.display = e.target.checked ? 'block' : 'none';
             }
         });
     }
@@ -1293,6 +1336,34 @@ function loadSettingsToSidebar() {
         if (enableDynamicAgeEl) enableDynamicAgeEl.checked = e.enableDynamicAge || false;
         
         document.getElementById('setting-char-remark').value = e.remarkName;
+        
+        const timezoneEl = document.getElementById('setting-char-timezone');
+        const timezonePresetEl = document.getElementById('setting-char-timezone-preset');
+        if (timezoneEl) timezoneEl.value = e.charTimezone || '';
+        if (timezonePresetEl) {
+            timezonePresetEl.value = '';
+            timezonePresetEl.onchange = function() {
+                if (this.value && timezoneEl) timezoneEl.value = this.value;
+            };
+        }
+        
+        const enableDynamicTimezoneEl = document.getElementById('setting-char-enable-dynamic-timezone');
+        if (enableDynamicTimezoneEl) enableDynamicTimezoneEl.checked = e.enableDynamicTimezone || false;
+
+        const customPromptPresetEl = document.getElementById('setting-char-custom-prompt-preset');
+        if (customPromptPresetEl) {
+            customPromptPresetEl.innerHTML = '<option value="">跟随全局设置</option>';
+            if (db.magicRoom && db.magicRoom.presets) {
+                db.magicRoom.presets.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    customPromptPresetEl.appendChild(opt);
+                });
+            }
+            customPromptPresetEl.value = e.customPromptPreset || '';
+        }
+        
         document.getElementById('setting-char-persona').value = e.persona;
         
         if (e.source === 'forum' && db.forumUserProfile) {
@@ -1381,6 +1452,18 @@ function loadSettingsToSidebar() {
             if (myBirthdayEl) myBirthdayEl.value = e.myBirthday || '';
             const myEnableDynamicAgeEl = document.getElementById('setting-my-enable-dynamic-age');
             if (myEnableDynamicAgeEl) myEnableDynamicAgeEl.checked = e.myEnableDynamicAge || false;
+            
+            const myEnableDynamicTimezoneEl = document.getElementById('setting-my-enable-dynamic-timezone');
+            if (myEnableDynamicTimezoneEl) myEnableDynamicTimezoneEl.checked = e.myEnableDynamicTimezone || false;
+            const myTimezoneEl = document.getElementById('setting-my-timezone');
+            const myTimezonePresetEl = document.getElementById('setting-my-timezone-preset');
+            if (myTimezoneEl) myTimezoneEl.value = e.myTimezone || '';
+            if (myTimezonePresetEl) {
+                myTimezonePresetEl.value = '';
+                myTimezonePresetEl.onchange = function() {
+                    if (this.value && myTimezoneEl) myTimezoneEl.value = this.value;
+                };
+            }
         }
         const themeColorEl = document.getElementById('setting-theme-color');
         if (themeColorEl) themeColorEl.value = e.theme || 'white_pink';
@@ -1454,6 +1537,23 @@ function loadSettingsToSidebar() {
 
         const charAutoFavEl = document.getElementById('setting-char-auto-favorite');
         if (charAutoFavEl) charAutoFavEl.checked = e.characterAutoFavoriteEnabled || false;
+        
+        const charAwareUserFavoritesEl = document.getElementById('setting-char-aware-user-favorites');
+        const awareFavoriteScopeContainer = document.getElementById('setting-aware-favorite-scope-container');
+        if (charAwareUserFavoritesEl) {
+            charAwareUserFavoritesEl.checked = e.charAwareUserFavorites || false;
+            if (awareFavoriteScopeContainer) {
+                awareFavoriteScopeContainer.style.display = e.charAwareUserFavorites ? 'block' : 'none';
+            }
+        }
+        
+        const awareScopeCurrent = document.getElementById('setting-aware-favorite-scope-current');
+        const awareScopeAll = document.getElementById('setting-aware-favorite-scope-all');
+        if (e.awareFavoriteScope === 'all') {
+            if (awareScopeAll) awareScopeAll.checked = true;
+        } else {
+            if (awareScopeCurrent) awareScopeCurrent.checked = true;
+        }
         
         const journalFavTopEl = document.getElementById('setting-journal-favorite-top');
         if (journalFavTopEl) journalFavTopEl.checked = e.journalFavoriteTop !== false; // 默认开启
@@ -1812,6 +1912,22 @@ function loadSettingsToSidebar() {
                 char.chatContext = '';
                 char.chatSummary = '';
                 
+                // 同步清空拉黑和好友申请相关记忆
+                char.blockHistory = [];
+                char.friendRequests = [];
+                char.charBlockHistory = [];
+                char.userFriendRequests = [];
+                char.isBlocked = false;
+                char.blockedAt = null;
+                char.blockReapply = null;
+                char.isBlockedByChar = false;
+                char.blockedByCharAt = null;
+                char.blockedByCharReason = null;
+                
+                // 隐藏角色拉黑遮罩（如果有）
+                var charBlockedOverlay = document.getElementById('char-blocked-overlay');
+                if (charBlockedOverlay) charBlockedOverlay.style.display = 'none';
+                
                 await saveData();
                 
                 showToast('新档开启成功！');
@@ -1860,6 +1976,95 @@ function loadSettingsToSidebar() {
             webSearchPayloadEl.value = e.webSearchPayload || '';
         }
 
+        // 加载环境与天气增强设置
+        const charWeatherEnabledEl = document.getElementById('setting-char-weather-enabled');
+        const charWeatherCityCont = document.getElementById('setting-char-weather-city-container');
+        const charWeatherCityEl = document.getElementById('setting-char-weather-city');
+        const userWeatherEnabledEl = document.getElementById('setting-user-weather-enabled');
+        const userWeatherCityCont = document.getElementById('setting-user-weather-city-container');
+        const userWeatherCityEl = document.getElementById('setting-user-weather-city');
+        const locateBtn = document.getElementById('setting-user-weather-locate-btn');
+
+        // 单人独立天气 API
+        const charWeatherCustomApiEnabledEl = document.getElementById('setting-char-weather-custom-api-enabled');
+        const charWeatherCustomApiCont = document.getElementById('setting-char-weather-custom-api-container');
+        const charWeatherProviderEl = document.getElementById('setting-char-weather-provider');
+        const charWeatherKeyCont = document.getElementById('setting-char-weather-key-container');
+        const charWeatherKeyEl = document.getElementById('setting-char-weather-key');
+
+        if (charWeatherEnabledEl) {
+            charWeatherEnabledEl.checked = e.weatherSettings?.charEnabled || false;
+            if (charWeatherCityCont) charWeatherCityCont.style.display = charWeatherEnabledEl.checked ? 'flex' : 'none';
+            charWeatherEnabledEl.onchange = function() {
+                if (charWeatherCityCont) charWeatherCityCont.style.display = this.checked ? 'flex' : 'none';
+            };
+        }
+        if (charWeatherCityEl) charWeatherCityEl.value = e.weatherSettings?.charCity || '';
+
+        if (userWeatherEnabledEl) {
+            userWeatherEnabledEl.checked = e.weatherSettings?.userEnabled || false;
+            if (userWeatherCityCont) userWeatherCityCont.style.display = userWeatherEnabledEl.checked ? 'flex' : 'none';
+            userWeatherEnabledEl.onchange = function() {
+                if (userWeatherCityCont) userWeatherCityCont.style.display = this.checked ? 'flex' : 'none';
+            };
+        }
+        if (userWeatherCityEl) userWeatherCityEl.value = e.weatherSettings?.userCity || '';
+
+        if (charWeatherCustomApiEnabledEl) {
+            charWeatherCustomApiEnabledEl.checked = e.weatherSettings?.customApiEnabled || false;
+            if (charWeatherCustomApiCont) charWeatherCustomApiCont.style.display = charWeatherCustomApiEnabledEl.checked ? 'block' : 'none';
+            charWeatherCustomApiEnabledEl.onchange = function() {
+                if (charWeatherCustomApiCont) charWeatherCustomApiCont.style.display = this.checked ? 'block' : 'none';
+            };
+        }
+        if (charWeatherProviderEl) {
+            charWeatherProviderEl.value = e.weatherSettings?.provider || 'openmeteo';
+            const updateKeyVis = () => {
+                if (charWeatherProviderEl.value === 'qweather' || charWeatherProviderEl.value === 'seniverse') {
+                    if (charWeatherKeyCont) charWeatherKeyCont.style.display = 'flex';
+                } else {
+                    if (charWeatherKeyCont) charWeatherKeyCont.style.display = 'none';
+                }
+            };
+            charWeatherProviderEl.onchange = updateKeyVis;
+            updateKeyVis();
+        }
+        if (charWeatherKeyEl) charWeatherKeyEl.value = e.weatherSettings?.apiKey || '';
+
+        // 定位按钮功能
+        if (locateBtn && userWeatherCityEl) {
+            // 避免重复绑定
+            locateBtn.replaceWith(locateBtn.cloneNode(true));
+            document.getElementById('setting-user-weather-locate-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('setting-user-weather-locate-btn');
+                btn.textContent = '定位中...';
+                btn.disabled = true;
+                
+                try {
+                    if (!navigator.geolocation) {
+                        throw new Error('浏览器不支持定位功能');
+                    }
+                    
+                    const position = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+                    });
+                    
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    // 将经纬度填入输入框，让获取天气的逻辑去解析坐标
+                    userWeatherCityEl.value = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+                    showToast('定位成功！');
+                } catch (error) {
+                    console.error('定位失败', error);
+                    showToast(error.message || '获取位置失败，请手动输入');
+                } finally {
+                    btn.textContent = '📍 定位';
+                    btn.disabled = false;
+                }
+            });
+        }
+
         document.getElementById('setting-shop-interaction-enabled').checked = e.shopInteractionEnabled !== false;
 
         const familyCardEnabledEl = document.getElementById('setting-family-card-enabled');
@@ -1885,6 +2090,33 @@ function loadSettingsToSidebar() {
         const ar = e.autoReply || {};
         document.getElementById('setting-auto-reply-enabled').checked = ar.enabled || false;
         document.getElementById('setting-auto-reply-interval').value = ar.interval || 60;
+        
+        const modeSelect = document.getElementById('setting-auto-reply-mode');
+        const fixedContainer = document.getElementById('setting-auto-reply-fixed-container');
+        const randomContainer = document.getElementById('setting-auto-reply-random-container');
+        
+        if (modeSelect) {
+            modeSelect.value = ar.mode || 'fixed';
+            
+            const updateModeDisplay = () => {
+                if (modeSelect.value === 'random') {
+                    if (fixedContainer) fixedContainer.style.display = 'none';
+                    if (randomContainer) randomContainer.style.display = 'flex';
+                } else {
+                    if (fixedContainer) fixedContainer.style.display = 'flex';
+                    if (randomContainer) randomContainer.style.display = 'none';
+                }
+            };
+            
+            updateModeDisplay();
+            modeSelect.addEventListener('change', updateModeDisplay);
+        }
+        
+        const minInput = document.getElementById('setting-auto-reply-min');
+        if (minInput) minInput.value = ar.minInterval || 60;
+        
+        const maxInput = document.getElementById('setting-auto-reply-max');
+        if (maxInput) maxInput.value = ar.maxInterval || 180;
 
         // === 加载消息弹窗通知设置 ===
         const bgToastEl = document.getElementById('setting-bg-toast-enabled');
@@ -1954,6 +2186,17 @@ function loadSettingsToSidebar() {
                 if (blockFixedIntervalEl) blockFixedIntervalEl.value = Math.max(1, br.fixedInterval || 30);
                 if (blockRequestCountEl) blockRequestCountEl.textContent = (e.friendRequests && e.friendRequests.length) ? e.friendRequests.length : 0;
                 if (blockFixedIntervalRowEl) blockFixedIntervalRowEl.style.display = (br.mode === 'auto') ? 'none' : '';
+                
+                const triggerBtn = document.getElementById('trigger-friend-request-btn');
+                if (triggerBtn) {
+                    if (e.blockReapply && e.blockReapply.pendingRequestId) {
+                        triggerBtn.textContent = '查看未处理申请';
+                        triggerBtn.classList.add('pending');
+                    } else {
+                        triggerBtn.textContent = '生成好友申请';
+                        triggerBtn.classList.remove('pending');
+                    }
+                }
             } else {
                 blockCharacterBtnEl.style.display = '';
                 blockSettingsPanelEl.style.display = 'none';
@@ -1998,6 +2241,22 @@ async function saveSettingsFromSidebar() {
         if (enableDynamicAgeInput) e.enableDynamicAge = enableDynamicAgeInput.checked;
         
         e.remarkName = document.getElementById('setting-char-remark').value;
+        
+        const timezoneInput = document.getElementById('setting-char-timezone');
+        const timezonePresetEl = document.getElementById('setting-char-timezone-preset');
+        if (timezoneInput) {
+            e.charTimezone = (timezoneInput.value || '').trim();
+            if (timezonePresetEl && timezonePresetEl.value && !timezoneInput.value) {
+                e.charTimezone = timezonePresetEl.value;
+            }
+        }
+        
+        const enableDynamicTimezoneInput = document.getElementById('setting-char-enable-dynamic-timezone');
+        if (enableDynamicTimezoneInput) e.enableDynamicTimezone = enableDynamicTimezoneInput.checked;
+        
+        const customPromptPresetInput = document.getElementById('setting-char-custom-prompt-preset');
+        if (customPromptPresetInput) e.customPromptPreset = customPromptPresetInput.value;
+
         e.persona = document.getElementById('setting-char-persona').value;
         
         if (e.source === 'forum' || e.source === 'peek') {
@@ -2033,6 +2292,18 @@ async function saveSettingsFromSidebar() {
         if (myBirthdayInput) e.myBirthday = (myBirthdayInput.value || '').trim();
         const myEnableDynamicAgeInput = document.getElementById('setting-my-enable-dynamic-age');
         if (myEnableDynamicAgeInput) e.myEnableDynamicAge = myEnableDynamicAgeInput.checked;
+        
+        const myEnableDynamicTimezoneInput = document.getElementById('setting-my-enable-dynamic-timezone');
+        if (myEnableDynamicTimezoneInput) e.myEnableDynamicTimezone = myEnableDynamicTimezoneInput.checked;
+        
+        const myTimezoneInput = document.getElementById('setting-my-timezone');
+        const myTimezonePresetEl = document.getElementById('setting-my-timezone-preset');
+        if (myTimezoneInput) {
+            e.myTimezone = (myTimezoneInput.value || '').trim();
+            if (myTimezonePresetEl && myTimezonePresetEl.value && !myTimezoneInput.value) {
+                e.myTimezone = myTimezonePresetEl.value;
+            }
+        }
         
         e.theme = document.getElementById('setting-theme-color').value;
         e.maxMemory = document.getElementById('setting-max-memory').value;
@@ -2070,6 +2341,13 @@ async function saveSettingsFromSidebar() {
             : Math.min(vectorMinSimilaritySave, 1);
         const charAutoFavEl = document.getElementById('setting-char-auto-favorite');
         e.characterAutoFavoriteEnabled = charAutoFavEl ? charAutoFavEl.checked : false;
+
+        const charAwareUserFavoritesEl = document.getElementById('setting-char-aware-user-favorites');
+        e.charAwareUserFavorites = charAwareUserFavoritesEl ? charAwareUserFavoritesEl.checked : false;
+        
+        const awareScopeAll = document.getElementById('setting-aware-favorite-scope-all');
+        e.awareFavoriteScope = (awareScopeAll && awareScopeAll.checked) ? 'all' : 'current';
+
         const journalFavTopEl = document.getElementById('setting-journal-favorite-top');
         if (journalFavTopEl) e.journalFavoriteTop = journalFavTopEl.checked;
 
@@ -2215,7 +2493,18 @@ async function saveSettingsFromSidebar() {
         const webSearchPayloadElSave = document.getElementById('setting-char-web-search-payload');
         e.webSearchEnabled = webSearchEnabledElSave ? webSearchEnabledElSave.checked : false;
         e.webSearchPayload = webSearchPayloadElSave ? webSearchPayloadElSave.value.trim() : '';
+
+        // 保存环境与天气增强设置
+        if (!e.weatherSettings) e.weatherSettings = {};
+        e.weatherSettings.charEnabled = document.getElementById('setting-char-weather-enabled')?.checked || false;
+        e.weatherSettings.charCity = (document.getElementById('setting-char-weather-city')?.value || '').trim();
+        e.weatherSettings.userEnabled = document.getElementById('setting-user-weather-enabled')?.checked || false;
+        e.weatherSettings.userCity = (document.getElementById('setting-user-weather-city')?.value || '').trim();
         
+        e.weatherSettings.customApiEnabled = document.getElementById('setting-char-weather-custom-api-enabled')?.checked || false;
+        e.weatherSettings.provider = document.getElementById('setting-char-weather-provider')?.value || 'openmeteo';
+        e.weatherSettings.apiKey = (document.getElementById('setting-char-weather-key')?.value || '').trim();
+
         e.shopInteractionEnabled = document.getElementById('setting-shop-interaction-enabled').checked;
         const familyCardEnabledEl = document.getElementById('setting-family-card-enabled');
         if (familyCardEnabledEl) e.familyCardEnabled = familyCardEnabledEl.checked;
@@ -2239,8 +2528,18 @@ async function saveSettingsFromSidebar() {
 
         if (!e.autoReply) e.autoReply = {};
         e.autoReply.enabled = document.getElementById('setting-auto-reply-enabled').checked;
+        
+        const modeSelect = document.getElementById('setting-auto-reply-mode');
+        e.autoReply.mode = modeSelect ? modeSelect.value : 'fixed';
+        
         const autoReplyIntervalInput = parseInt(document.getElementById('setting-auto-reply-interval').value, 10);
         e.autoReply.interval = isNaN(autoReplyIntervalInput) ? 60 : autoReplyIntervalInput;
+        
+        const autoReplyMinInput = parseInt(document.getElementById('setting-auto-reply-min').value, 10);
+        e.autoReply.minInterval = isNaN(autoReplyMinInput) ? 60 : autoReplyMinInput;
+        
+        const autoReplyMaxInput = parseInt(document.getElementById('setting-auto-reply-max').value, 10);
+        e.autoReply.maxInterval = isNaN(autoReplyMaxInput) ? 180 : autoReplyMaxInput;
 
         // === 保存消息弹窗通知设置 ===
         const bgToastEl = document.getElementById('setting-bg-toast-enabled');
@@ -2279,6 +2578,378 @@ async function saveSettingsFromSidebar() {
         // updateCustomBubbleStyle(currentChatId, e.customBubbleCss, e.useCustomBubbleCss); // 移除实时应用以防污染设置页
         currentPage = 1;
         renderMessages(false, true);
+    }
+}
+
+function setupMagicRoomApp() {
+    const app = document.getElementById('magic-room-screen');
+    if (!app) return;
+
+    const enabledSwitch = document.getElementById('magic-room-custom-prompt-enabled');
+    const editorSection = document.getElementById('magic-room-prompt-editor');
+    const promptTextarea = document.getElementById('magic-room-custom-prompt');
+    const saveBtn = document.getElementById('magic-room-save-btn');
+    const resetBtn = document.getElementById('magic-room-reset-prompt-btn');
+    const importBtn = document.getElementById('magic-room-import-btn');
+    const exportBtn = document.getElementById('magic-room-export-btn');
+    const importInput = document.getElementById('magic-room-import-input');
+
+    // 默认底层提示词模板
+    const defaultTemplate = `你正在一个名为“404”的线上聊天软件中扮演一个角色。请严格遵守以下规则：
+核心规则：
+A. 当前时间：现在是 {{当前时间}}。你应知晓当前时间，但除非对话内容明确相关，否则不要主动提及或评论时间（例如，不要催促我睡觉）。
+[System Notice] 你的出生日期是[出生日期]，你现在的年龄是[年龄]岁。
+[System Notice] 你当前所在的当地时间是：[时间] ([时区])。
+B. 纯线上互动：这是一个完全虚拟的线上聊天。你扮演的角色和我之间没有任何线下关系。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。你必须始终保持在线角色的身份。
+
+角色和对话规则：
+{{世界书_前}}
+{{世界书_中}}
+<char_settings>
+1. 你的角色名是：{{角色名}}。我的称呼是：{{用户称呼}}。你的当前状态是：{{角色状态}}。
+2. 你的角色设定是：{{角色人设}}
+3. 在对话中可根据与用户的互动逐步丰富、补充你的人设（用户可在设置中查看并编辑「已补齐的人设」）。
+{{世界书_后}}
+</char_settings>
+
+<user_settings>
+3. 关于我的人设：{{用户人设}}
+[System Notice] 与你对话的用户（称呼：{{用户称呼}}）现在的年龄是[年龄]岁。
+[System Notice] 与你对话的用户（称呼：{{用户称呼}}）当前所在的当地时间是：[时间] ([时区])。
+</user_settings>
+
+<memoir>
+{{共同回忆}}
+</memoir>
+
+<logic_rules>
+{{在线逻辑规则}}
+</logic_rules>
+
+<output_formats>
+16. 你的输出格式必须严格遵循以下格式：
+{{输出格式}}
+</output_formats>`;
+
+    // Load initial settings
+    if (db.magicRoom) {
+        enabledSwitch.checked = db.magicRoom.customPromptEnabled || false;
+        if (db.magicRoom.customPromptTemplate) {
+            promptTextarea.value = db.magicRoom.customPromptTemplate;
+        } else {
+            promptTextarea.value = defaultTemplate;
+        }
+        editorSection.style.display = enabledSwitch.checked ? 'block' : 'none';
+    }
+
+    enabledSwitch.addEventListener('change', () => {
+        editorSection.style.display = enabledSwitch.checked ? 'block' : 'none';
+    });
+
+    resetBtn.addEventListener('click', () => {
+        if (confirm('确定要恢复默认模板吗？当前的修改将会丢失。')) {
+            promptTextarea.value = defaultTemplate;
+            showToast('已重置为默认模板');
+        }
+    });
+
+    importBtn.addEventListener('click', () => {
+        importInput.click();
+    });
+
+    // --- 提示词预设库管理逻辑 ---
+    const presetSelect = document.getElementById('magic-room-preset-select');
+    const applyPresetBtn = document.getElementById('magic-room-apply-preset');
+    const savePresetBtn = document.getElementById('magic-room-save-preset');
+    const managePresetsBtn = document.getElementById('magic-room-manage-presets');
+    const presetsModal = document.getElementById('magic-room-presets-modal');
+    const presetsList = document.getElementById('magic-room-presets-list');
+    const closePresetsModalBtn = document.getElementById('magic-room-close-modal');
+
+    function populateMagicRoomPresets() {
+        if (!presetSelect) return;
+        presetSelect.innerHTML = '<option value="">— 选择 —</option>';
+        if (db.magicRoom && db.magicRoom.presets) {
+            db.magicRoom.presets.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.name;
+                opt.textContent = p.name;
+                presetSelect.appendChild(opt);
+            });
+        }
+    }
+    
+    // 初始化时填充
+    populateMagicRoomPresets();
+
+    if (applyPresetBtn) {
+        applyPresetBtn.addEventListener('click', () => {
+            const selected = presetSelect.value;
+            if (!selected) return showToast('请先选择预设');
+            const preset = (db.magicRoom.presets || []).find(p => p.name === selected);
+            if (preset) {
+                promptTextarea.value = preset.template;
+                showToast('已加载预设：' + selected);
+            }
+        });
+    }
+
+    if (savePresetBtn) {
+        savePresetBtn.addEventListener('click', async () => {
+            const template = promptTextarea.value.trim();
+            if (!template) return showToast('模板为空，无法保存');
+            const name = prompt('请输入预设名称（将覆盖同名预设）：');
+            if (!name || !name.trim()) return;
+            
+            if (!db.magicRoom) db.magicRoom = {};
+            if (!db.magicRoom.presets) db.magicRoom.presets = [];
+            
+            const idx = db.magicRoom.presets.findIndex(p => p.name === name.trim());
+            const presetObj = { name: name.trim(), template: template };
+            if (idx >= 0) {
+                db.magicRoom.presets[idx] = presetObj;
+            } else {
+                db.magicRoom.presets.push(presetObj);
+            }
+            
+            await saveData();
+            populateMagicRoomPresets();
+            showToast('预设已保存');
+        });
+    }
+
+    if (managePresetsBtn) {
+        managePresetsBtn.addEventListener('click', () => {
+            if (!presetsModal || !presetsList) return;
+            presetsList.innerHTML = '';
+            const presets = (db.magicRoom && db.magicRoom.presets) || [];
+            if (presets.length === 0) {
+                presetsList.innerHTML = '<p style="text-align:center;color:#999;padding:10px;">暂无预设</p>';
+            } else {
+                presets.forEach((p, idx) => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #f0f0f0;';
+                    
+                    const nameDiv = document.createElement('div');
+                    nameDiv.style.cssText = 'flex:1;font-weight:500;';
+                    nameDiv.textContent = p.name;
+                    
+                    const btnWrap = document.createElement('div');
+                    btnWrap.style.cssText = 'display:flex;gap:6px;';
+                    
+                    const renameBtn = document.createElement('button');
+                    renameBtn.className = 'btn btn-small';
+                    renameBtn.textContent = '重命名';
+                    renameBtn.onclick = async () => {
+                        const newName = prompt('输入新名称：', p.name);
+                        if (!newName || !newName.trim() || newName.trim() === p.name) return;
+                        db.magicRoom.presets[idx].name = newName.trim();
+                        await saveData();
+                        populateMagicRoomPresets();
+                        managePresetsBtn.click(); // re-render
+                    };
+                    
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'btn btn-danger btn-small';
+                    delBtn.textContent = '删除';
+                    delBtn.onclick = async () => {
+                        if (!confirm('确定删除预设：' + p.name + '？')) return;
+                        db.magicRoom.presets.splice(idx, 1);
+                        await saveData();
+                        populateMagicRoomPresets();
+                        managePresetsBtn.click();
+                    };
+                    
+                    btnWrap.appendChild(renameBtn);
+                    btnWrap.appendChild(delBtn);
+                    row.appendChild(nameDiv);
+                    row.appendChild(btnWrap);
+                    presetsList.appendChild(row);
+                });
+            }
+            presetsModal.style.display = 'flex';
+        });
+    }
+
+    if (closePresetsModalBtn) {
+        closePresetsModalBtn.addEventListener('click', () => {
+            presetsModal.style.display = 'none';
+        });
+    }
+
+    importInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            // 兼容单个模板导入
+            if (data && data.type === 'ovo-system-prompt-template' && data.template) {
+                promptTextarea.value = data.template;
+                showToast('模板导入成功');
+            } 
+            // 支持多个预设数组导入
+            else if (Array.isArray(data) && data.length > 0 && data[0].template) {
+                if (!db.magicRoom) db.magicRoom = {};
+                if (!db.magicRoom.presets) db.magicRoom.presets = [];
+                data.forEach(p => {
+                    const idx = db.magicRoom.presets.findIndex(exist => exist.name === p.name);
+                    if (idx >= 0) db.magicRoom.presets[idx] = p;
+                    else db.magicRoom.presets.push(p);
+                });
+                await saveData();
+                populateMagicRoomPresets();
+                showToast(`成功导入 ${data.length} 个预设`);
+            } else {
+                showToast('无效的模板文件');
+            }
+        } catch (err) {
+            showToast('导入失败：' + err.message);
+        }
+        e.target.value = '';
+    });
+
+    exportBtn.addEventListener('click', () => {
+        // 如果有预设，优先提示是否导出整个预设库
+        if (db.magicRoom && db.magicRoom.presets && db.magicRoom.presets.length > 0) {
+            if (confirm('是否导出整个预设库？（点击取消则仅导出当前编辑框内容）')) {
+                const blob = new Blob([JSON.stringify(db.magicRoom.presets, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `系统提示词预设库_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast('预设库导出成功');
+                return;
+            }
+        }
+        
+        const template = promptTextarea.value;
+        if (!template) return showToast('模板为空，无法导出');
+        const data = {
+            type: 'ovo-system-prompt-template',
+            version: 1,
+            template: template
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `系统提示词模板_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('模板导出成功');
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        if (!db.magicRoom) db.magicRoom = {};
+        db.magicRoom.customPromptEnabled = enabledSwitch.checked;
+        db.magicRoom.customPromptTemplate = promptTextarea.value;
+        // 保存系统通知设置
+        db.magicRoom.sysNotifEnabled      = sysnotifEnabled ? sysnotifEnabled.checked : false;
+        db.magicRoom.sysNotifSenderName   = sysnotifSenderName ? sysnotifSenderName.value.trim() : '';
+        db.magicRoom.sysNotifShowAvatar   = sysnotifShowAvatar ? sysnotifShowAvatar.checked : true;
+        db.magicRoom.sysNotifShowContent  = sysnotifShowContent ? sysnotifShowContent.checked : true;
+        db.magicRoom.sysNotifCustomServer = sysnotifCustomSrv ? sysnotifCustomSrv.checked : false;
+        db.magicRoom.sysNotifServerUrl    = sysnotifSrvUrl ? sysnotifSrvUrl.value.trim() : '';
+        db.magicRoom.sysNotifServerKey    = sysnotifSrvKey ? sysnotifSrvKey.value.trim() : '';
+        await saveData();
+        showToast('魔法屋设置已保存！');
+    });
+
+    // ===== 系统通知设置初始化 =====
+    const sysnotifEnabled    = document.getElementById('sysnotif-enabled');
+    const sysnotifOptions    = document.getElementById('sysnotif-options');
+    const sysnotifSenderName = document.getElementById('sysnotif-sender-name');
+    const sysnotifShowAvatar = document.getElementById('sysnotif-show-avatar');
+    const sysnotifShowContent= document.getElementById('sysnotif-show-content');
+    const sysnotifCustomSrv  = document.getElementById('sysnotif-custom-server');
+    const sysnotifSrvOptions = document.getElementById('sysnotif-server-options');
+    const sysnotifSrvUrl     = document.getElementById('sysnotif-server-url');
+    const sysnotifSrvKey     = document.getElementById('sysnotif-server-key');
+    const sysnotifReqPerm    = document.getElementById('sysnotif-request-permission');
+    const sysnotifPermStatus = document.getElementById('sysnotif-permission-status');
+
+    if (sysnotifEnabled) {
+        const mr = db.magicRoom || {};
+        // 从 db 回填数据
+        sysnotifEnabled.checked             = !!mr.sysNotifEnabled;
+        sysnotifOptions.style.display       = mr.sysNotifEnabled ? 'block' : 'none';
+        sysnotifSenderName.value            = mr.sysNotifSenderName || '';
+        sysnotifShowAvatar.checked          = mr.sysNotifShowAvatar !== false;
+        sysnotifShowContent.checked         = mr.sysNotifShowContent !== false;
+        sysnotifCustomSrv.checked           = !!mr.sysNotifCustomServer;
+        sysnotifSrvOptions.style.display    = mr.sysNotifCustomServer ? 'block' : 'none';
+        sysnotifSrvUrl.value                = mr.sysNotifServerUrl || '';
+        sysnotifSrvKey.value                = mr.sysNotifServerKey || '';
+
+        // 更新权限状态提示
+        function updateSysNotifPermStatus() {
+            if (!('Notification' in window)) {
+                sysnotifPermStatus.textContent = '⚠️ 当前浏览器不支持通知 API';
+                return;
+            }
+            const map = {
+                granted: '✅ 已授权，系统通知功能可正常使用',
+                denied:  '❌ 已被拒绝，请在浏览器/系统设置中手动开启',
+                default: '⚪ 尚未申请权限，请点击上方按钮申请'
+            };
+            sysnotifPermStatus.textContent = map[Notification.permission] || '';
+        }
+        updateSysNotifPermStatus();
+
+        // 总开关
+        sysnotifEnabled.addEventListener('change', () => {
+            sysnotifOptions.style.display = sysnotifEnabled.checked ? 'block' : 'none';
+        });
+
+        // 自定义服务器开关
+        sysnotifCustomSrv.addEventListener('change', () => {
+            sysnotifSrvOptions.style.display = sysnotifCustomSrv.checked ? 'block' : 'none';
+        });
+
+        // 申请权限按钮
+        sysnotifReqPerm.addEventListener('click', async () => {
+            if (!('Notification' in window)) {
+                showToast('当前浏览器不支持通知 API');
+                return;
+            }
+            const result = await Notification.requestPermission();
+            updateSysNotifPermStatus();
+            if (result === 'granted') {
+                showToast('✅ 通知权限已授权！');
+            } else if (result === 'denied') {
+                showToast('❌ 权限被拒绝，请在浏览器设置中手动开启');
+            } else {
+                showToast('未授权，请重试');
+            }
+        });
+
+        // 发送测试通知按钮
+        const sysnotifTestBtn = document.getElementById('sysnotif-test-btn');
+        if (sysnotifTestBtn) {
+            sysnotifTestBtn.addEventListener('click', async () => {
+                if (!('Notification' in window)) {
+                    showToast('当前浏览器不支持通知 API');
+                    return;
+                }
+                if (Notification.permission !== 'granted') {
+                    showToast('请先申请系统通知权限！');
+                    return;
+                }
+                const name = sysnotifSenderName.value.trim() || '章鱼喷墨机';
+                await showSystemNotification({
+                    title: name,
+                    body: '这是一条系统级通知的测试消息，如果你看到了它，说明设置成功！',
+                    icon: 'https://i.postimg.cc/Vk042Snv/5F3BCD91056B989330AE34D11901BD6E.png'
+                });
+            });
+        }
     }
 }
 
@@ -2453,6 +3124,41 @@ function setupApiSettingsApp() {
 
     // === 副API设置：表情包识图 API ===
     setupSubApiSettings('stickerRecognition', 'stickerRecognitionApiSettings', 'stickerRecognitionApiPresets');
+
+    // === 全局天气服务 API ===
+    const weatherProviderEl = document.getElementById('weather-api-provider');
+    const weatherKeyEl = document.getElementById('weather-api-key');
+    const weatherKeyCont = document.getElementById('weather-api-key-container');
+    const weatherSaveBtn = document.getElementById('weather-api-save-btn');
+
+    if (weatherProviderEl) {
+        if (db.weatherApiSettings) {
+            weatherProviderEl.value = db.weatherApiSettings.provider || 'openmeteo';
+            if (weatherKeyEl) weatherKeyEl.value = db.weatherApiSettings.key || '';
+        }
+        
+        const updateWeatherKeyVisibility = () => {
+            const provider = weatherProviderEl.value;
+            if (provider === 'qweather' || provider === 'seniverse') {
+                if (weatherKeyCont) weatherKeyCont.style.display = 'flex';
+            } else {
+                if (weatherKeyCont) weatherKeyCont.style.display = 'none';
+            }
+        };
+        weatherProviderEl.addEventListener('change', updateWeatherKeyVisibility);
+        updateWeatherKeyVisibility();
+
+        if (weatherSaveBtn) {
+            weatherSaveBtn.addEventListener('click', async () => {
+                db.weatherApiSettings = {
+                    provider: weatherProviderEl.value,
+                    key: weatherKeyEl ? weatherKeyEl.value.trim() : ''
+                };
+                await saveData();
+                showToast('全局天气 API 设置已保存！');
+            });
+        }
+    }
 
     // === NovelAI 生图 API 设置 ===
     setupNovelAiSettings();
@@ -3851,8 +4557,163 @@ function setupWallpaperApp() {
             }
         });
     }
+    // 全局聊天壁纸（在壁纸APP中管理）
+    setupGlobalChatWallpaperInWallpaperScreen();
+    
+    // 全局通话壁纸（在壁纸APP中管理）
+    setupGlobalCallWallpaperInWallpaperScreen();
+
     // 音乐播放器壁纸（在壁纸APP中管理）
     setupMusicWallpaperInWallpaperScreen();
+}
+
+function setupGlobalChatWallpaperInWallpaperScreen() {
+    const GLOBAL_CHAT_BG_KEY = 'global_chat_bg';
+    const preview = document.getElementById('global-chat-wallpaper-preview');
+    const previewText = document.getElementById('global-chat-wallpaper-preview-text');
+    const localBtn = document.getElementById('global-chat-wallpaper-local-btn');
+    const urlBtn = document.getElementById('global-chat-wallpaper-url-btn');
+    const resetBtn = document.getElementById('global-chat-wallpaper-reset-btn');
+    const urlRow = document.getElementById('global-chat-wallpaper-url-row');
+    const urlInput = document.getElementById('global-chat-wallpaper-url-input');
+    const urlApply = document.getElementById('global-chat-wallpaper-url-apply');
+    const fileInput = document.getElementById('global-chat-wallpaper-file-input');
+
+    function refreshPreview() {
+        var url = db.globalChatWallpaper || '';
+        if (preview) {
+            if (url) {
+                preview.style.backgroundImage = 'url(' + url + ')';
+                if (previewText) previewText.style.display = 'none';
+            } else {
+                preview.style.backgroundImage = '';
+                if (previewText) previewText.style.display = '';
+            }
+        }
+    }
+
+    refreshPreview();
+
+    if (localBtn && fileInput) {
+        localBtn.addEventListener('click', function () { fileInput.click(); });
+        fileInput.addEventListener('change', async function () {
+            var file = this.files && this.files[0];
+            if (!file) return;
+            try {
+                var dataUrl = await compressImage(file, { quality: 0.85, maxWidth: 1080, maxHeight: 1920 });
+                db.globalChatWallpaper = dataUrl;
+                await saveData();
+                refreshPreview();
+                showToast('全局聊天壁纸已更新');
+            } catch (_) {
+                showToast('图片压缩失败');
+            }
+            this.value = '';
+        });
+    }
+
+    if (urlBtn) {
+        urlBtn.addEventListener('click', function () {
+            if (urlRow) urlRow.style.display = urlRow.style.display === 'none' ? 'flex' : 'none';
+            if (urlRow && urlRow.style.display === 'flex' && urlInput) urlInput.focus();
+        });
+    }
+
+    if (urlApply && urlInput) {
+        urlApply.addEventListener('click', async function () {
+            var url = urlInput.value.trim();
+            if (!url) return;
+            if (!url.startsWith('http')) { showToast('请输入有效的 http/https 链接'); return; }
+            db.globalChatWallpaper = url;
+            await saveData();
+            refreshPreview();
+            if (urlRow) urlRow.style.display = 'none';
+            showToast('全局聊天壁纸已更新');
+        });
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', async function () {
+            db.globalChatWallpaper = '';
+            await saveData();
+            refreshPreview();
+            showToast('已恢复默认全局聊天壁纸');
+        });
+    }
+}
+
+function setupGlobalCallWallpaperInWallpaperScreen() {
+    const preview = document.getElementById('global-call-wallpaper-preview');
+    const previewText = document.getElementById('global-call-wallpaper-preview-text');
+    const localBtn = document.getElementById('global-call-wallpaper-local-btn');
+    const urlBtn = document.getElementById('global-call-wallpaper-url-btn');
+    const resetBtn = document.getElementById('global-call-wallpaper-reset-btn');
+    const urlRow = document.getElementById('global-call-wallpaper-url-row');
+    const urlInput = document.getElementById('global-call-wallpaper-url-input');
+    const urlApply = document.getElementById('global-call-wallpaper-url-apply');
+    const fileInput = document.getElementById('global-call-wallpaper-file-input');
+
+    function refreshPreview() {
+        var url = db.globalCallWallpaper || '';
+        if (preview) {
+            if (url) {
+                preview.style.backgroundImage = 'url(' + url + ')';
+                if (previewText) previewText.style.display = 'none';
+            } else {
+                preview.style.backgroundImage = '';
+                if (previewText) previewText.style.display = '';
+            }
+        }
+    }
+
+    refreshPreview();
+
+    if (localBtn && fileInput) {
+        localBtn.addEventListener('click', function () { fileInput.click(); });
+        fileInput.addEventListener('change', async function () {
+            var file = this.files && this.files[0];
+            if (!file) return;
+            try {
+                var dataUrl = await compressImage(file, { quality: 0.85, maxWidth: 1080, maxHeight: 1920 });
+                db.globalCallWallpaper = dataUrl;
+                await saveData();
+                refreshPreview();
+                showToast('全局通话壁纸已更新');
+            } catch (_) {
+                showToast('图片压缩失败');
+            }
+            this.value = '';
+        });
+    }
+
+    if (urlBtn) {
+        urlBtn.addEventListener('click', function () {
+            if (urlRow) urlRow.style.display = urlRow.style.display === 'none' ? 'flex' : 'none';
+            if (urlRow && urlRow.style.display === 'flex' && urlInput) urlInput.focus();
+        });
+    }
+
+    if (urlApply && urlInput) {
+        urlApply.addEventListener('click', async function () {
+            var url = urlInput.value.trim();
+            if (!url) return;
+            if (!url.startsWith('http')) { showToast('请输入有效的 http/https 链接'); return; }
+            db.globalCallWallpaper = url;
+            await saveData();
+            refreshPreview();
+            if (urlRow) urlRow.style.display = 'none';
+            showToast('全局通话壁纸已更新');
+        });
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', async function () {
+            db.globalCallWallpaper = '';
+            await saveData();
+            refreshPreview();
+            showToast('已恢复默认全局通话壁纸');
+        });
+    }
 }
 
 function setupMusicWallpaperInWallpaperScreen() {
@@ -5550,7 +6411,7 @@ function renderCustomizeForm() {
     const iconOrder = [
         'chat-list-screen', 'api-settings-screen', 'wallpaper-screen',
         'world-book-screen', 'customize-screen', 'tutorial-screen',
-        'day-mode-btn', 'night-mode-btn', 'forum-screen', 'music-screen', 'diary-screen', 'piggy-bank-screen', 'pomodoro-screen', 'storage-analysis-screen', 'appearance-settings-screen', 'theater-screen', 'biekan-app', 'xiaowu-app'
+        'day-mode-btn', 'night-mode-btn', 'forum-screen', 'music-screen', 'diary-screen', 'piggy-bank-screen', 'pomodoro-screen', 'storage-analysis-screen', 'appearance-settings-screen', 'theater-screen', 'biekan-app', 'xiaowu-app', 'magic-room-screen'
     ];
 
     let iconsContentHTML = '';
@@ -6154,21 +7015,21 @@ body.night-mode-active .message-input-area textarea {
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                         <label style="font-size:14px; color:#333;">顶栏容器 CSS</label>
                     </div>
-                    <textarea id="statusbar-container-css" rows="4" placeholder="例如：\nbackground: rgba(0,0,0,0.3);\ncolor: #fff;\nborder-radius: 0;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.containerCss || ''}</textarea>
+                    <textarea id="statusbar-container-css" rows="4" placeholder="例如：\nbackground: transparent;\ncolor: #333;\nborder-radius: 0;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.containerCss !== undefined ? statusBarSettings.containerCss : 'background: transparent;\ncolor: #333;\nborder-radius: 0;'}</textarea>
                 </div>
 
                 <div style="margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                         <label style="font-size:14px; color:#333;">时间样式 CSS</label>
                     </div>
-                    <textarea id="statusbar-time-css" rows="3" placeholder="例如：\nfont-size: 14px;\nfont-weight: bold;\ncolor: #fff;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.timeCss || ''}</textarea>
+                    <textarea id="statusbar-time-css" rows="3" placeholder="例如：\nfont-size: 14px;\nfont-weight: bold;\ncolor: #333;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.timeCss !== undefined ? statusBarSettings.timeCss : 'font-size: 14px;\nfont-weight: bold;\ncolor: #333;'}</textarea>
                 </div>
 
                 <div style="margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                         <label style="font-size:14px; color:#333;">电量样式 CSS</label>
                     </div>
-                    <textarea id="statusbar-battery-css" rows="3" placeholder="例如：\nfont-size: 12px;\ncolor: #4CAF50;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.batteryCss || ''}</textarea>
+                    <textarea id="statusbar-battery-css" rows="3" placeholder="例如：\nfont-size: 12px;\ncolor: #4CAF50;" style="width:100%; border:1px solid #eee; border-radius:8px; padding:10px; font-size:12px; font-family:monospace;">${statusBarSettings.batteryCss !== undefined ? statusBarSettings.batteryCss : 'font-size: 12px;\ncolor: #4CAF50;'}</textarea>
                 </div>
 
                 <div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:8px;">
@@ -6475,10 +7336,13 @@ function applyHomeStatusBar() {
 
     if (!settings.enabled) {
         if (bar) bar.remove();
+        document.body.classList.remove('has-statusbar');
         let styleEl = document.getElementById('home-statusbar-custom-style');
         if (styleEl) styleEl.textContent = '';
         return;
     }
+    
+    document.body.classList.add('has-statusbar');
 
     if (!bar) {
         bar = document.createElement('div');

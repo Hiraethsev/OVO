@@ -88,6 +88,7 @@ const defaultIcons = {
     'piggy-bank-screen': {name: '存钱罐', url: 'https://i.postimg.cc/3RmWRRtS/chan-18.png'},
     'pomodoro-screen': {name: '番茄钟', url: 'https://i.postimg.cc/PrYGRDPF/chan-76.png'},
     'storage-analysis-screen': {name: '存储分析', url: 'https://i.postimg.cc/J0F3Lt0T/chan-107.png'},
+    'magic-room-screen': {name: '魔法屋', url: 'https://i.postimg.cc/hPCcZG3v/png-(143).png'},
     'appearance-settings-screen': {name: '外观设置', url: 'https://i.postimg.cc/KcgT1wzQ/DF424409FC54EDFF74D78ECB1311E1D7.png'},
     'theater-screen': {name: '小剧场', url: 'https://i.postimg.cc/t4gXjG8P/7632D362A35EC703E7A81F6FF0F8AE34.png'},
     'biekan-app': {name: '别看', url: 'https://i.postimg.cc/5y6G7fn4/5A615115038157EA857BB5D4D8E54EC7.png'},
@@ -162,6 +163,7 @@ const DEFAULT_COT_PRESETS = [
 const globalSettingKeys = [
     'apiSettings', 'summaryApiSettings', 'backgroundApiSettings', 'supplementPersonaApiSettings', 'peekApiSettings', 'imageRecognitionEnabled', 'imageRecognitionApiSettings', 'stickerRecognitionApiSettings', 'wallpaper', 'homeScreenMode', 'fontUrl', 'localFontName', 'customIcons', 'customAppNames', 'namePresets',
     'embeddingSettings',
+    'apiSettings', 'summaryApiSettings', 'backgroundApiSettings', 'supplementPersonaApiSettings', 'peekApiSettings', 'imageRecognitionEnabled', 'imageRecognitionApiSettings', 'stickerRecognitionApiSettings', 'wallpaper', 'globalChatWallpaper', 'globalCallWallpaper', 'homeScreenMode', 'fontUrl', 'localFontName', 'customIcons', 'customAppNames', 'namePresets',
     'apiPresets', 'summaryApiPresets', 'backgroundApiPresets', 'supplementPersonaApiPresets', 'peekApiPresets', 'imageRecognitionApiPresets', 'stickerRecognitionApiPresets', 'bubbleCssPresets', 'myPersonaPresets', 'globalCss',
     'globalCssPresets', 'fontPresets', 'homeSignature', 'forumPosts', 'forumBindings', 'forumUserProfile', 'forumSettings', 'forumApiSettings', 'forumMessages', 'forumStrangerProfiles', 'forumFriendRequests', 'forumPendingRequestFromUser', 'forumAltAccounts', 'forumActiveAccountId', 'pomodoroTasks', 'pomodoroSettings', 'insWidgetSettings', 'homeWidgetSettings',
     'chatFolders', 'fontSizeScale', 'activePersonaId', 'moreProfileCardBg', 'statusBarPresets', 'regexFilterPresets', 'themeSettings', 'themePresets', 'savedKeyboardHeight',
@@ -173,7 +175,7 @@ const globalSettingKeys = [
     'theaterApiSettings', 'theaterFontSize', 'theaterFontPreset',
     'novelAiSettings', 'avatarRecognitionDetailLevel',
     'phoneControlRecycleBin', 'nodeTemplates', 'nodeSummaryText',
-    'nightModeSettings', 'homeStatusBarSettings', 'stickerCategories'
+    'nightModeSettings', 'homeStatusBarSettings', 'stickerCategories', 'magicRoom'
 ];
 if (typeof window !== 'undefined') window.globalSettingKeysForBackup = globalSettingKeys;
 
@@ -208,8 +210,32 @@ function normalizeMemoryChunk(chunk) {
     };
 }
 
-const appVersion = "4.26";
+const appVersion = "5.1";
 const updateLog = [
+    {
+        version: "5.1",
+        date: "2026-05-01",
+        notes: [
+            "5.1更新：",
+            "依旧是除了写出来的更新还优化了其他地方的一些流程",
+            "1.新增编辑消息可以插入语音和引用",
+            "2.修复顶栏",
+            "3.微调了一下时间感知，新增时间间隔也可以编辑了",
+            "4.新增全局聊天背景更换和通话背景更换",
+            "5.新增角色和用户动态时区",
+            "6.新增角色可看见用户的收藏",
+            "7.优化拉黑关于未处理的好友申请卡住问题和拉黑状态随“开启新档”和“清空聊天记录”重置",
+            "8.新增提示词可以自定义，可以给每个角色配置不同的",
+            "9.新增顶栏文件夹有未读消息会显示红点",
+            "10.修复消息通知。",
+            "11.新增系统级别通知，没有测试过，可能有BUG，IOS只有16.4+才支持",
+            "12.优化世界书，可以拖动更改位置，可以搜索",
+            "13.优化提示词世界书，增加权重和关键词，关键词就相当于酒馆的绿灯蓝灯，权重就相当于深度？",
+            "14.新增思维链可以拖动",
+            "15.新增天气API",
+            "16.新增后台消息随机间隔"
+        ]
+    },
     {
         version: "4.26",
         date: "2026-04-26",
@@ -671,6 +697,8 @@ var db = {
     peekApiSettings: {},
     embeddingSettings: createDefaultEmbeddingSettings(),
     wallpaper: 'https://i.postimg.cc/W4Z9R9x4/ins-1.jpg',
+    globalChatWallpaper: '',
+    globalCallWallpaper: '',
     myStickers: [],
     memoryChunks: [],
     homeScreenMode: 'night',
@@ -834,6 +862,7 @@ function initDatabase() {
                 summaryApiSettings: data.summaryApiSettings || {},
                 backgroundApiSettings: data.backgroundApiSettings || {},
                 wallpaper: data.wallpaper || 'https://i.postimg.cc/W4Z9R9x4/ins-1.jpg',
+                globalChatWallpaper: data.globalChatWallpaper || '',
                 homeScreenMode: data.homeScreenMode || 'night',
                 fontUrl: data.fontUrl || '',
                 localFontName: data.localFontName || '',
@@ -855,7 +884,18 @@ function initDatabase() {
             moreProfileCardBg: data.moreProfileCardBg || 'https://i.postimg.cc/XvFDdTKY/Smart-Select-20251013-023208.jpg',
             cotSettings: data.cotSettings || { enabled: false, activePresetId: 'default' },
             cotPresets: data.cotPresets || JSON.parse(JSON.stringify(DEFAULT_COT_PRESETS)),
-            stickerCategories: data.stickerCategories || []
+            stickerCategories: data.stickerCategories || [],
+            magicRoom: Object.assign({
+                customPromptEnabled: false,
+                customPromptTemplate: '',
+                sysNotifEnabled: false,
+                sysNotifSenderName: '',
+                sysNotifShowAvatar: true,
+                sysNotifShowContent: true,
+                sysNotifCustomServer: false,
+                sysNotifServerUrl: '',
+                sysNotifServerKey: '',
+            }, data.magicRoom || {})
             };
 
             const settingsPromises = Object.entries(settingsToMigrate).map(([key, value]) =>
@@ -892,6 +932,19 @@ function initDatabase() {
 
 // 数据保存与加载
 const saveData = async () => {
+    // 存储配额预检
+    if (navigator.storage && navigator.storage.estimate) {
+        try {
+            const { usage, quota } = await navigator.storage.estimate();
+            const pct = (usage / quota) * 100;
+            if (pct > 95) {
+                if (typeof showToast === 'function') {
+                    showToast(`⚠️ 存储空间已使用 ${pct.toFixed(0)}%，请立即导出备份！`, 6000);
+                }
+            }
+        } catch (_) { /* 不阻断主流程 */ }
+    }
+
     try {
         await dexieDB.transaction('rw', dexieDB.tables, async () => {
             await dexieDB.characters.bulkPut(db.characters);
@@ -903,7 +956,8 @@ const saveData = async () => {
                 await dexieDB.memoryChunks.bulkPut(db.memoryChunks.map(normalizeMemoryChunk));
             }
 
-            const settingsPromises = globalSettingKeys.map(key => {
+            const allSettingKeys = [...globalSettingKeys, 'worldBookCategoryOrder'];
+            const settingsPromises = allSettingKeys.map(key => {
                 if (db[key] !== undefined) {
                     return dexieDB.globalSettings.put({ key: key, value: db[key] });
                 }
@@ -914,10 +968,68 @@ const saveData = async () => {
     } catch (e) {
         console.error("saveData failed:", e);
         if (typeof showToast === 'function') {
-            showToast("保存数据失败: " + e.message);
+            // 根据错误类型给用户有意义的提示
+            const isQuota = e.name === 'QuotaExceededError'
+                || (e.message && (e.message.includes('quota') || e.message.includes('delete record')));
+            const msg = isQuota
+                ? '存储空间不足，保存失败！请到「存储管理」导出备份后清理数据。'
+                : '保存数据失败: ' + e.message;
+            showToast(msg, 6000);
         }
     }
 };
+
+/**
+ * 只保存单个角色到 IndexedDB（聊天消息写入、角色配置修改时使用）
+ * 失败时自动降级为全量 saveData
+ */
+const saveCharacter = async (characterId) => {
+    const character = db.characters.find(c => c.id === characterId);
+    if (!character) return;
+    try {
+        await dexieDB.characters.put(character);
+    } catch (e) {
+        console.error("saveCharacter failed, falling back to saveData:", e);
+        await saveData();
+    }
+};
+
+/**
+ * 只保存单个群组到 IndexedDB（群消息写入、群配置修改时使用）
+ * 失败时自动降级为全量 saveData
+ */
+const saveGroup = async (groupId) => {
+    const group = db.groups.find(g => g.id === groupId);
+    if (!group) return;
+    try {
+        await dexieDB.groups.put(group);
+    } catch (e) {
+        console.error("saveGroup failed, falling back to saveData:", e);
+        await saveData();
+    }
+};
+
+/**
+ * 只保存全局设置（apiSettings、壁纸、主题等），不写角色/群
+ */
+const saveGlobalSettings = async () => {
+    try {
+        const allSettingKeys = [...globalSettingKeys, 'worldBookCategoryOrder'];
+        await dexieDB.transaction('rw', dexieDB.globalSettings, async () => {
+            const promises = allSettingKeys
+                .filter(key => db[key] !== undefined)
+                .map(key => dexieDB.globalSettings.put({ key, value: db[key] }));
+            await Promise.all(promises);
+        });
+    } catch (e) {
+        console.error("saveGlobalSettings failed:", e);
+        if (typeof showToast === 'function') showToast("保存设置失败: " + e.message);
+    }
+};
+
+window.saveCharacter = saveCharacter;
+window.saveGroup = saveGroup;
+window.saveGlobalSettings = saveGlobalSettings;
 
 const loadData = async () => {
     const tables = [
@@ -950,6 +1062,8 @@ const loadData = async () => {
         return acc;
     }, {});
 
+    db.worldBookCategoryOrder = settings.worldBookCategoryOrder || null;
+
     globalSettingKeys.forEach(key => {
         const defaultValue = {
             apiSettings: {},
@@ -962,6 +1076,8 @@ const loadData = async () => {
             imageRecognitionApiSettings: {},
             stickerRecognitionApiSettings: {},
             wallpaper: 'https://i.postimg.cc/W4Z9R9x4/ins-1.jpg',
+            globalChatWallpaper: '',
+            globalCallWallpaper: '',
             homeScreenMode: 'night',
             fontUrl: '',
             localFontName: '',
@@ -1018,14 +1134,25 @@ const loadData = async () => {
             theaterMode: 'text',
             theaterApiSettings: { useTheaterApi: false, url: '', key: '', model: '' },
             theaterFontSize: 15,
-            theaterFontPreset: null,
-            avatarRecognitionDetailLevel: 'detailed',
-            nodeTemplates: [],
-            nodeSummaryText: '摘要',
-            stickerCategories: []
-        };
-        db[key] = settings[key] !== undefined ? settings[key] : (defaultValue[key] !== undefined ? JSON.parse(JSON.stringify(defaultValue[key])) : undefined);
-    });
+        theaterFontPreset: null,
+        avatarRecognitionDetailLevel: 'detailed',
+        nodeTemplates: [],
+        nodeSummaryText: '摘要',
+        stickerCategories: [],
+        magicRoom: {
+            customPromptEnabled: false,
+            customPromptTemplate: '',
+            sysNotifEnabled: false,
+            sysNotifSenderName: '',
+            sysNotifShowAvatar: true,
+            sysNotifShowContent: true,
+            sysNotifCustomServer: false,
+            sysNotifServerUrl: '',
+            sysNotifServerKey: '',
+        }
+    };
+    db[key] = settings[key] !== undefined ? settings[key] : (defaultValue[key] !== undefined ? JSON.parse(JSON.stringify(defaultValue[key])) : undefined);
+});
 
     if (!db.embeddingSettings || typeof db.embeddingSettings !== 'object') {
         db.embeddingSettings = createDefaultEmbeddingSettings();
@@ -1057,6 +1184,7 @@ const loadData = async () => {
         if (c.isPinned === undefined) c.isPinned = false;
         if (c.status === undefined) c.status = '在线';
         if (!c.worldBookIds) c.worldBookIds = [];
+        if (c.callWallpaper === undefined) c.callWallpaper = '';
         if (c.customBubbleCss === undefined) c.customBubbleCss = '';
         if (c.useCustomBubbleCss === undefined) c.useCustomBubbleCss = false;
         if (c.allowCharSwitchBubbleCss === undefined) c.allowCharSwitchBubbleCss = false;
@@ -1095,6 +1223,10 @@ const loadData = async () => {
         if (!c.callHistory) c.callHistory = [];
         if (!c.userAvatarLibrary || !Array.isArray(c.userAvatarLibrary)) c.userAvatarLibrary = [];
         if (!c.charAvatarLibrary || !Array.isArray(c.charAvatarLibrary)) c.charAvatarLibrary = [];
+        if (c.charTimezone === undefined) c.charTimezone = '';
+        if (c.myTimezone === undefined) c.myTimezone = '';
+        if (c.enableDynamicTimezone === undefined) c.enableDynamicTimezone = false;
+        if (c.myEnableDynamicTimezone === undefined) c.myEnableDynamicTimezone = false;
         // 拉黑与好友申请
         if (c.isBlocked === undefined) c.isBlocked = false;
         if (!c.blockHistory || !Array.isArray(c.blockHistory)) c.blockHistory = [];
@@ -1210,6 +1342,8 @@ const dataStorage = {
         // 4. Personalization
         categorizedSizes.personalization += stringify(db.myStickers);
         categorizedSizes.personalization += stringify(db.wallpaper);
+        categorizedSizes.personalization += stringify(db.globalChatWallpaper);
+        categorizedSizes.personalization += stringify(db.globalCallWallpaper);
         categorizedSizes.personalization += stringify(db.homeScreenMode);
         categorizedSizes.personalization += stringify(db.fontUrl);
         categorizedSizes.personalization += stringify(db.localFontName);

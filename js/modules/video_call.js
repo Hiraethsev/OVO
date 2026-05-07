@@ -934,12 +934,23 @@ const VideoCallModule = {
 
         document.getElementById('vc-chat-container').innerHTML = '';
 
-        // === 初始化 NovelAI 视频通话生图背景 ===
+        // 设置通话背景
         const chat = this.state.currentChat;
+        const callSceneEl = document.getElementById('vc-scene-call');
+        if (callSceneEl) {
+            let bgUrl = '';
+            if (chat && chat.callWallpaper) {
+                bgUrl = chat.callWallpaper;
+            } else if (db.globalCallWallpaper) {
+                bgUrl = db.globalCallWallpaper;
+            }
+            callSceneEl.style.backgroundImage = bgUrl ? `url(${bgUrl})` : 'none';
+        }
+
+        // === 初始化 NovelAI 视频通话生图背景 ===
         const _vcNaiOn = chat && chat.vcNovelAiEnabled && db.novelAiSettings && db.novelAiSettings.enabled && db.novelAiSettings.token && this.state.callType === 'video';
         const bgEl = document.getElementById('vc-nai-bg');
         const bgImg = document.getElementById('vc-nai-bg-img');
-        const callSceneEl = document.getElementById('vc-scene-call');
         if (bgEl) {
             if (_vcNaiOn) {
                 bgEl.style.display = 'block';
@@ -1437,7 +1448,10 @@ const VideoCallModule = {
         const naiSaveBtn = document.getElementById('vc-nai-save-btn');
         if (naiSaveBtn) naiSaveBtn.style.display = 'none';
         const callSceneEl = document.getElementById('vc-scene-call');
-        if (callSceneEl) callSceneEl.classList.remove('vc-nai-active');
+        if (callSceneEl) {
+            callSceneEl.classList.remove('vc-nai-active');
+            callSceneEl.style.backgroundImage = 'none';
+        }
 
         // 恢复聊天区域展开状态
         const chatArea = document.getElementById('vc-chat-container');

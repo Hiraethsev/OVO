@@ -22,15 +22,15 @@ const VolcengineTTSService = {
             
             // 构建请求 Header
             const headers = {
-                'Authorization': `Bearer ${config.accessToken}`,
+                'Authorization': `Bearer;${config.accessToken}`, // 新版鉴权：Bearer;{token}
                 'Content-Type': 'application/json'
             };
 
-            // 构建请求 Body
+            // 构建请求 Body，适应新版参数规范
             const requestBody = {
                 app: {
                     appid: config.appId,
-                    token: 'access_token', // API 规范中此处填任意非空字符串，实际鉴权靠 Header
+                    token: config.accessToken, // 传入实际 token
                     cluster: config.cluster || 'volcano_tts'
                 },
                 user: {

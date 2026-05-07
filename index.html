@@ -20,6 +20,7 @@
     <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -31,6 +32,9 @@
     <!-- CSS Split: Core Features -->
     <link rel="stylesheet" href="css/chat.css">
     <link rel="stylesheet" href="css/settings.css">
+
+    <!-- Weather Module -->
+    <script src="js/modules/weather.js"></script>
 
     <!-- CSS Split: Modules -->
     <link rel="stylesheet" href="css/modules/peek.css">
@@ -1421,6 +1425,22 @@
                         style="display: none; font-size: 16px;">取消</button>
                 </div>
             </header>
+            <div id="world-book-search-bar" style="padding: 10px 15px; background: transparent;">
+                <div class="search-input-wrapper" style="display: flex; gap: 10px;">
+                    <div style="flex: 1; position: relative; display: flex; align-items: center; background: #fff; border-radius: 16px; padding: 0 12px; border: 1px solid #eee; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="world-book-search-input" placeholder="搜索条目名称、分类、内容..." style="border: none; background: transparent; padding: 8px; width: 100%; outline: none; font-size: 14px;">
+                    </div>
+                    <select id="world-book-filter-select" style="border: 1px solid #eee; border-radius: 12px; padding: 4px 8px; background: #fff; font-size: 13px; outline: none; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+                        <option value="all">全部</option>
+                        <option value="global">仅全局</option>
+                        <option value="disabled">已停用</option>
+                    </select>
+                </div>
+            </div>
             <input type="file" id="import-world-book-file-input" accept=".txt,.json,.docx" style="display:none;">
             <main class="content">
                 <ul class="list-container" id="world-book-list-container"></ul>
@@ -1483,8 +1503,12 @@
                         <input type="text" id="world-book-name" placeholder="例如：世界观背景、魔法体系" required>
                     </div>
                     <div class="form-group">
-                        <label for="world-book-category">条目分类</label>
+                        <label for="world-book-category">条目分类 <span style="font-size:12px;color:#999;font-weight:normal;">(使用/创建子分类，如: 魔法/法术)</span></label>
                         <input type="text" id="world-book-category" placeholder="例如：人物、地点、组织（可选）">
+                    </div>
+                    <div class="form-group">
+                        <label for="world-book-tags">标签 <span style="font-size:12px;color:#999;font-weight:normal;">(多个标签用逗号分隔)</span></label>
+                        <input type="text" id="world-book-tags" placeholder="例如：设定, 核心, 剧透">
                     </div>
                     <div class="form-group">
                         <label for="world-book-content">条目内容</label>
@@ -1508,6 +1532,32 @@
                         </label>
                         <p style="font-size: 12px; color: #999; margin-top: 5px;">
                             开启后，此条目将自动应用到所有角色
+                        </p>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            <span>常驻 (Always-on)</span>
+                            <label class="kkt-switch" style="margin: 0;">
+                                <input type="checkbox" id="world-book-always-on" checked>
+                                <span class="kkt-slider"></span>
+                            </label>
+                        </label>
+                        <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                            开启后无视关键词，每次对话必定注入
+                        </p>
+                    </div>
+                    <div class="form-group" id="world-book-keywords-group" style="display: none;">
+                        <label for="world-book-keywords">触发关键词</label>
+                        <input type="text" id="world-book-keywords" placeholder="用逗号分隔，如：魔法,火球术">
+                        <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                            当最近聊天记录包含这些关键词之一时，该条目才会被触发注入
+                        </p>
+                    </div>
+                    <div class="form-group">
+                        <label for="world-book-weight">权重 (越小排越上，越大排越下，默认 100)</label>
+                        <input type="number" id="world-book-weight" placeholder="100" value="100">
+                        <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                            同位置分组内按权重排序。AI对越靠下的内容记忆越深，核心设定建议填高权重。
                         </p>
                     </div>
                     <button type="submit" class="btn btn-primary">保存条目</button>
@@ -2327,6 +2377,48 @@
                         </div>
                     </div>
 
+                    <!-- 天气服务 API -->
+                    <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
+                        <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; color: var(--primary-color);">全局天气服务 API（可选）</h3>
+                                <p style="font-size: 12px; color: #999; margin: 5px 0 0;">为角色提供天气感知能力的数据源</p>
+                            </div>
+                            <span class="collapsible-arrow">▼</span>
+                        </div>
+                        
+                        <div class="collapsible-content">
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">服务商</div>
+                                <div class="kkt-item-control">
+                                    <select id="weather-api-provider"
+                                        style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                        <option value="openmeteo">Open-Meteo (免费免Key推荐)</option>
+                                        <option value="wttrin">wttr.in (免费免Key)</option>
+                                        <option value="qweather">和风天气</option>
+                                        <option value="seniverse">心知天气</option>
+                                    </select>
+                                    <span class="kkt-arrow">›</span>
+                                </div>
+                            </div>
+                            
+                            <div class="kkt-item" id="weather-api-key-container" style="display:none;">
+                                <div class="kkt-item-label">密钥 (Key)</div>
+                                <div class="kkt-item-control">
+                                    <input type="password" id="weather-api-key" autocomplete="new-password"
+                                        placeholder="输入天气 API Key"
+                                        style="text-align:right; border:none; background:transparent; width: 100%;">
+                                </div>
+                            </div>
+                            
+                            <button type="button" class="btn btn-primary" id="weather-api-save-btn"
+                                style="margin-top: 15px; width: 100%;">
+                                <span class="btn-text">保存全局天气 API 设置</span>
+                                <div class="spinner"></div>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- 副API 6: 表情包识图专用 API -->
                     <div class="kkt-group collapsible-section" style="margin-top: 30px; padding-top: 0; border-top: 2px solid #eee;">
                         <div class="collapsible-header" style="padding: 15px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="this.parentElement.classList.toggle('open')">
@@ -2602,6 +2694,13 @@
 
                         <!-- Volcengine TTS 专属配置 -->
                         <div id="volcengine-tts-config-wrap" style="display: none;">
+                            <div style="padding: 10px 15px; margin-bottom: 10px; background: #fff3e0; border-radius: 8px; border: 1px solid #ffe0b2; display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 13px; color: #e65100;">配置遇到问题？</div>
+                                <button type="button" id="volcengine-tts-tutorial-btn" style="background: none; border: none; color: #f57c00; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 0;">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+                                    查看接入教程
+                                </button>
+                            </div>
                             <div class="kkt-item">
                                 <div class="kkt-item-label">App ID</div>
                                 <div class="kkt-item-control">
@@ -2752,6 +2851,13 @@
                             </div>
                             
                             <div id="volcengine-user-tts-config-wrap" style="display: none;">
+                                <div style="padding: 10px 15px; margin-bottom: 10px; background: #fff3e0; border-radius: 8px; border: 1px solid #ffe0b2; display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="font-size: 13px; color: #e65100;">配置遇到问题？</div>
+                                    <button type="button" id="volcengine-user-tts-tutorial-btn" style="background: none; border: none; color: #f57c00; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 0;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+                                        查看接入教程
+                                    </button>
+                                </div>
                                 <div class="kkt-item">
                                     <div class="kkt-item-label">App ID</div>
                                     <div class="kkt-item-control">
@@ -2795,10 +2901,38 @@
                 <!-- 主屏幕壁纸 -->
                 <div class="wallpaper-section-label">主屏幕壁纸</div>
                 <div class="wallpaper-preview" id="wallpaper-preview"><span>当前壁纸预览</span></div>
-                <button type="button" id="wallpaper-reset-btn" class="btn btn-secondary">重置为默认壁纸</button>
+                <button type="button" id="wallpaper-reset-btn" class="btn btn-secondary" style="margin-bottom: 12px;">重置为默认壁纸</button>
                 <input type="file"
                     id="wallpaper-upload" accept="image/*" style="display: none;"><label for="wallpaper-upload"
                     class="btn btn-primary">从相册选择新壁纸</label>
+
+                <!-- 全局聊天壁纸 -->
+                <div class="wallpaper-section-label" style="margin-top:28px;">全局聊天壁纸</div>
+                <div class="wallpaper-preview" id="global-chat-wallpaper-preview"><span id="global-chat-wallpaper-preview-text">当前聊天壁纸预览</span></div>
+                <div class="wallpaper-music-actions">
+                    <button type="button" id="global-chat-wallpaper-local-btn" class="btn btn-primary">本地上传</button>
+                    <button type="button" id="global-chat-wallpaper-url-btn" class="btn btn-secondary">输入 URL</button>
+                    <button type="button" id="global-chat-wallpaper-reset-btn" class="btn btn-secondary">恢复默认</button>
+                </div>
+                <div class="music-wallpaper-url-row" id="global-chat-wallpaper-url-row" style="display:none;">
+                    <input type="text" id="global-chat-wallpaper-url-input" class="form-group" placeholder="输入背景图片链接 (http/https)" style="flex:1;margin:0;">
+                    <button type="button" id="global-chat-wallpaper-url-apply" class="btn btn-primary btn-small">使用</button>
+                </div>
+                <input type="file" id="global-chat-wallpaper-file-input" accept="image/*" hidden>
+
+                <!-- 全局通话壁纸 -->
+                <div class="wallpaper-section-label" style="margin-top:28px;">全局通话壁纸</div>
+                <div class="wallpaper-preview" id="global-call-wallpaper-preview"><span id="global-call-wallpaper-preview-text">当前通话壁纸预览</span></div>
+                <div class="wallpaper-music-actions">
+                    <button type="button" id="global-call-wallpaper-local-btn" class="btn btn-primary">本地上传</button>
+                    <button type="button" id="global-call-wallpaper-url-btn" class="btn btn-secondary">输入 URL</button>
+                    <button type="button" id="global-call-wallpaper-reset-btn" class="btn btn-secondary">恢复默认</button>
+                </div>
+                <div class="music-wallpaper-url-row" id="global-call-wallpaper-url-row" style="display:none;">
+                    <input type="text" id="global-call-wallpaper-url-input" class="form-group" placeholder="输入背景图片链接 (http/https)" style="flex:1;margin:0;">
+                    <button type="button" id="global-call-wallpaper-url-apply" class="btn btn-primary btn-small">使用</button>
+                </div>
+                <input type="file" id="global-call-wallpaper-file-input" accept="image/*" hidden>
 
                 <!-- 音乐播放器壁纸 -->
                 <div class="wallpaper-section-label" style="margin-top:28px;">音乐播放器壁纸</div>
@@ -3534,6 +3668,13 @@
             <div class="modal-window">
                 <h3>编辑消息</h3>
                 <form id="message-edit-form">
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <div class="format-toolbar" style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-small btn-secondary" onclick="insertFormatText('message-edit-textarea', 'voice')" style="padding:4px 8px;">插入语音</button>
+                            <button type="button" class="btn btn-small btn-secondary" onclick="insertFormatText('message-edit-textarea', 'quote')" style="padding:4px 8px;">插入引用</button>
+                            <button type="button" class="btn btn-small btn-secondary" onclick="insertFormatText('message-edit-textarea', 'visual')" style="padding:4px 8px;">插入动作</button>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <textarea id="message-edit-textarea" rows="6" required></textarea>
                     </div>
@@ -3567,6 +3708,22 @@
             <div class="modal-window">
                 <h3>新增消息</h3>
                 <form id="insert-message-form">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="font-size: 13px; color: #666; margin-bottom: 6px; display: block;">发送者身份</label>
+                        <div class="radio-group-pills">
+                            <input type="radio" id="insert-sender-char" name="insert-sender-role" value="char" checked>
+                            <label for="insert-sender-char" style="font-size: 13px; padding: 4px 12px;">对方</label>
+                            <input type="radio" id="insert-sender-me" name="insert-sender-role" value="user">
+                            <label for="insert-sender-me" style="font-size: 13px; padding: 4px 12px;">我</label>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <div class="format-toolbar" style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-small btn-secondary" onclick="insertFormatText('insert-message-textarea', 'voice')" style="padding:4px 8px;">插入语音</button>
+                            <button type="button" class="btn btn-small btn-secondary" onclick="insertFormatText('insert-message-textarea', 'quote')" style="padding:4px 8px;">插入引用</button>
+                            <button type="button" class="btn btn-small btn-secondary" onclick="insertFormatText('insert-message-textarea', 'visual')" style="padding:4px 8px;">插入动作</button>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <textarea id="insert-message-textarea" rows="6" placeholder="请输入新消息内容..." required></textarea>
                     </div>
@@ -4030,6 +4187,61 @@
                                             placeholder="点击修改">
                                     </div>
                                 </div>
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+                                    <div class="kkt-item-label">角色时区</div>
+                                    <div class="kkt-item-control" style="display:flex; align-items:center; gap:5px; width:100%;">
+                                        <select id="setting-char-timezone-preset" style="border: 1px solid #eee; border-radius: 6px; padding: 4px 8px; background: #f9f9f9; min-width: 80px; appearance: none; -webkit-appearance: none; text-align: center; text-align-last: center;">
+                                            <option value="">预设</option>
+                                            <optgroup label="亚洲">
+                                                <option value="Asia/Shanghai">北京/上海 (UTC+8)</option>
+                                                <option value="Asia/Seoul">首尔 (UTC+9)</option>
+                                                <option value="Asia/Tokyo">东京 (UTC+9)</option>
+                                                <option value="Asia/Taipei">台北 (UTC+8)</option>
+                                                <option value="Asia/Hong_Kong">香港 (UTC+8)</option>
+                                                <option value="Asia/Singapore">新加坡 (UTC+8)</option>
+                                                <option value="Asia/Bangkok">曼谷 (UTC+7)</option>
+                                                <option value="Asia/Dubai">迪拜 (UTC+4)</option>
+                                            </optgroup>
+                                            <optgroup label="美洲">
+                                                <option value="America/New_York">纽约 (EST/EDT)</option>
+                                                <option value="America/Los_Angeles">洛杉矶 (PST/PDT)</option>
+                                                <option value="America/Chicago">芝加哥 (CST/CDT)</option>
+                                                <option value="America/Toronto">多伦多 (EST/EDT)</option>
+                                                <option value="America/Vancouver">温哥华 (PST/PDT)</option>
+                                                <option value="America/Sao_Paulo">圣保罗 (BRT)</option>
+                                            </optgroup>
+                                            <optgroup label="欧洲">
+                                                <option value="Europe/London">伦敦 (GMT/BST)</option>
+                                                <option value="Europe/Paris">巴黎 (CET/CEST)</option>
+                                                <option value="Europe/Berlin">柏林 (CET/CEST)</option>
+                                                <option value="Europe/Rome">罗马 (CET/CEST)</option>
+                                                <option value="Europe/Moscow">莫斯科 (MSK)</option>
+                                            </optgroup>
+                                            <optgroup label="大洋洲">
+                                                <option value="Australia/Sydney">悉尼 (AEST/AEDT)</option>
+                                                <option value="Australia/Melbourne">墨尔本 (AEST/AEDT)</option>
+                                                <option value="Pacific/Auckland">奥克兰 (NZST/NZDT)</option>
+                                            </optgroup>
+                                            <optgroup label="其他">
+                                                <option value="UTC">世界协调时 (UTC)</option>
+                                            </optgroup>
+                                        </select>
+                                        <span class="kkt-arrow">›</span>
+                                        <input type="text" id="setting-char-timezone" autocomplete="off"
+                                            style="text-align:right; border:none; background:transparent; flex:1; min-width:0;"
+                                            placeholder="可在此自定义输入">
+                                    </div>
+                                </div>
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:4px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>开启动态时区提示词</span>
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-enable-dynamic-timezone">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size:12px;color:#999;margin:0;">通过系统时间加上双方时差设定，让角色感知两地时间</p>
+                                </div>
                                 <div class="kkt-item" style="flex-direction:column; align-items:flex-start;">
                                     <div class="kkt-item-label" style="margin-bottom:8px;">角色人设</div>
                                     <textarea id="setting-char-persona"
@@ -4128,6 +4340,61 @@
                                             <span class="kkt-slider"></span>
                                         </label>
                                     </div>
+                                </div>
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+                                    <div class="kkt-item-label">我的时区</div>
+                                    <div class="kkt-item-control" style="display:flex; align-items:center; gap:5px; width:100%;">
+                                        <select id="setting-my-timezone-preset" style="border: 1px solid #eee; border-radius: 6px; padding: 4px 8px; background: #f9f9f9; min-width: 80px; appearance: none; -webkit-appearance: none; text-align: center; text-align-last: center;">
+                                            <option value="">预设</option>
+                                            <optgroup label="亚洲">
+                                                <option value="Asia/Shanghai">北京/上海 (UTC+8)</option>
+                                                <option value="Asia/Seoul">首尔 (UTC+9)</option>
+                                                <option value="Asia/Tokyo">东京 (UTC+9)</option>
+                                                <option value="Asia/Taipei">台北 (UTC+8)</option>
+                                                <option value="Asia/Hong_Kong">香港 (UTC+8)</option>
+                                                <option value="Asia/Singapore">新加坡 (UTC+8)</option>
+                                                <option value="Asia/Bangkok">曼谷 (UTC+7)</option>
+                                                <option value="Asia/Dubai">迪拜 (UTC+4)</option>
+                                            </optgroup>
+                                            <optgroup label="美洲">
+                                                <option value="America/New_York">纽约 (EST/EDT)</option>
+                                                <option value="America/Los_Angeles">洛杉矶 (PST/PDT)</option>
+                                                <option value="America/Chicago">芝加哥 (CST/CDT)</option>
+                                                <option value="America/Toronto">多伦多 (EST/EDT)</option>
+                                                <option value="America/Vancouver">温哥华 (PST/PDT)</option>
+                                                <option value="America/Sao_Paulo">圣保罗 (BRT)</option>
+                                            </optgroup>
+                                            <optgroup label="欧洲">
+                                                <option value="Europe/London">伦敦 (GMT/BST)</option>
+                                                <option value="Europe/Paris">巴黎 (CET/CEST)</option>
+                                                <option value="Europe/Berlin">柏林 (CET/CEST)</option>
+                                                <option value="Europe/Rome">罗马 (CET/CEST)</option>
+                                                <option value="Europe/Moscow">莫斯科 (MSK)</option>
+                                            </optgroup>
+                                            <optgroup label="大洋洲">
+                                                <option value="Australia/Sydney">悉尼 (AEST/AEDT)</option>
+                                                <option value="Australia/Melbourne">墨尔本 (AEST/AEDT)</option>
+                                                <option value="Pacific/Auckland">奥克兰 (NZST/NZDT)</option>
+                                            </optgroup>
+                                            <optgroup label="其他">
+                                                <option value="UTC">世界协调时 (UTC)</option>
+                                            </optgroup>
+                                        </select>
+                                        <span class="kkt-arrow">›</span>
+                                        <input type="text" id="setting-my-timezone" autocomplete="off"
+                                            style="text-align:right; border:none; background:transparent; flex:1; min-width:0;"
+                                            placeholder="可在此自定义输入">
+                                    </div>
+                                </div>
+                                <div class="kkt-item" style="flex-direction:column; align-items:stretch; gap:4px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>开启动态时区提示词</span>
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-my-enable-dynamic-timezone">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size:12px;color:#999;margin:0;">通过系统时间加上双方时差设定，让角色感知两地时间</p>
                                 </div>
                                 <div class="kkt-item" style="flex-direction:column; align-items:flex-start;">
                                     <div class="kkt-item-label" style="margin-bottom:8px;">我的人设</div>
@@ -4280,6 +4547,24 @@
                                 <div class="kkt-item" style="padding-top: 0;">
                                     <p class="kkt-item-hint" style="font-size: 12px; color: #999; margin: 0;">
                                         开启后，该角色可自主收藏认为重要的用户消息，可在「收藏」→「角色收藏」中查看</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">角色知晓我的收藏</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-aware-user-favorites">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="setting-aware-favorite-scope-container" style="display: none; padding: 12px 15px; margin: 0 15px 15px; background: #f9f9f9; border-radius: 8px; border: 1px solid #f0f0f0;">
+                                    <div class="radio-group-pills" style="margin-bottom: 8px;">
+                                        <input type="radio" name="setting-aware-favorite-scope" id="setting-aware-favorite-scope-current" value="current" checked>
+                                        <label for="setting-aware-favorite-scope-current" style="font-size: 13px; padding: 6px 16px;">仅当前角色</label>
+                                        <input type="radio" name="setting-aware-favorite-scope" id="setting-aware-favorite-scope-all" value="all">
+                                        <label for="setting-aware-favorite-scope-all" style="font-size: 13px; padding: 6px 16px;">所有角色的收藏</label>
+                                    </div>
+                                    <p style="font-size: 12px; color: #999; margin: 0; line-height: 1.4;">开启后角色能看到你收藏的内容，借此了解你的喜好</p>
                                 </div>
                             </div>
 
@@ -4745,6 +5030,15 @@
                             <!-- 后台自动消息 -->
                             <div class="kkt-group" style="margin-top:15px;">
                                 <div class="kkt-item">
+                                    <div class="kkt-item-label">后台消息弹窗通知</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-bg-toast-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item">
                                     <div class="kkt-item-label">后台自动发送消息</div>
                                     <div class="kkt-item-control">
                                         <label class="kkt-switch">
@@ -4754,10 +5048,27 @@
                                     </div>
                                 </div>
                                 <div class="kkt-item">
+                                    <div class="kkt-item-label">触发模式</div>
+                                    <div class="kkt-item-control">
+                                        <select id="setting-auto-reply-mode" style="border:none; background:transparent; text-align:right; font-size:14px; color:#555; outline:none;">
+                                            <option value="fixed">固定间隔</option>
+                                            <option value="random">随机区间</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-auto-reply-fixed-container">
                                     <div class="kkt-item-label">无操作检测时间 (分钟)</div>
                                     <div class="kkt-item-control">
                                         <input type="number" id="setting-auto-reply-interval" value="60" min="1"
                                             style="width:50px; text-align:right; border:none;">
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-auto-reply-random-container" style="display:none;">
+                                    <div class="kkt-item-label">无操作检测区间 (分钟)</div>
+                                    <div class="kkt-item-control" style="gap: 5px;">
+                                        <input type="number" id="setting-auto-reply-min" value="60" min="1" style="width:40px; text-align:center; border:none; background: rgba(0,0,0,0.05); border-radius: 4px;">
+                                        <span style="color:#999;">-</span>
+                                        <input type="number" id="setting-auto-reply-max" value="180" min="1" style="width:40px; text-align:center; border:none; background: rgba(0,0,0,0.05); border-radius: 4px;">
                                     </div>
                                 </div>
                                 <div class="kkt-item">
@@ -5044,6 +5355,16 @@
                                         style="display:none;">
                                 </div>
                                 <div class="kkt-item">
+                                    <div class="kkt-item-label">通话壁纸</div>
+                                    <div class="kkt-item-control" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                        <span onclick="document.getElementById('setting-call-bg-upload').click()" style="cursor:pointer;">点击更换</span>
+                                        <span class="kkt-arrow">›</span>
+                                        <span id="reset-call-bg-btn" style="margin-left:4px;color:#888;font-size:13px;cursor:pointer;">恢复默认</span>
+                                    </div>
+                                    <input type="file" id="setting-call-bg-upload" accept="image/*"
+                                        style="display:none;">
+                                </div>
+                                <div class="kkt-item">
                                     <div class="kkt-item-label">主题颜色</div>
                                     <div class="kkt-item-control">
                                         <select id="setting-theme-color"
@@ -5220,6 +5541,96 @@
 
                         <!-- 【拓展】Tab 内容 -->
                         <div id="setting-tab-ext" class="settings-tab-content">
+                            <!-- 环境与天气增强 -->
+                            <div class="kkt-group" style="margin-bottom:15px;">
+                                <div style="margin-bottom: 15px; padding-top: 5px; padding-left: 8px;">
+                                    <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">环境与天气增强</div>
+                                    <p style="font-size: 11px; color: #999; margin: 5px 0 0;">让角色感知所在地区的天气变化</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">开启角色所在地天气</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-weather-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-char-weather-city-container" style="display:none; flex-direction:column; align-items:flex-start;">
+                                    <div class="kkt-item-label" style="margin-bottom:8px; font-size:12px;">角色所在城市 / 地区</div>
+                                    <input type="text" id="setting-char-weather-city" placeholder="例如：上海、北京、东京" style="width:100%; border:1px solid #eee; border-radius:8px; padding:8px;">
+                                </div>
+
+                                <div class="kkt-item" style="border-top:1px solid #f5f5f5; padding-top:12px;">
+                                    <div class="kkt-item-label">开启用户所在地天气</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-user-weather-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="kkt-item" id="setting-user-weather-city-container" style="display:none; flex-direction:column; align-items:flex-start;">
+                                    <div class="kkt-item-label" style="margin-bottom:8px; font-size:12px;">用户所在城市 / 地区</div>
+                                    <div style="display:flex; width:100%; gap:8px;">
+                                        <input type="text" id="setting-user-weather-city" placeholder="例如：上海、北京" style="flex:1; border:1px solid #eee; border-radius:8px; padding:8px;">
+                                        <button type="button" id="setting-user-weather-locate-btn" class="btn btn-secondary btn-small" style="white-space:nowrap; padding:0 12px;">📍 定位</button>
+                                    </div>
+                                </div>
+
+                                <div class="kkt-item" style="border-top:1px solid #f5f5f5; padding-top:12px;">
+                                    <div class="kkt-item-label">使用独立天气 API</div>
+                                    <div class="kkt-item-control">
+                                        <label class="kkt-switch">
+                                            <input type="checkbox" id="setting-char-weather-custom-api-enabled">
+                                            <span class="kkt-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="setting-char-weather-custom-api-container" style="display:none;">
+                                    <div class="kkt-item">
+                                        <div class="kkt-item-label">服务商</div>
+                                        <div class="kkt-item-control">
+                                            <select id="setting-char-weather-provider"
+                                                style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                                <option value="openmeteo">Open-Meteo (免费免Key推荐)</option>
+                                                <option value="wttrin">wttr.in (免费免Key)</option>
+                                                <option value="qweather">和风天气</option>
+                                                <option value="seniverse">心知天气</option>
+                                            </select>
+                                            <span class="kkt-arrow">›</span>
+                                        </div>
+                                    </div>
+                                    <div class="kkt-item" id="setting-char-weather-key-container" style="display:none;">
+                                        <div class="kkt-item-label">密钥 (Key)</div>
+                                        <div class="kkt-item-control">
+                                            <input type="password" id="setting-char-weather-key" autocomplete="new-password"
+                                                placeholder="输入独立 API Key"
+                                                style="text-align:right; border:none; background:transparent; width: 100%;">
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- 专属系统提示词设置 -->
+                            <div class="kkt-group" style="margin-bottom:15px;">
+                                <div style="margin-bottom: 15px; padding-top: 5px; padding-left: 8px;">
+                                    <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">系统提示词</div>
+                                    <p style="font-size: 11px; color: #999; margin: 5px 0 0;">为该角色设置专属的系统提示词，可覆盖全局魔法屋设置</p>
+                                </div>
+                                <div class="kkt-item">
+                                    <div class="kkt-item-label">专属系统提示词</div>
+                                    <div class="kkt-item-control">
+                                        <select id="setting-char-custom-prompt-preset"
+                                            style="border:none; background:transparent; text-align:right; direction: rtl; appearance: none; -webkit-appearance: none; padding-right: 15px;">
+                                            <option value="">跟随全局设置</option>
+                                        </select>
+                                        <span class="kkt-arrow">›</span>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 联网搜索设置 -->
                             <div class="kkt-group" style="margin-bottom:15px;">
                                 <div style="margin-bottom: 15px; padding-top: 5px; padding-left: 8px;">
@@ -7112,6 +7523,185 @@
             </div>
         </div>
 
+        <!-- Magic Room Screen -->
+        <div id="magic-room-screen" class="screen">
+            <header class="app-header">
+                <button class="back-btn" data-target="home-screen">‹</button>
+                <div class="title-container">
+                    <h1 class="title">魔法屋</h1>
+                </div>
+                <div class="placeholder"></div>
+            </header>
+            <main class="content">
+                <div class="kkt-settings-container">
+                    <div style="margin-bottom: 15px; padding-top: 5px; padding-left: 8px;">
+                        <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">系统提示词自定义</div>
+                        <p style="font-size: 11px; color: #999; margin: 5px 0 0;">修改底层提示词结构，打造完全属于你的 AI 灵魂内核。</p>
+                    </div>
+
+                    <div class="kkt-group">
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">启用自定义系统提示词</div>
+                            <div class="kkt-item-control">
+                                <label class="kkt-switch">
+                                    <input type="checkbox" id="magic-room-custom-prompt-enabled">
+                                    <span class="kkt-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="magic-room-prompt-editor" style="display: none;">
+                            <div class="api-presets-embedded" style="margin-bottom:15px; border-top: 1px solid #f5f5f5; padding-top: 15px;">
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                    <label style="min-width:40px; color:#666; font-size: 14px;">预设库</label>
+                                    <select id="magic-room-preset-select"
+                                        style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                        <option value="">— 选择 —</option>
+                                    </select>
+                                    <button type="button" id="magic-room-apply-preset" class="btn btn-primary btn-small"
+                                        style="padding: 6px 12px;">加载</button>
+                                </div>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+                                    <button type="button" id="magic-room-save-preset" class="btn btn-small" style="flex: 1;">当前存为预设</button>
+                                    <button type="button" id="magic-room-manage-presets" class="btn btn-small" style="flex: 1;">管理</button>
+                                </div>
+                                <div id="magic-room-presets-modal"
+                                    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9999;align-items:center;justify-content:center;">
+                                    <div
+                                        style="width:640px;max-width:94%;background:var(--panel-bg,#fff);padding:16px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);">
+                                        <h3 style="margin:0 0 12px 0;">提示词预设管理</h3>
+                                        <div id="magic-room-presets-list"
+                                            style="max-height:360px;overflow:auto;border:1px solid #f0f0f0;padding:8px;border-radius:6px;">
+                                        </div>
+                                        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+                                            <button type="button" id="magic-room-close-modal" class="btn btn-primary">关闭</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="kkt-item" style="flex-direction: column; align-items: stretch; padding-bottom: 15px; border-top: 1px solid #f5f5f5;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <div class="kkt-item-label" style="font-size: 13px;">提示词模板</div>
+                                    <div style="display: flex; gap: 5px;">
+                                        <button type="button" id="magic-room-reset-prompt-btn" class="btn btn-small btn-secondary" style="padding: 4px 8px;">恢复默认</button>
+                                    </div>
+                                </div>
+                                <p style="font-size: 11px; color: #888; margin: 0 0 8px 0; line-height: 1.4;">
+                                    支持的变量：<br>
+                                    <code style="color:var(--primary-color);">{{当前时间}}</code> <code style="color:var(--primary-color);">{{世界书_前}}</code> <code style="color:var(--primary-color);">{{世界书_中}}</code> <code style="color:var(--primary-color);">{{世界书_后}}</code> <code style="color:var(--primary-color);">{{角色名}}</code> <code style="color:var(--primary-color);">{{用户称呼}}</code> <code style="color:var(--primary-color);">{{角色状态}}</code> <code style="color:var(--primary-color);">{{角色人设}}</code> <code style="color:var(--primary-color);">{{用户人设}}</code> <code style="color:var(--primary-color);">{{共同回忆}}</code> <code style="color:var(--primary-color);">{{在线逻辑规则}}</code> <code style="color:var(--primary-color);">{{输出格式}}</code>
+                                </p>
+                                <textarea id="magic-room-custom-prompt" rows="15" style="width: 100%; padding: 10px; border: 1px solid #e0e0e0; border-radius: 8px; resize: vertical; font-size: 12px; font-family: monospace; box-sizing: border-box; background: #fafafa;"></textarea>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button type="button" id="magic-room-import-btn" class="btn btn-secondary" style="flex: 1;">导入模板</button>
+                                <button type="button" id="magic-room-export-btn" class="btn btn-secondary" style="flex: 1;">导出模板</button>
+                                <input type="file" id="magic-room-import-input" accept=".json" style="display:none;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== 系统通知设置 ===== -->
+                    <div style="margin: 20px 0 15px; padding-top: 18px; border-top: 2px solid #f0f0f0; padding-left: 8px;">
+                        <div class="kkt-item-label" style="font-weight: bold; color: var(--primary-color);">系统级通知</div>
+                        <p style="font-size: 11px; color: #999; margin: 5px 0 0;">开启后，收到消息时将弹出系统级弹窗通知，类似微信/QQ 的消息提醒。</p>
+                    </div>
+
+                    <div class="kkt-group">
+                        <!-- 总开关 -->
+                        <div class="kkt-item">
+                            <div class="kkt-item-label">启用系统通知</div>
+                            <div class="kkt-item-control">
+                                <label class="kkt-switch">
+                                    <input type="checkbox" id="sysnotif-enabled">
+                                    <span class="kkt-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 子设置区域 -->
+                        <div id="sysnotif-options" style="display:none;">
+
+                            <!-- 自定义发送方名称 -->
+                            <div class="kkt-item" style="flex-direction: column; align-items: stretch; padding-bottom: 12px;">
+                                <div class="kkt-item-label" style="margin-bottom: 8px;">通知显示名称</div>
+                                <input type="text" id="sysnotif-sender-name" placeholder="留空则使用角色自己的名字"
+                                    style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:13px; box-sizing:border-box; background: #fafafa;">
+                                <p style="font-size:11px; color:#aaa; margin:5px 0 0;">例如填入「微信」「QQ」可模拟系统消息来源名称</p>
+                            </div>
+
+                            <!-- 显示头像 -->
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">显示发送方头像</div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="sysnotif-show-avatar">
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- 显示消息内容 -->
+                            <div class="kkt-item">
+                                <div class="kkt-item-label">显示消息内容预览</div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="sysnotif-show-content">
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- 通知权限 -->
+                            <div class="kkt-item" style="flex-direction: column; align-items: stretch; padding-bottom: 10px;">
+                                <div style="display: flex; gap: 10px; margin-bottom: 6px;">
+                                    <button type="button" id="sysnotif-request-permission" class="btn btn-secondary" style="flex: 1; font-size:13px;">
+                                        申请系统通知权限
+                                    </button>
+                                    <button type="button" id="sysnotif-test-btn" class="btn btn-primary" style="flex: 1; font-size:13px;">
+                                        发送测试通知
+                                    </button>
+                                </div>
+                                <div id="sysnotif-permission-status" style="font-size:12px; color:#999; padding: 0 2px;"></div>
+                                <p style="font-size:11px; color:#bbb; margin:5px 0 0; line-height:1.5;">iOS 用户需先将应用「添加到主屏幕」，再通过主屏幕图标打开后才能申请权限。</p>
+                            </div>
+
+                            <!-- 自定义推送服务器 -->
+                            <div class="kkt-item" style="border-top: 1px solid #f5f5f5; padding-top: 10px;">
+                                <div class="kkt-item-label">使用自定义推送服务器
+                                    <span style="font-size:11px; color:#bbb; font-weight:normal;">（选填，适合应用完全关闭时仍需推送）</span>
+                                </div>
+                                <div class="kkt-item-control">
+                                    <label class="kkt-switch">
+                                        <input type="checkbox" id="sysnotif-custom-server">
+                                        <span class="kkt-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div id="sysnotif-server-options" style="display:none;">
+                                <div class="kkt-item" style="flex-direction: column; align-items: stretch; padding-bottom: 12px;">
+                                    <div class="kkt-item-label" style="margin-bottom: 8px;">推送服务器 URL</div>
+                                    <input type="url" id="sysnotif-server-url" placeholder="https://your-push-server.com/send"
+                                        style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:13px; box-sizing:border-box; background: #fafafa;">
+                                </div>
+                                <div class="kkt-item" style="flex-direction: column; align-items: stretch; padding-bottom: 12px;">
+                                    <div class="kkt-item-label" style="margin-bottom: 8px;">服务器 Key / Token</div>
+                                    <input type="password" id="sysnotif-server-key" placeholder="填入你的推送服务器鉴权 Key"
+                                        style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:13px; box-sizing:border-box; background: #fafafa;">
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary" id="magic-room-save-btn" style="margin-top: 20px; width: 100%;">
+                        <span class="btn-text">保存魔法屋设置</span>
+                    </button>
+                </div>
+            </main>
+        </div>
+
         <div id="storage-analysis-screen" class="screen">
             <header class="app-header">
                 <button class="back-btn" data-target="home-screen">‹</button>
@@ -8229,6 +8819,38 @@
         </div>
 
         <!-- 节点系统相关弹窗与界面 -->
+    <!-- 1. 节点系统入口选择弹窗 -->
+    <!-- 豆包 TTS 接入教程弹窗 -->
+    <div id="volcengine-tts-tutorial-modal" class="modal-overlay">
+        <div class="modal-window" style="max-height: 85vh; overflow-y: auto;">
+            <h3 style="margin-bottom: 15px; color: var(--primary-color);">豆包(火山引擎) 语音接入教程</h3>
+            <div style="font-size: 13px; color: #444; line-height: 1.6;">
+                <p style="margin-bottom: 10px;">目前火山引擎对于<b>语音合成(TTS)</b>有“旧版语音控制台”和“新版大模型控制台(方舟)”两种不同的接入方式。本APP目前使用的是<b>标准长文本/短文本在线语音合成</b>（非端到端大模型）。</p>
+                <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--primary-color);">
+                    <div style="font-weight: bold; margin-bottom: 5px;">步骤 1：开通服务并获取 App ID</div>
+                    <ol style="padding-left: 15px; margin: 0;">
+                        <li>访问火山引擎官网，进入 <a href="https://console.volcengine.com/speech/app" target="_blank" style="color: var(--primary-color); text-decoration: underline;">语音技术控制台 -> 应用管理</a></li>
+                        <li>点击“创建应用”，在应用详情页可找到 <b>AppID</b>。</li>
+                        <li>在“语音合成”能力中，选择并开通你需要的音色服务（例如：在线语音合成）。注意：必须<b>开通服务</b>否则会报鉴权错误！</li>
+                    </ol>
+                </div>
+                <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--primary-color);">
+                    <div style="font-weight: bold; margin-bottom: 5px;">步骤 2：获取 Access Token (API Key)</div>
+                    <ol style="padding-left: 15px; margin: 0;">
+                        <li>不要使用旧版的 Authorization Token 逻辑。</li>
+                        <li>进入右上角个人头像 -> <b>API Key 管理</b>。</li>
+                        <li>新建一个 API Key，将其复制填入设置页面的 <b>Access Token</b> 框中。</li>
+                    </ol>
+                </div>
+                <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary-color);">
+                    <div style="font-weight: bold; margin-bottom: 5px;">步骤 3：集群 (Cluster) 选择</div>
+                    <p style="margin: 0;">通常填写 <code>volcano_tts</code>。如果你使用的是特定的复刻音色，请在官方文档中查找你所用音色对应的特定 Cluster 名称填入。</p>
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary" id="close-volcengine-tts-tutorial-btn" style="width: 100%; margin-top: 20px;">我知道了</button>
+        </div>
+    </div>
+
     <!-- 1. 节点系统入口选择弹窗 -->
     <div id="node-system-entry-modal" class="modal-overlay">
         <div class="modal-window" style="max-width: 320px; padding: 24px 20px;">
