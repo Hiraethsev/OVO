@@ -3,7 +3,7 @@
 // 常量定义
 const BLOCKED_API_DOMAINS = [
     'api522.pro',
-    'api520.pro'
+    'api521.pro'
 ];
 
 const colorThemes = {
